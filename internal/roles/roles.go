@@ -73,6 +73,7 @@ var repoReadTools = []string{
 var repoProposeTools = []string{
 	"repo-write", "repo-edit", "repo-delete", "repo-commit",
 	"repo-branch-create", "repo-mr-create", "repo-mr-list", "repo-mr-comment",
+	"repo-mail-send",
 }
 
 // Repo review tools: the maintainer reviews and merges MRs, creates the
@@ -81,6 +82,7 @@ var repoProposeTools = []string{
 var repoReviewTools = []string{
 	"repo-branch-create", "repo-tag-create", "repo-build-image",
 	"repo-mr-list", "repo-mr-comment", "repo-mr-merge",
+	"repo-mail-send",
 	"service-deploy", "service-list", "service-delete",
 }
 

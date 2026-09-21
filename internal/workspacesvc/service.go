@@ -1,4 +1,4 @@
-// Package workspacesvc implements workspace.v1.WorkspaceService: the trusted
+// Package workspacesvc implements workspace.v1.BranchSessionService: the trusted
 // entry point for creating sessions (which derives the role + immutable preset)
 // and the read/browse surface for the webui.
 package workspacesvc
@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -29,7 +30,7 @@ import (
 	"github.com/abcp-sdk/workspace-gateway/internal/workerclient"
 )
 
-// Service implements wsv1connect.WorkspaceServiceHandler.
+// Service implements wsv1connect.BranchSessionServiceHandler.
 type Service struct {
 	agent        agentv1connect.AgentServiceClient
 	members      *members.Store
@@ -126,13 +127,19 @@ func (s *Service) resolveTenant(ctx context.Context, hdr map[string][]string) (s
 
 // ---- workspaces ----
 
-// CreateWorkspace creates `org:repo:branch`, ensures the Forgejo repo, records
-// ownership, and creates the session with the role's immutable preset.
+// EnsureBranchSession ensures `org:repo:branch` exists as a session (repo:branch
+// <-> session, 1:1) and returns it. The gateway ensures the Forgejo repo, records
+// ownership, and — when the session is ABSENT — creates it with the role's
+// immutable preset. When it ALREADY exists the call is IDEMPOTENT (returns the
+// existing session); this is what lets a UI/tool path "just ensure" a branch has
+// a session.
 //
 // Ownership rule: a repo that already exists belongs to whoever created it. A
 // tenant may NOT claim a repo it does not own (it would otherwise be added to
 // the visibility table and could browse another tenant's repository).
-func (s *Service) CreateWorkspace(ctx context.Context, req *connect.Request[wsv1.CreateWorkspaceRequest]) (*connect.Response[wsv1.CreateWorkspaceResponse], error) {
+//
+// The deployment's default branch is ALWAYS `main`: `branch` empty means `main`.
+func (s *Service) EnsureBranchSession(ctx context.Context, req *connect.Request[wsv1.EnsureBranchSessionRequest]) (*connect.Response[wsv1.EnsureBranchSessionResponse], error) {
 	tenant, err := s.resolveTenant(ctx, req.Header())
 	if err != nil {
 		return nil, err
@@ -150,13 +157,25 @@ func (s *Service) CreateWorkspace(ctx context.Context, req *connect.Request[wsv1
 
 	session := roles.SessionName(org, repo, branch)
 	role := roles.RoleForBranch(branch)
-	if err := s.createSession(ctx, req.Header(), session, roles.PresetFor(role), req.Msg.GetModel()); err != nil {
-		return nil, err
+	// Idempotent: create only when absent. The agent refuses a duplicate, so we
+	// probe first (GetSession -> NotFound means absent).
+	if !s.sessionExists(ctx, req.Header(), session) {
+		if err := s.createSession(ctx, req.Header(), session, roles.PresetFor(role), req.Msg.GetModel()); err != nil {
+			return nil, err
+		}
 	}
-	return connect.NewResponse(&wsv1.CreateWorkspaceResponse{Workspace: &wsv1.Workspace{
+	return connect.NewResponse(&wsv1.EnsureBranchSessionResponse{BranchSession: &wsv1.BranchSession{
 		Session: session, Org: org, Repo: repo, Branch: branch,
 		Role: string(role), Preset: roles.PresetFor(role), Sandbox: session,
 	}}), nil
+}
+
+// sessionExists reports whether the agent already holds a session with this id.
+func (s *Service) sessionExists(ctx context.Context, hdr map[string][]string, session string) bool {
+	r := connect.NewRequest(&agentv1.GetSessionRequest{Id: session})
+	copyHeaders(r, hdr)
+	res, err := s.agent.GetSession(ctx, r)
+	return err == nil && res.Msg.GetSession() != nil
 }
 
 // claimRepo ensures org/repo exists and is owned by tenant. A pre-existing repo
@@ -185,12 +204,15 @@ func (s *Service) claimRepo(ctx context.Context, tenant, org, repo string) error
 	return nil
 }
 
-// ForkWorkspace creates a new branch workspace from a parent session. org/repo
-// come from the parent's name; `branch` must be a legal, non-main name. The
-// preset is FORCED to developer (a fork can never inherit/escalate a role), and
-// the agent publishes a `forked` lifecycle event the workspace-extension uses
-// to materialize the branch.
-func (s *Service) ForkWorkspace(ctx context.Context, req *connect.Request[wsv1.ForkWorkspaceRequest]) (*connect.Response[wsv1.ForkWorkspaceResponse], error) {
+// ForkBranchSession creates `org:repo:<branch>` as a NEW branch session forked
+// from a parent session. org/repo come from the parent's name; `branch` must be
+// a legal, non-main name. The preset is FORCED to developer (a fork can never
+// inherit/escalate a role), and the agent publishes a `forked` lifecycle event
+// the workspace-extension uses to materialize the branch from the parent's.
+//
+// The parent session MUST exist (branch <-> session is 1:1; the caller derives
+// it from an existing branch session).
+func (s *Service) ForkBranchSession(ctx context.Context, req *connect.Request[wsv1.ForkBranchSessionRequest]) (*connect.Response[wsv1.ForkBranchSessionResponse], error) {
 	tenant, err := s.resolveTenant(ctx, req.Header())
 	if err != nil {
 		return nil, err
@@ -208,7 +230,10 @@ func (s *Service) ForkWorkspace(ctx context.Context, req *connect.Request[wsv1.F
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	if !owned {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("workspace not found"))
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("branch session not found"))
+	}
+	if !s.sessionExists(ctx, req.Header(), req.Msg.GetSession()) {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("parent session not found"))
 	}
 
 	session := roles.SessionName(org, repo, branch)
@@ -223,7 +248,7 @@ func (s *Service) ForkWorkspace(ctx context.Context, req *connect.Request[wsv1.F
 	if _, err := s.agent.Fork(ctx, fr); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&wsv1.ForkWorkspaceResponse{Workspace: &wsv1.Workspace{
+	return connect.NewResponse(&wsv1.ForkBranchSessionResponse{BranchSession: &wsv1.BranchSession{
 		Session: session, Org: org, Repo: repo, Branch: branch,
 		Role: string(role), Preset: roles.PresetFor(role), Sandbox: session,
 	}}), nil
@@ -265,10 +290,10 @@ func (s *Service) createSession(ctx context.Context, hdr map[string][]string, na
 	return err
 }
 
-// ListWorkspaces lists the tenant's repo-bound workspaces + free sessions,
-// derived from the agent's own session list (the agent is the source of truth;
-// the gateway owns only repo ownership + free-session roles).
-func (s *Service) ListWorkspaces(ctx context.Context, req *connect.Request[wsv1.ListWorkspacesRequest]) (*connect.Response[wsv1.ListWorkspacesResponse], error) {
+// ListBranchSessions lists the tenant's repo-bound branch sessions + free
+// sessions, derived from the agent's own session list (the agent is the source
+// of truth; the gateway owns only repo ownership + free-session roles).
+func (s *Service) ListBranchSessions(ctx context.Context, req *connect.Request[wsv1.ListBranchSessionsRequest]) (*connect.Response[wsv1.ListBranchSessionsResponse], error) {
 	tenant, err := s.resolveTenant(ctx, req.Header())
 	if err != nil {
 		return nil, err
@@ -288,7 +313,7 @@ func (s *Service) ListWorkspaces(ctx context.Context, req *connect.Request[wsv1.
 		}
 	}
 
-	out := []*wsv1.Workspace{}
+	out := []*wsv1.BranchSession{}
 	for _, sess := range res.Msg.GetSessions() {
 		name := sess.GetName()
 		if org, repo, branch, ok := roles.ParseSession(name); ok {
@@ -300,7 +325,7 @@ func (s *Service) ListWorkspaces(ctx context.Context, req *connect.Request[wsv1.
 				continue
 			}
 			role := roles.RoleForBranch(branch)
-			out = append(out, &wsv1.Workspace{
+			out = append(out, &wsv1.BranchSession{
 				Session: name, Org: org, Repo: repo, Branch: branch,
 				Role: string(role), Preset: roles.PresetFor(role),
 				Sandbox: name, Phase: phase[name],
@@ -308,16 +333,16 @@ func (s *Service) ListWorkspaces(ctx context.Context, req *connect.Request[wsv1.
 			continue
 		}
 		if role, ok, _ := s.members.FreeRole(tenant, name); ok {
-			out = append(out, &wsv1.Workspace{
+			out = append(out, &wsv1.BranchSession{
 				Session: name, Role: role, Preset: role, Sandbox: name, Phase: phase[name],
 			})
 		}
 	}
-	return connect.NewResponse(&wsv1.ListWorkspacesResponse{Workspaces: out}), nil
+	return connect.NewResponse(&wsv1.ListBranchSessionsResponse{BranchSessions: out}), nil
 }
 
-// GetWorkspace returns one workspace.
-func (s *Service) GetWorkspace(ctx context.Context, req *connect.Request[wsv1.GetWorkspaceRequest]) (*connect.Response[wsv1.GetWorkspaceResponse], error) {
+// GetBranchSession returns one branch session (or free session).
+func (s *Service) GetBranchSession(ctx context.Context, req *connect.Request[wsv1.GetBranchSessionRequest]) (*connect.Response[wsv1.GetBranchSessionResponse], error) {
 	tenant, err := s.resolveTenant(ctx, req.Header())
 	if err != nil {
 		return nil, err
@@ -329,25 +354,26 @@ func (s *Service) GetWorkspace(ctx context.Context, req *connect.Request[wsv1.Ge
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 		if !owned {
-			return nil, connect.NewError(connect.CodeNotFound, errors.New("workspace not found"))
+			return nil, connect.NewError(connect.CodeNotFound, errors.New("branch session not found"))
 		}
 		role := roles.RoleForBranch(branch)
-		return connect.NewResponse(&wsv1.GetWorkspaceResponse{Workspace: &wsv1.Workspace{
+		return connect.NewResponse(&wsv1.GetBranchSessionResponse{BranchSession: &wsv1.BranchSession{
 			Session: session, Org: org, Repo: repo, Branch: branch,
 			Role: string(role), Preset: roles.PresetFor(role), Sandbox: session,
 		}}), nil
 	}
 	role, ok, _ := s.members.FreeRole(tenant, session)
 	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("workspace not found"))
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("branch session not found"))
 	}
-	return connect.NewResponse(&wsv1.GetWorkspaceResponse{Workspace: &wsv1.Workspace{
+	return connect.NewResponse(&wsv1.GetBranchSessionResponse{BranchSession: &wsv1.BranchSession{
 		Session: session, Role: role, Preset: role, Sandbox: session,
 	}}), nil
 }
 
-// DeleteWorkspace deletes a workspace: its sandbox + session, and the free row.
-func (s *Service) DeleteWorkspace(ctx context.Context, req *connect.Request[wsv1.DeleteWorkspaceRequest]) (*connect.Response[wsv1.DeleteWorkspaceResponse], error) {
+// DeleteBranchSession deletes a branch session (its sandbox + agent session) or
+// a free session. It does NOT delete the underlying git branch.
+func (s *Service) DeleteBranchSession(ctx context.Context, req *connect.Request[wsv1.DeleteBranchSessionRequest]) (*connect.Response[wsv1.DeleteBranchSessionResponse], error) {
 	tenant, err := s.resolveTenant(ctx, req.Header())
 	if err != nil {
 		return nil, err
@@ -355,18 +381,55 @@ func (s *Service) DeleteWorkspace(ctx context.Context, req *connect.Request[wsv1
 	session := req.Msg.GetSession()
 	if org, repo, _, ok := roles.ParseSession(session); ok {
 		if owned, _ := s.members.OwnsRepo(tenant, org, repo); !owned {
-			return nil, connect.NewError(connect.CodeNotFound, errors.New("workspace not found"))
+			return nil, connect.NewError(connect.CodeNotFound, errors.New("branch session not found"))
 		}
 	} else if _, ok, _ := s.members.FreeRole(tenant, session); !ok {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("workspace not found"))
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("branch session not found"))
 	}
 	// Best-effort sandbox cleanup + session delete.
+	s.deleteSessionAndSandbox(ctx, req.Header(), tenant, session)
+	return connect.NewResponse(&wsv1.DeleteBranchSessionResponse{Ok: true}), nil
+}
+
+// DeleteBranch removes a repo branch AND its branch session (session + sandboxes
+// cascade). Only the owning tenant may delete; `main` is refused (the default
+// branch is protected). The git deletion is idempotent (an already-absent
+// branch is fine); the branch session is deleted even if the branch was gone.
+func (s *Service) DeleteBranch(ctx context.Context, req *connect.Request[wsv1.DeleteBranchRequest]) (*connect.Response[wsv1.DeleteBranchResponse], error) {
+	tenant, err := s.resolveTenant(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	org, repo, branch := req.Msg.GetOrg(), req.Msg.GetRepo(), req.Msg.GetBranch()
+	if !roles.ValidComponent(org) || !roles.ValidComponent(repo) || !roles.ValidComponent(branch) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org/repo/branch must be simple names"))
+	}
+	if branch == roles.MainBranch {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("refusing to delete the default branch"))
+	}
+	owned, err := s.members.OwnsRepo(tenant, org, repo)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if !owned {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("repository not found"))
+	}
+	// Delete the branch session (session + sandboxes) first, then the git branch.
+	session := roles.SessionName(org, repo, branch)
+	s.deleteSessionAndSandbox(ctx, req.Header(), tenant, session)
+	if err := s.git.DeleteBranch(ctx, org, repo, branch); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.DeleteBranchResponse{Ok: true}), nil
+}
+
+// deleteSessionAndSandbox deletes a session's sandbox(es) and the agent session.
+func (s *Service) deleteSessionAndSandbox(ctx context.Context, hdr map[string][]string, tenant, session string) {
 	_, _ = s.sbx.Delete(ctx, session)
 	r := connect.NewRequest(&agentv1.DeleteSessionRequest{Id: session})
-	copyHeaders(r, req.Header())
+	copyHeaders(r, hdr)
 	_, _ = s.agent.DeleteSession(ctx, r)
 	_ = s.members.DeleteFreeSession(tenant, session)
-	return connect.NewResponse(&wsv1.DeleteWorkspaceResponse{Ok: true}), nil
 }
 
 // ---- git browse ----
@@ -674,7 +737,22 @@ func (s *Service) EnsureRepo(ctx context.Context, req *connect.Request[wsv1.Ensu
 	if err := s.members.AddRepo(tenant, org, repo); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	// Auto-create the `org:repo:main` branch session (repo:branch <-> session,
+	// 1:1). Idempotent: a re-ensure leaves an existing session untouched.
+	s.ensureMainSession(ctx, req.Header(), org, repo)
 	return connect.NewResponse(&wsv1.EnsureRepoResponse{Created: created}), nil
+}
+
+// ensureMainSession idempotently creates the `org:repo:main` session bound to
+// the maintainer role. Best-effort: a repo is still usable if this fails.
+func (s *Service) ensureMainSession(ctx context.Context, hdr map[string][]string, org, repo string) {
+	session := roles.SessionName(org, repo, roles.MainBranch)
+	if s.sessionExists(ctx, hdr, session) {
+		return
+	}
+	if err := s.createSession(ctx, hdr, session, roles.PresetFor(roles.Maintainer), ""); err != nil {
+		log.Printf("warn: ensure main session %s: %v", session, err)
+	}
 }
 
 // requireAdmin gates org/repo creation. Every tenant may create org/repo
@@ -1279,4 +1357,4 @@ func copyHeaders[T any](dst *connect.Request[T], hdr map[string][]string) {
 	}
 }
 
-var _ wsv1connect.WorkspaceServiceHandler = (*Service)(nil)
+var _ wsv1connect.BranchSessionServiceHandler = (*Service)(nil)

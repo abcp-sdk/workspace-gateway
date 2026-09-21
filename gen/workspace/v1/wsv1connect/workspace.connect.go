@@ -34,8 +34,8 @@ import (
 const _ = connect.IsAtLeastVersion1_13_0
 
 const (
-	// WorkspaceServiceName is the fully-qualified name of the WorkspaceService service.
-	WorkspaceServiceName = "workspace.v1.WorkspaceService"
+	// BranchSessionServiceName is the fully-qualified name of the BranchSessionService service.
+	BranchSessionServiceName = "workspace.v1.BranchSessionService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -46,226 +46,241 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// WorkspaceServiceCreateWorkspaceProcedure is the fully-qualified name of the WorkspaceService's
-	// CreateWorkspace RPC.
-	WorkspaceServiceCreateWorkspaceProcedure = "/workspace.v1.WorkspaceService/CreateWorkspace"
-	// WorkspaceServiceForkWorkspaceProcedure is the fully-qualified name of the WorkspaceService's
-	// ForkWorkspace RPC.
-	WorkspaceServiceForkWorkspaceProcedure = "/workspace.v1.WorkspaceService/ForkWorkspace"
-	// WorkspaceServiceListWorkspacesProcedure is the fully-qualified name of the WorkspaceService's
-	// ListWorkspaces RPC.
-	WorkspaceServiceListWorkspacesProcedure = "/workspace.v1.WorkspaceService/ListWorkspaces"
-	// WorkspaceServiceGetWorkspaceProcedure is the fully-qualified name of the WorkspaceService's
-	// GetWorkspace RPC.
-	WorkspaceServiceGetWorkspaceProcedure = "/workspace.v1.WorkspaceService/GetWorkspace"
-	// WorkspaceServiceDeleteWorkspaceProcedure is the fully-qualified name of the WorkspaceService's
-	// DeleteWorkspace RPC.
-	WorkspaceServiceDeleteWorkspaceProcedure = "/workspace.v1.WorkspaceService/DeleteWorkspace"
-	// WorkspaceServiceCreateFreeSessionProcedure is the fully-qualified name of the WorkspaceService's
-	// CreateFreeSession RPC.
-	WorkspaceServiceCreateFreeSessionProcedure = "/workspace.v1.WorkspaceService/CreateFreeSession"
-	// WorkspaceServiceListReposProcedure is the fully-qualified name of the WorkspaceService's
+	// BranchSessionServiceEnsureBranchSessionProcedure is the fully-qualified name of the
+	// BranchSessionService's EnsureBranchSession RPC.
+	BranchSessionServiceEnsureBranchSessionProcedure = "/workspace.v1.BranchSessionService/EnsureBranchSession"
+	// BranchSessionServiceForkBranchSessionProcedure is the fully-qualified name of the
+	// BranchSessionService's ForkBranchSession RPC.
+	BranchSessionServiceForkBranchSessionProcedure = "/workspace.v1.BranchSessionService/ForkBranchSession"
+	// BranchSessionServiceListBranchSessionsProcedure is the fully-qualified name of the
+	// BranchSessionService's ListBranchSessions RPC.
+	BranchSessionServiceListBranchSessionsProcedure = "/workspace.v1.BranchSessionService/ListBranchSessions"
+	// BranchSessionServiceGetBranchSessionProcedure is the fully-qualified name of the
+	// BranchSessionService's GetBranchSession RPC.
+	BranchSessionServiceGetBranchSessionProcedure = "/workspace.v1.BranchSessionService/GetBranchSession"
+	// BranchSessionServiceDeleteBranchSessionProcedure is the fully-qualified name of the
+	// BranchSessionService's DeleteBranchSession RPC.
+	BranchSessionServiceDeleteBranchSessionProcedure = "/workspace.v1.BranchSessionService/DeleteBranchSession"
+	// BranchSessionServiceDeleteBranchProcedure is the fully-qualified name of the
+	// BranchSessionService's DeleteBranch RPC.
+	BranchSessionServiceDeleteBranchProcedure = "/workspace.v1.BranchSessionService/DeleteBranch"
+	// BranchSessionServiceCreateFreeSessionProcedure is the fully-qualified name of the
+	// BranchSessionService's CreateFreeSession RPC.
+	BranchSessionServiceCreateFreeSessionProcedure = "/workspace.v1.BranchSessionService/CreateFreeSession"
+	// BranchSessionServiceListReposProcedure is the fully-qualified name of the BranchSessionService's
 	// ListRepos RPC.
-	WorkspaceServiceListReposProcedure = "/workspace.v1.WorkspaceService/ListRepos"
-	// WorkspaceServiceTreeProcedure is the fully-qualified name of the WorkspaceService's Tree RPC.
-	WorkspaceServiceTreeProcedure = "/workspace.v1.WorkspaceService/Tree"
-	// WorkspaceServiceReadBlobProcedure is the fully-qualified name of the WorkspaceService's ReadBlob
+	BranchSessionServiceListReposProcedure = "/workspace.v1.BranchSessionService/ListRepos"
+	// BranchSessionServiceTreeProcedure is the fully-qualified name of the BranchSessionService's Tree
 	// RPC.
-	WorkspaceServiceReadBlobProcedure = "/workspace.v1.WorkspaceService/ReadBlob"
-	// WorkspaceServiceReadRawProcedure is the fully-qualified name of the WorkspaceService's ReadRaw
+	BranchSessionServiceTreeProcedure = "/workspace.v1.BranchSessionService/Tree"
+	// BranchSessionServiceReadBlobProcedure is the fully-qualified name of the BranchSessionService's
+	// ReadBlob RPC.
+	BranchSessionServiceReadBlobProcedure = "/workspace.v1.BranchSessionService/ReadBlob"
+	// BranchSessionServiceReadRawProcedure is the fully-qualified name of the BranchSessionService's
+	// ReadRaw RPC.
+	BranchSessionServiceReadRawProcedure = "/workspace.v1.BranchSessionService/ReadRaw"
+	// BranchSessionServiceLogProcedure is the fully-qualified name of the BranchSessionService's Log
 	// RPC.
-	WorkspaceServiceReadRawProcedure = "/workspace.v1.WorkspaceService/ReadRaw"
-	// WorkspaceServiceLogProcedure is the fully-qualified name of the WorkspaceService's Log RPC.
-	WorkspaceServiceLogProcedure = "/workspace.v1.WorkspaceService/Log"
-	// WorkspaceServiceBranchesProcedure is the fully-qualified name of the WorkspaceService's Branches
+	BranchSessionServiceLogProcedure = "/workspace.v1.BranchSessionService/Log"
+	// BranchSessionServiceBranchesProcedure is the fully-qualified name of the BranchSessionService's
+	// Branches RPC.
+	BranchSessionServiceBranchesProcedure = "/workspace.v1.BranchSessionService/Branches"
+	// BranchSessionServiceTagsProcedure is the fully-qualified name of the BranchSessionService's Tags
 	// RPC.
-	WorkspaceServiceBranchesProcedure = "/workspace.v1.WorkspaceService/Branches"
-	// WorkspaceServiceTagsProcedure is the fully-qualified name of the WorkspaceService's Tags RPC.
-	WorkspaceServiceTagsProcedure = "/workspace.v1.WorkspaceService/Tags"
-	// WorkspaceServiceListReleasesProcedure is the fully-qualified name of the WorkspaceService's
-	// ListReleases RPC.
-	WorkspaceServiceListReleasesProcedure = "/workspace.v1.WorkspaceService/ListReleases"
-	// WorkspaceServiceGetReleaseAssetProcedure is the fully-qualified name of the WorkspaceService's
-	// GetReleaseAsset RPC.
-	WorkspaceServiceGetReleaseAssetProcedure = "/workspace.v1.WorkspaceService/GetReleaseAsset"
-	// WorkspaceServiceGetCommitProcedure is the fully-qualified name of the WorkspaceService's
+	BranchSessionServiceTagsProcedure = "/workspace.v1.BranchSessionService/Tags"
+	// BranchSessionServiceListReleasesProcedure is the fully-qualified name of the
+	// BranchSessionService's ListReleases RPC.
+	BranchSessionServiceListReleasesProcedure = "/workspace.v1.BranchSessionService/ListReleases"
+	// BranchSessionServiceGetReleaseAssetProcedure is the fully-qualified name of the
+	// BranchSessionService's GetReleaseAsset RPC.
+	BranchSessionServiceGetReleaseAssetProcedure = "/workspace.v1.BranchSessionService/GetReleaseAsset"
+	// BranchSessionServiceGetCommitProcedure is the fully-qualified name of the BranchSessionService's
 	// GetCommit RPC.
-	WorkspaceServiceGetCommitProcedure = "/workspace.v1.WorkspaceService/GetCommit"
-	// WorkspaceServiceCommitDiffProcedure is the fully-qualified name of the WorkspaceService's
+	BranchSessionServiceGetCommitProcedure = "/workspace.v1.BranchSessionService/GetCommit"
+	// BranchSessionServiceCommitDiffProcedure is the fully-qualified name of the BranchSessionService's
 	// CommitDiff RPC.
-	WorkspaceServiceCommitDiffProcedure = "/workspace.v1.WorkspaceService/CommitDiff"
-	// WorkspaceServiceEnsureRepoProcedure is the fully-qualified name of the WorkspaceService's
+	BranchSessionServiceCommitDiffProcedure = "/workspace.v1.BranchSessionService/CommitDiff"
+	// BranchSessionServiceEnsureRepoProcedure is the fully-qualified name of the BranchSessionService's
 	// EnsureRepo RPC.
-	WorkspaceServiceEnsureRepoProcedure = "/workspace.v1.WorkspaceService/EnsureRepo"
-	// WorkspaceServiceListMRsProcedure is the fully-qualified name of the WorkspaceService's ListMRs
-	// RPC.
-	WorkspaceServiceListMRsProcedure = "/workspace.v1.WorkspaceService/ListMRs"
-	// WorkspaceServiceGetMRProcedure is the fully-qualified name of the WorkspaceService's GetMR RPC.
-	WorkspaceServiceGetMRProcedure = "/workspace.v1.WorkspaceService/GetMR"
-	// WorkspaceServiceMRDiffProcedure is the fully-qualified name of the WorkspaceService's MRDiff RPC.
-	WorkspaceServiceMRDiffProcedure = "/workspace.v1.WorkspaceService/MRDiff"
-	// WorkspaceServiceListMRCommentsProcedure is the fully-qualified name of the WorkspaceService's
-	// ListMRComments RPC.
-	WorkspaceServiceListMRCommentsProcedure = "/workspace.v1.WorkspaceService/ListMRComments"
-	// WorkspaceServiceCreateMRProcedure is the fully-qualified name of the WorkspaceService's CreateMR
-	// RPC.
-	WorkspaceServiceCreateMRProcedure = "/workspace.v1.WorkspaceService/CreateMR"
-	// WorkspaceServiceCommentMRProcedure is the fully-qualified name of the WorkspaceService's
+	BranchSessionServiceEnsureRepoProcedure = "/workspace.v1.BranchSessionService/EnsureRepo"
+	// BranchSessionServiceListMRsProcedure is the fully-qualified name of the BranchSessionService's
+	// ListMRs RPC.
+	BranchSessionServiceListMRsProcedure = "/workspace.v1.BranchSessionService/ListMRs"
+	// BranchSessionServiceGetMRProcedure is the fully-qualified name of the BranchSessionService's
+	// GetMR RPC.
+	BranchSessionServiceGetMRProcedure = "/workspace.v1.BranchSessionService/GetMR"
+	// BranchSessionServiceMRDiffProcedure is the fully-qualified name of the BranchSessionService's
+	// MRDiff RPC.
+	BranchSessionServiceMRDiffProcedure = "/workspace.v1.BranchSessionService/MRDiff"
+	// BranchSessionServiceListMRCommentsProcedure is the fully-qualified name of the
+	// BranchSessionService's ListMRComments RPC.
+	BranchSessionServiceListMRCommentsProcedure = "/workspace.v1.BranchSessionService/ListMRComments"
+	// BranchSessionServiceCreateMRProcedure is the fully-qualified name of the BranchSessionService's
+	// CreateMR RPC.
+	BranchSessionServiceCreateMRProcedure = "/workspace.v1.BranchSessionService/CreateMR"
+	// BranchSessionServiceCommentMRProcedure is the fully-qualified name of the BranchSessionService's
 	// CommentMR RPC.
-	WorkspaceServiceCommentMRProcedure = "/workspace.v1.WorkspaceService/CommentMR"
-	// WorkspaceServiceMergeMRProcedure is the fully-qualified name of the WorkspaceService's MergeMR
-	// RPC.
-	WorkspaceServiceMergeMRProcedure = "/workspace.v1.WorkspaceService/MergeMR"
-	// WorkspaceServiceListOCIImagesProcedure is the fully-qualified name of the WorkspaceService's
-	// ListOCIImages RPC.
-	WorkspaceServiceListOCIImagesProcedure = "/workspace.v1.WorkspaceService/ListOCIImages"
-	// WorkspaceServiceBuildSandboxImageProcedure is the fully-qualified name of the WorkspaceService's
-	// BuildSandboxImage RPC.
-	WorkspaceServiceBuildSandboxImageProcedure = "/workspace.v1.WorkspaceService/BuildSandboxImage"
-	// WorkspaceServiceListSandboxesProcedure is the fully-qualified name of the WorkspaceService's
-	// ListSandboxes RPC.
-	WorkspaceServiceListSandboxesProcedure = "/workspace.v1.WorkspaceService/ListSandboxes"
-	// WorkspaceServiceCreateSandboxProcedure is the fully-qualified name of the WorkspaceService's
-	// CreateSandbox RPC.
-	WorkspaceServiceCreateSandboxProcedure = "/workspace.v1.WorkspaceService/CreateSandbox"
-	// WorkspaceServiceGetSandboxProcedure is the fully-qualified name of the WorkspaceService's
+	BranchSessionServiceCommentMRProcedure = "/workspace.v1.BranchSessionService/CommentMR"
+	// BranchSessionServiceMergeMRProcedure is the fully-qualified name of the BranchSessionService's
+	// MergeMR RPC.
+	BranchSessionServiceMergeMRProcedure = "/workspace.v1.BranchSessionService/MergeMR"
+	// BranchSessionServiceListOCIImagesProcedure is the fully-qualified name of the
+	// BranchSessionService's ListOCIImages RPC.
+	BranchSessionServiceListOCIImagesProcedure = "/workspace.v1.BranchSessionService/ListOCIImages"
+	// BranchSessionServiceBuildSandboxImageProcedure is the fully-qualified name of the
+	// BranchSessionService's BuildSandboxImage RPC.
+	BranchSessionServiceBuildSandboxImageProcedure = "/workspace.v1.BranchSessionService/BuildSandboxImage"
+	// BranchSessionServiceListSandboxesProcedure is the fully-qualified name of the
+	// BranchSessionService's ListSandboxes RPC.
+	BranchSessionServiceListSandboxesProcedure = "/workspace.v1.BranchSessionService/ListSandboxes"
+	// BranchSessionServiceCreateSandboxProcedure is the fully-qualified name of the
+	// BranchSessionService's CreateSandbox RPC.
+	BranchSessionServiceCreateSandboxProcedure = "/workspace.v1.BranchSessionService/CreateSandbox"
+	// BranchSessionServiceGetSandboxProcedure is the fully-qualified name of the BranchSessionService's
 	// GetSandbox RPC.
-	WorkspaceServiceGetSandboxProcedure = "/workspace.v1.WorkspaceService/GetSandbox"
-	// WorkspaceServiceDeleteSandboxProcedure is the fully-qualified name of the WorkspaceService's
-	// DeleteSandbox RPC.
-	WorkspaceServiceDeleteSandboxProcedure = "/workspace.v1.WorkspaceService/DeleteSandbox"
-	// WorkspaceServiceResolveSandboxProcedure is the fully-qualified name of the WorkspaceService's
-	// ResolveSandbox RPC.
-	WorkspaceServiceResolveSandboxProcedure = "/workspace.v1.WorkspaceService/ResolveSandbox"
-	// WorkspaceServiceListSandboxJobsProcedure is the fully-qualified name of the WorkspaceService's
-	// ListSandboxJobs RPC.
-	WorkspaceServiceListSandboxJobsProcedure = "/workspace.v1.WorkspaceService/ListSandboxJobs"
-	// WorkspaceServiceGetSandboxJobOutputProcedure is the fully-qualified name of the
-	// WorkspaceService's GetSandboxJobOutput RPC.
-	WorkspaceServiceGetSandboxJobOutputProcedure = "/workspace.v1.WorkspaceService/GetSandboxJobOutput"
-	// WorkspaceServiceWatchSandboxJobProcedure is the fully-qualified name of the WorkspaceService's
-	// WatchSandboxJob RPC.
-	WorkspaceServiceWatchSandboxJobProcedure = "/workspace.v1.WorkspaceService/WatchSandboxJob"
-	// WorkspaceServiceDeployServiceProcedure is the fully-qualified name of the WorkspaceService's
-	// DeployService RPC.
-	WorkspaceServiceDeployServiceProcedure = "/workspace.v1.WorkspaceService/DeployService"
-	// WorkspaceServiceListServicesProcedure is the fully-qualified name of the WorkspaceService's
-	// ListServices RPC.
-	WorkspaceServiceListServicesProcedure = "/workspace.v1.WorkspaceService/ListServices"
-	// WorkspaceServiceDeleteServiceProcedure is the fully-qualified name of the WorkspaceService's
-	// DeleteService RPC.
-	WorkspaceServiceDeleteServiceProcedure = "/workspace.v1.WorkspaceService/DeleteService"
-	// WorkspaceServiceHealthProcedure is the fully-qualified name of the WorkspaceService's Health RPC.
-	WorkspaceServiceHealthProcedure = "/workspace.v1.WorkspaceService/Health"
-	// WorkspaceServiceGetIdentityProcedure is the fully-qualified name of the WorkspaceService's
-	// GetIdentity RPC.
-	WorkspaceServiceGetIdentityProcedure = "/workspace.v1.WorkspaceService/GetIdentity"
-	// WorkspaceServiceListSessionsProcedure is the fully-qualified name of the WorkspaceService's
-	// ListSessions RPC.
-	WorkspaceServiceListSessionsProcedure = "/workspace.v1.WorkspaceService/ListSessions"
-	// WorkspaceServiceGetSessionProcedure is the fully-qualified name of the WorkspaceService's
+	BranchSessionServiceGetSandboxProcedure = "/workspace.v1.BranchSessionService/GetSandbox"
+	// BranchSessionServiceDeleteSandboxProcedure is the fully-qualified name of the
+	// BranchSessionService's DeleteSandbox RPC.
+	BranchSessionServiceDeleteSandboxProcedure = "/workspace.v1.BranchSessionService/DeleteSandbox"
+	// BranchSessionServiceResolveSandboxProcedure is the fully-qualified name of the
+	// BranchSessionService's ResolveSandbox RPC.
+	BranchSessionServiceResolveSandboxProcedure = "/workspace.v1.BranchSessionService/ResolveSandbox"
+	// BranchSessionServiceListSandboxJobsProcedure is the fully-qualified name of the
+	// BranchSessionService's ListSandboxJobs RPC.
+	BranchSessionServiceListSandboxJobsProcedure = "/workspace.v1.BranchSessionService/ListSandboxJobs"
+	// BranchSessionServiceGetSandboxJobOutputProcedure is the fully-qualified name of the
+	// BranchSessionService's GetSandboxJobOutput RPC.
+	BranchSessionServiceGetSandboxJobOutputProcedure = "/workspace.v1.BranchSessionService/GetSandboxJobOutput"
+	// BranchSessionServiceWatchSandboxJobProcedure is the fully-qualified name of the
+	// BranchSessionService's WatchSandboxJob RPC.
+	BranchSessionServiceWatchSandboxJobProcedure = "/workspace.v1.BranchSessionService/WatchSandboxJob"
+	// BranchSessionServiceDeployServiceProcedure is the fully-qualified name of the
+	// BranchSessionService's DeployService RPC.
+	BranchSessionServiceDeployServiceProcedure = "/workspace.v1.BranchSessionService/DeployService"
+	// BranchSessionServiceListServicesProcedure is the fully-qualified name of the
+	// BranchSessionService's ListServices RPC.
+	BranchSessionServiceListServicesProcedure = "/workspace.v1.BranchSessionService/ListServices"
+	// BranchSessionServiceDeleteServiceProcedure is the fully-qualified name of the
+	// BranchSessionService's DeleteService RPC.
+	BranchSessionServiceDeleteServiceProcedure = "/workspace.v1.BranchSessionService/DeleteService"
+	// BranchSessionServiceHealthProcedure is the fully-qualified name of the BranchSessionService's
+	// Health RPC.
+	BranchSessionServiceHealthProcedure = "/workspace.v1.BranchSessionService/Health"
+	// BranchSessionServiceGetIdentityProcedure is the fully-qualified name of the
+	// BranchSessionService's GetIdentity RPC.
+	BranchSessionServiceGetIdentityProcedure = "/workspace.v1.BranchSessionService/GetIdentity"
+	// BranchSessionServiceListSessionsProcedure is the fully-qualified name of the
+	// BranchSessionService's ListSessions RPC.
+	BranchSessionServiceListSessionsProcedure = "/workspace.v1.BranchSessionService/ListSessions"
+	// BranchSessionServiceGetSessionProcedure is the fully-qualified name of the BranchSessionService's
 	// GetSession RPC.
-	WorkspaceServiceGetSessionProcedure = "/workspace.v1.WorkspaceService/GetSession"
-	// WorkspaceServiceDeleteSessionProcedure is the fully-qualified name of the WorkspaceService's
-	// DeleteSession RPC.
-	WorkspaceServiceDeleteSessionProcedure = "/workspace.v1.WorkspaceService/DeleteSession"
-	// WorkspaceServiceListMessagesProcedure is the fully-qualified name of the WorkspaceService's
-	// ListMessages RPC.
-	WorkspaceServiceListMessagesProcedure = "/workspace.v1.WorkspaceService/ListMessages"
-	// WorkspaceServicePromptProcedure is the fully-qualified name of the WorkspaceService's Prompt RPC.
-	WorkspaceServicePromptProcedure = "/workspace.v1.WorkspaceService/Prompt"
-	// WorkspaceServiceWatchSessionProcedure is the fully-qualified name of the WorkspaceService's
-	// WatchSession RPC.
-	WorkspaceServiceWatchSessionProcedure = "/workspace.v1.WorkspaceService/WatchSession"
-	// WorkspaceServiceWatchSessionsProcedure is the fully-qualified name of the WorkspaceService's
-	// WatchSessions RPC.
-	WorkspaceServiceWatchSessionsProcedure = "/workspace.v1.WorkspaceService/WatchSessions"
-	// WorkspaceServiceSetModelProcedure is the fully-qualified name of the WorkspaceService's SetModel
+	BranchSessionServiceGetSessionProcedure = "/workspace.v1.BranchSessionService/GetSession"
+	// BranchSessionServiceDeleteSessionProcedure is the fully-qualified name of the
+	// BranchSessionService's DeleteSession RPC.
+	BranchSessionServiceDeleteSessionProcedure = "/workspace.v1.BranchSessionService/DeleteSession"
+	// BranchSessionServiceListMessagesProcedure is the fully-qualified name of the
+	// BranchSessionService's ListMessages RPC.
+	BranchSessionServiceListMessagesProcedure = "/workspace.v1.BranchSessionService/ListMessages"
+	// BranchSessionServicePromptProcedure is the fully-qualified name of the BranchSessionService's
+	// Prompt RPC.
+	BranchSessionServicePromptProcedure = "/workspace.v1.BranchSessionService/Prompt"
+	// BranchSessionServiceWatchSessionProcedure is the fully-qualified name of the
+	// BranchSessionService's WatchSession RPC.
+	BranchSessionServiceWatchSessionProcedure = "/workspace.v1.BranchSessionService/WatchSession"
+	// BranchSessionServiceWatchSessionsProcedure is the fully-qualified name of the
+	// BranchSessionService's WatchSessions RPC.
+	BranchSessionServiceWatchSessionsProcedure = "/workspace.v1.BranchSessionService/WatchSessions"
+	// BranchSessionServiceSetModelProcedure is the fully-qualified name of the BranchSessionService's
+	// SetModel RPC.
+	BranchSessionServiceSetModelProcedure = "/workspace.v1.BranchSessionService/SetModel"
+	// BranchSessionServiceUndoProcedure is the fully-qualified name of the BranchSessionService's Undo
 	// RPC.
-	WorkspaceServiceSetModelProcedure = "/workspace.v1.WorkspaceService/SetModel"
-	// WorkspaceServiceUndoProcedure is the fully-qualified name of the WorkspaceService's Undo RPC.
-	WorkspaceServiceUndoProcedure = "/workspace.v1.WorkspaceService/Undo"
-	// WorkspaceServiceStateProcedure is the fully-qualified name of the WorkspaceService's State RPC.
-	WorkspaceServiceStateProcedure = "/workspace.v1.WorkspaceService/State"
-	// WorkspaceServiceMailboxProcedure is the fully-qualified name of the WorkspaceService's Mailbox
-	// RPC.
-	WorkspaceServiceMailboxProcedure = "/workspace.v1.WorkspaceService/Mailbox"
-	// WorkspaceServiceInterruptProcedure is the fully-qualified name of the WorkspaceService's
+	BranchSessionServiceUndoProcedure = "/workspace.v1.BranchSessionService/Undo"
+	// BranchSessionServiceStateProcedure is the fully-qualified name of the BranchSessionService's
+	// State RPC.
+	BranchSessionServiceStateProcedure = "/workspace.v1.BranchSessionService/State"
+	// BranchSessionServiceMailboxProcedure is the fully-qualified name of the BranchSessionService's
+	// Mailbox RPC.
+	BranchSessionServiceMailboxProcedure = "/workspace.v1.BranchSessionService/Mailbox"
+	// BranchSessionServiceInterruptProcedure is the fully-qualified name of the BranchSessionService's
 	// Interrupt RPC.
-	WorkspaceServiceInterruptProcedure = "/workspace.v1.WorkspaceService/Interrupt"
-	// WorkspaceServiceCompactProcedure is the fully-qualified name of the WorkspaceService's Compact
-	// RPC.
-	WorkspaceServiceCompactProcedure = "/workspace.v1.WorkspaceService/Compact"
-	// WorkspaceServiceUpdateSettingsProcedure is the fully-qualified name of the WorkspaceService's
-	// UpdateSettings RPC.
-	WorkspaceServiceUpdateSettingsProcedure = "/workspace.v1.WorkspaceService/UpdateSettings"
-	// WorkspaceServiceListProvidersProcedure is the fully-qualified name of the WorkspaceService's
-	// ListProviders RPC.
-	WorkspaceServiceListProvidersProcedure = "/workspace.v1.WorkspaceService/ListProviders"
-	// WorkspaceServiceListProvidersCatalogProcedure is the fully-qualified name of the
-	// WorkspaceService's ListProvidersCatalog RPC.
-	WorkspaceServiceListProvidersCatalogProcedure = "/workspace.v1.WorkspaceService/ListProvidersCatalog"
-	// WorkspaceServiceRegisterProviderProcedure is the fully-qualified name of the WorkspaceService's
-	// RegisterProvider RPC.
-	WorkspaceServiceRegisterProviderProcedure = "/workspace.v1.WorkspaceService/RegisterProvider"
-	// WorkspaceServiceDeleteProviderProcedure is the fully-qualified name of the WorkspaceService's
-	// DeleteProvider RPC.
-	WorkspaceServiceDeleteProviderProcedure = "/workspace.v1.WorkspaceService/DeleteProvider"
-	// WorkspaceServiceTestProviderProcedure is the fully-qualified name of the WorkspaceService's
-	// TestProvider RPC.
-	WorkspaceServiceTestProviderProcedure = "/workspace.v1.WorkspaceService/TestProvider"
-	// WorkspaceServiceListModelsProcedure is the fully-qualified name of the WorkspaceService's
+	BranchSessionServiceInterruptProcedure = "/workspace.v1.BranchSessionService/Interrupt"
+	// BranchSessionServiceCompactProcedure is the fully-qualified name of the BranchSessionService's
+	// Compact RPC.
+	BranchSessionServiceCompactProcedure = "/workspace.v1.BranchSessionService/Compact"
+	// BranchSessionServiceUpdateSettingsProcedure is the fully-qualified name of the
+	// BranchSessionService's UpdateSettings RPC.
+	BranchSessionServiceUpdateSettingsProcedure = "/workspace.v1.BranchSessionService/UpdateSettings"
+	// BranchSessionServiceListProvidersProcedure is the fully-qualified name of the
+	// BranchSessionService's ListProviders RPC.
+	BranchSessionServiceListProvidersProcedure = "/workspace.v1.BranchSessionService/ListProviders"
+	// BranchSessionServiceListProvidersCatalogProcedure is the fully-qualified name of the
+	// BranchSessionService's ListProvidersCatalog RPC.
+	BranchSessionServiceListProvidersCatalogProcedure = "/workspace.v1.BranchSessionService/ListProvidersCatalog"
+	// BranchSessionServiceRegisterProviderProcedure is the fully-qualified name of the
+	// BranchSessionService's RegisterProvider RPC.
+	BranchSessionServiceRegisterProviderProcedure = "/workspace.v1.BranchSessionService/RegisterProvider"
+	// BranchSessionServiceDeleteProviderProcedure is the fully-qualified name of the
+	// BranchSessionService's DeleteProvider RPC.
+	BranchSessionServiceDeleteProviderProcedure = "/workspace.v1.BranchSessionService/DeleteProvider"
+	// BranchSessionServiceTestProviderProcedure is the fully-qualified name of the
+	// BranchSessionService's TestProvider RPC.
+	BranchSessionServiceTestProviderProcedure = "/workspace.v1.BranchSessionService/TestProvider"
+	// BranchSessionServiceListModelsProcedure is the fully-qualified name of the BranchSessionService's
 	// ListModels RPC.
-	WorkspaceServiceListModelsProcedure = "/workspace.v1.WorkspaceService/ListModels"
-	// WorkspaceServiceListPresetsProcedure is the fully-qualified name of the WorkspaceService's
-	// ListPresets RPC.
-	WorkspaceServiceListPresetsProcedure = "/workspace.v1.WorkspaceService/ListPresets"
-	// WorkspaceServicePreviewPresetProcedure is the fully-qualified name of the WorkspaceService's
-	// PreviewPreset RPC.
-	WorkspaceServicePreviewPresetProcedure = "/workspace.v1.WorkspaceService/PreviewPreset"
-	// WorkspaceServiceGetConfigProcedure is the fully-qualified name of the WorkspaceService's
+	BranchSessionServiceListModelsProcedure = "/workspace.v1.BranchSessionService/ListModels"
+	// BranchSessionServiceListPresetsProcedure is the fully-qualified name of the
+	// BranchSessionService's ListPresets RPC.
+	BranchSessionServiceListPresetsProcedure = "/workspace.v1.BranchSessionService/ListPresets"
+	// BranchSessionServicePreviewPresetProcedure is the fully-qualified name of the
+	// BranchSessionService's PreviewPreset RPC.
+	BranchSessionServicePreviewPresetProcedure = "/workspace.v1.BranchSessionService/PreviewPreset"
+	// BranchSessionServiceGetConfigProcedure is the fully-qualified name of the BranchSessionService's
 	// GetConfig RPC.
-	WorkspaceServiceGetConfigProcedure = "/workspace.v1.WorkspaceService/GetConfig"
-	// WorkspaceServiceSetConfigProcedure is the fully-qualified name of the WorkspaceService's
+	BranchSessionServiceGetConfigProcedure = "/workspace.v1.BranchSessionService/GetConfig"
+	// BranchSessionServiceSetConfigProcedure is the fully-qualified name of the BranchSessionService's
 	// SetConfig RPC.
-	WorkspaceServiceSetConfigProcedure = "/workspace.v1.WorkspaceService/SetConfig"
-	// WorkspaceServiceListToolsProcedure is the fully-qualified name of the WorkspaceService's
+	BranchSessionServiceSetConfigProcedure = "/workspace.v1.BranchSessionService/SetConfig"
+	// BranchSessionServiceListToolsProcedure is the fully-qualified name of the BranchSessionService's
 	// ListTools RPC.
-	WorkspaceServiceListToolsProcedure = "/workspace.v1.WorkspaceService/ListTools"
-	// WorkspaceServiceGetToolConfigProcedure is the fully-qualified name of the WorkspaceService's
-	// GetToolConfig RPC.
-	WorkspaceServiceGetToolConfigProcedure = "/workspace.v1.WorkspaceService/GetToolConfig"
-	// WorkspaceServiceSetToolConfigProcedure is the fully-qualified name of the WorkspaceService's
-	// SetToolConfig RPC.
-	WorkspaceServiceSetToolConfigProcedure = "/workspace.v1.WorkspaceService/SetToolConfig"
-	// WorkspaceServiceSetExtensionConfigProcedure is the fully-qualified name of the WorkspaceService's
-	// SetExtensionConfig RPC.
-	WorkspaceServiceSetExtensionConfigProcedure = "/workspace.v1.WorkspaceService/SetExtensionConfig"
-	// WorkspaceServiceUploadFileProcedure is the fully-qualified name of the WorkspaceService's
+	BranchSessionServiceListToolsProcedure = "/workspace.v1.BranchSessionService/ListTools"
+	// BranchSessionServiceGetToolConfigProcedure is the fully-qualified name of the
+	// BranchSessionService's GetToolConfig RPC.
+	BranchSessionServiceGetToolConfigProcedure = "/workspace.v1.BranchSessionService/GetToolConfig"
+	// BranchSessionServiceSetToolConfigProcedure is the fully-qualified name of the
+	// BranchSessionService's SetToolConfig RPC.
+	BranchSessionServiceSetToolConfigProcedure = "/workspace.v1.BranchSessionService/SetToolConfig"
+	// BranchSessionServiceSetExtensionConfigProcedure is the fully-qualified name of the
+	// BranchSessionService's SetExtensionConfig RPC.
+	BranchSessionServiceSetExtensionConfigProcedure = "/workspace.v1.BranchSessionService/SetExtensionConfig"
+	// BranchSessionServiceUploadFileProcedure is the fully-qualified name of the BranchSessionService's
 	// UploadFile RPC.
-	WorkspaceServiceUploadFileProcedure = "/workspace.v1.WorkspaceService/UploadFile"
-	// WorkspaceServiceIngestFileProcedure is the fully-qualified name of the WorkspaceService's
+	BranchSessionServiceUploadFileProcedure = "/workspace.v1.BranchSessionService/UploadFile"
+	// BranchSessionServiceIngestFileProcedure is the fully-qualified name of the BranchSessionService's
 	// IngestFile RPC.
-	WorkspaceServiceIngestFileProcedure = "/workspace.v1.WorkspaceService/IngestFile"
-	// WorkspaceServiceGetFileProcedure is the fully-qualified name of the WorkspaceService's GetFile
-	// RPC.
-	WorkspaceServiceGetFileProcedure = "/workspace.v1.WorkspaceService/GetFile"
-	// WorkspaceServiceGetFileMetaProcedure is the fully-qualified name of the WorkspaceService's
-	// GetFileMeta RPC.
-	WorkspaceServiceGetFileMetaProcedure = "/workspace.v1.WorkspaceService/GetFileMeta"
-	// WorkspaceServiceGetFileStreamProcedure is the fully-qualified name of the WorkspaceService's
-	// GetFileStream RPC.
-	WorkspaceServiceGetFileStreamProcedure = "/workspace.v1.WorkspaceService/GetFileStream"
+	BranchSessionServiceIngestFileProcedure = "/workspace.v1.BranchSessionService/IngestFile"
+	// BranchSessionServiceGetFileProcedure is the fully-qualified name of the BranchSessionService's
+	// GetFile RPC.
+	BranchSessionServiceGetFileProcedure = "/workspace.v1.BranchSessionService/GetFile"
+	// BranchSessionServiceGetFileMetaProcedure is the fully-qualified name of the
+	// BranchSessionService's GetFileMeta RPC.
+	BranchSessionServiceGetFileMetaProcedure = "/workspace.v1.BranchSessionService/GetFileMeta"
+	// BranchSessionServiceGetFileStreamProcedure is the fully-qualified name of the
+	// BranchSessionService's GetFileStream RPC.
+	BranchSessionServiceGetFileStreamProcedure = "/workspace.v1.BranchSessionService/GetFileStream"
 )
 
-// WorkspaceServiceClient is a client for the workspace.v1.WorkspaceService service.
-type WorkspaceServiceClient interface {
-	// workspaces (repo-bound sessions)
-	CreateWorkspace(context.Context, *connect.Request[v1.CreateWorkspaceRequest]) (*connect.Response[v1.CreateWorkspaceResponse], error)
-	ForkWorkspace(context.Context, *connect.Request[v1.ForkWorkspaceRequest]) (*connect.Response[v1.ForkWorkspaceResponse], error)
-	ListWorkspaces(context.Context, *connect.Request[v1.ListWorkspacesRequest]) (*connect.Response[v1.ListWorkspacesResponse], error)
-	GetWorkspace(context.Context, *connect.Request[v1.GetWorkspaceRequest]) (*connect.Response[v1.GetWorkspaceResponse], error)
-	DeleteWorkspace(context.Context, *connect.Request[v1.DeleteWorkspaceRequest]) (*connect.Response[v1.DeleteWorkspaceResponse], error)
+// BranchSessionServiceClient is a client for the workspace.v1.BranchSessionService service.
+type BranchSessionServiceClient interface {
+	// branch sessions (repo:branch <-> session, 1:1)
+	EnsureBranchSession(context.Context, *connect.Request[v1.EnsureBranchSessionRequest]) (*connect.Response[v1.EnsureBranchSessionResponse], error)
+	ForkBranchSession(context.Context, *connect.Request[v1.ForkBranchSessionRequest]) (*connect.Response[v1.ForkBranchSessionResponse], error)
+	ListBranchSessions(context.Context, *connect.Request[v1.ListBranchSessionsRequest]) (*connect.Response[v1.ListBranchSessionsResponse], error)
+	GetBranchSession(context.Context, *connect.Request[v1.GetBranchSessionRequest]) (*connect.Response[v1.GetBranchSessionResponse], error)
+	DeleteBranchSession(context.Context, *connect.Request[v1.DeleteBranchSessionRequest]) (*connect.Response[v1.DeleteBranchSessionResponse], error)
+	// DeleteBranch removes a repo branch AND its branch session (session +
+	// sandboxes cascade); requires the branch owner (non-main).
+	DeleteBranch(context.Context, *connect.Request[v1.DeleteBranchRequest]) (*connect.Response[v1.DeleteBranchResponse], error)
 	// standalone sessions
 	CreateFreeSession(context.Context, *connect.Request[v1.CreateFreeSessionRequest]) (*connect.Response[v1.CreateFreeSessionResponse], error)
 	// git browse (read-only) + ensure
@@ -352,465 +367,472 @@ type WorkspaceServiceClient interface {
 	GetFileStream(context.Context, *connect.Request[v11.GetFileRequest]) (*connect.ServerStreamForClient[v11.FileChunk], error)
 }
 
-// NewWorkspaceServiceClient constructs a client for the workspace.v1.WorkspaceService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
+// NewBranchSessionServiceClient constructs a client for the workspace.v1.BranchSessionService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
 //
 // The URL supplied here should be the base URL for the Connect or gRPC server (for example,
 // http://api.acme.com or https://acme.com/grpc).
-func NewWorkspaceServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) WorkspaceServiceClient {
+func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BranchSessionServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
-	workspaceServiceMethods := v1.File_workspace_v1_workspace_proto.Services().ByName("WorkspaceService").Methods()
-	return &workspaceServiceClient{
-		createWorkspace: connect.NewClient[v1.CreateWorkspaceRequest, v1.CreateWorkspaceResponse](
+	branchSessionServiceMethods := v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods()
+	return &branchSessionServiceClient{
+		ensureBranchSession: connect.NewClient[v1.EnsureBranchSessionRequest, v1.EnsureBranchSessionResponse](
 			httpClient,
-			baseURL+WorkspaceServiceCreateWorkspaceProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("CreateWorkspace")),
+			baseURL+BranchSessionServiceEnsureBranchSessionProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("EnsureBranchSession")),
 			connect.WithClientOptions(opts...),
 		),
-		forkWorkspace: connect.NewClient[v1.ForkWorkspaceRequest, v1.ForkWorkspaceResponse](
+		forkBranchSession: connect.NewClient[v1.ForkBranchSessionRequest, v1.ForkBranchSessionResponse](
 			httpClient,
-			baseURL+WorkspaceServiceForkWorkspaceProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ForkWorkspace")),
+			baseURL+BranchSessionServiceForkBranchSessionProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ForkBranchSession")),
 			connect.WithClientOptions(opts...),
 		),
-		listWorkspaces: connect.NewClient[v1.ListWorkspacesRequest, v1.ListWorkspacesResponse](
+		listBranchSessions: connect.NewClient[v1.ListBranchSessionsRequest, v1.ListBranchSessionsResponse](
 			httpClient,
-			baseURL+WorkspaceServiceListWorkspacesProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListWorkspaces")),
+			baseURL+BranchSessionServiceListBranchSessionsProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListBranchSessions")),
 			connect.WithClientOptions(opts...),
 		),
-		getWorkspace: connect.NewClient[v1.GetWorkspaceRequest, v1.GetWorkspaceResponse](
+		getBranchSession: connect.NewClient[v1.GetBranchSessionRequest, v1.GetBranchSessionResponse](
 			httpClient,
-			baseURL+WorkspaceServiceGetWorkspaceProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("GetWorkspace")),
+			baseURL+BranchSessionServiceGetBranchSessionProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("GetBranchSession")),
 			connect.WithClientOptions(opts...),
 		),
-		deleteWorkspace: connect.NewClient[v1.DeleteWorkspaceRequest, v1.DeleteWorkspaceResponse](
+		deleteBranchSession: connect.NewClient[v1.DeleteBranchSessionRequest, v1.DeleteBranchSessionResponse](
 			httpClient,
-			baseURL+WorkspaceServiceDeleteWorkspaceProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("DeleteWorkspace")),
+			baseURL+BranchSessionServiceDeleteBranchSessionProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("DeleteBranchSession")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteBranch: connect.NewClient[v1.DeleteBranchRequest, v1.DeleteBranchResponse](
+			httpClient,
+			baseURL+BranchSessionServiceDeleteBranchProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("DeleteBranch")),
 			connect.WithClientOptions(opts...),
 		),
 		createFreeSession: connect.NewClient[v1.CreateFreeSessionRequest, v1.CreateFreeSessionResponse](
 			httpClient,
-			baseURL+WorkspaceServiceCreateFreeSessionProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("CreateFreeSession")),
+			baseURL+BranchSessionServiceCreateFreeSessionProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("CreateFreeSession")),
 			connect.WithClientOptions(opts...),
 		),
 		listRepos: connect.NewClient[v1.ListReposRequest, v1.ListReposResponse](
 			httpClient,
-			baseURL+WorkspaceServiceListReposProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListRepos")),
+			baseURL+BranchSessionServiceListReposProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListRepos")),
 			connect.WithClientOptions(opts...),
 		),
 		tree: connect.NewClient[v1.TreeRequest, v1.TreeResponse](
 			httpClient,
-			baseURL+WorkspaceServiceTreeProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("Tree")),
+			baseURL+BranchSessionServiceTreeProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("Tree")),
 			connect.WithClientOptions(opts...),
 		),
 		readBlob: connect.NewClient[v1.ReadBlobRequest, v1.ReadBlobResponse](
 			httpClient,
-			baseURL+WorkspaceServiceReadBlobProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ReadBlob")),
+			baseURL+BranchSessionServiceReadBlobProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ReadBlob")),
 			connect.WithClientOptions(opts...),
 		),
 		readRaw: connect.NewClient[v1.ReadRawRequest, v1.ReadRawResponse](
 			httpClient,
-			baseURL+WorkspaceServiceReadRawProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ReadRaw")),
+			baseURL+BranchSessionServiceReadRawProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ReadRaw")),
 			connect.WithClientOptions(opts...),
 		),
 		log: connect.NewClient[v1.LogRequest, v1.LogResponse](
 			httpClient,
-			baseURL+WorkspaceServiceLogProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("Log")),
+			baseURL+BranchSessionServiceLogProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("Log")),
 			connect.WithClientOptions(opts...),
 		),
 		branches: connect.NewClient[v1.BranchesRequest, v1.BranchesResponse](
 			httpClient,
-			baseURL+WorkspaceServiceBranchesProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("Branches")),
+			baseURL+BranchSessionServiceBranchesProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("Branches")),
 			connect.WithClientOptions(opts...),
 		),
 		tags: connect.NewClient[v1.TagsRequest, v1.TagsResponse](
 			httpClient,
-			baseURL+WorkspaceServiceTagsProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("Tags")),
+			baseURL+BranchSessionServiceTagsProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("Tags")),
 			connect.WithClientOptions(opts...),
 		),
 		listReleases: connect.NewClient[v1.ReleasesRequest, v1.ReleasesResponse](
 			httpClient,
-			baseURL+WorkspaceServiceListReleasesProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListReleases")),
+			baseURL+BranchSessionServiceListReleasesProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListReleases")),
 			connect.WithClientOptions(opts...),
 		),
 		getReleaseAsset: connect.NewClient[v1.ReleaseAssetRequest, v1.ReleaseAssetResponse](
 			httpClient,
-			baseURL+WorkspaceServiceGetReleaseAssetProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("GetReleaseAsset")),
+			baseURL+BranchSessionServiceGetReleaseAssetProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("GetReleaseAsset")),
 			connect.WithClientOptions(opts...),
 		),
 		getCommit: connect.NewClient[v1.GetCommitRequest, v1.GetCommitResponse](
 			httpClient,
-			baseURL+WorkspaceServiceGetCommitProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("GetCommit")),
+			baseURL+BranchSessionServiceGetCommitProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("GetCommit")),
 			connect.WithClientOptions(opts...),
 		),
 		commitDiff: connect.NewClient[v1.CommitDiffRequest, v1.DiffResponse](
 			httpClient,
-			baseURL+WorkspaceServiceCommitDiffProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("CommitDiff")),
+			baseURL+BranchSessionServiceCommitDiffProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("CommitDiff")),
 			connect.WithClientOptions(opts...),
 		),
 		ensureRepo: connect.NewClient[v1.EnsureRepoRequest, v1.EnsureRepoResponse](
 			httpClient,
-			baseURL+WorkspaceServiceEnsureRepoProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("EnsureRepo")),
+			baseURL+BranchSessionServiceEnsureRepoProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("EnsureRepo")),
 			connect.WithClientOptions(opts...),
 		),
 		listMRs: connect.NewClient[v1.ListMRsRequest, v1.ListMRsResponse](
 			httpClient,
-			baseURL+WorkspaceServiceListMRsProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListMRs")),
+			baseURL+BranchSessionServiceListMRsProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListMRs")),
 			connect.WithClientOptions(opts...),
 		),
 		getMR: connect.NewClient[v1.GetMRRequest, v1.GetMRResponse](
 			httpClient,
-			baseURL+WorkspaceServiceGetMRProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("GetMR")),
+			baseURL+BranchSessionServiceGetMRProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("GetMR")),
 			connect.WithClientOptions(opts...),
 		),
 		mRDiff: connect.NewClient[v1.MRDiffRequest, v1.MRDiffResponse](
 			httpClient,
-			baseURL+WorkspaceServiceMRDiffProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("MRDiff")),
+			baseURL+BranchSessionServiceMRDiffProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("MRDiff")),
 			connect.WithClientOptions(opts...),
 		),
 		listMRComments: connect.NewClient[v1.ListMRCommentsRequest, v1.ListMRCommentsResponse](
 			httpClient,
-			baseURL+WorkspaceServiceListMRCommentsProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListMRComments")),
+			baseURL+BranchSessionServiceListMRCommentsProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListMRComments")),
 			connect.WithClientOptions(opts...),
 		),
 		createMR: connect.NewClient[v1.CreateMRRequest, v1.CreateMRResponse](
 			httpClient,
-			baseURL+WorkspaceServiceCreateMRProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("CreateMR")),
+			baseURL+BranchSessionServiceCreateMRProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("CreateMR")),
 			connect.WithClientOptions(opts...),
 		),
 		commentMR: connect.NewClient[v1.CommentMRRequest, v1.CommentMRResponse](
 			httpClient,
-			baseURL+WorkspaceServiceCommentMRProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("CommentMR")),
+			baseURL+BranchSessionServiceCommentMRProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("CommentMR")),
 			connect.WithClientOptions(opts...),
 		),
 		mergeMR: connect.NewClient[v1.MergeMRRequest, v1.MergeMRResponse](
 			httpClient,
-			baseURL+WorkspaceServiceMergeMRProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("MergeMR")),
+			baseURL+BranchSessionServiceMergeMRProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("MergeMR")),
 			connect.WithClientOptions(opts...),
 		),
 		listOCIImages: connect.NewClient[v1.ListOCIImagesRequest, v1.ListOCIImagesResponse](
 			httpClient,
-			baseURL+WorkspaceServiceListOCIImagesProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListOCIImages")),
+			baseURL+BranchSessionServiceListOCIImagesProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListOCIImages")),
 			connect.WithClientOptions(opts...),
 		),
 		buildSandboxImage: connect.NewClient[v1.BuildSandboxImageRequest, v1.BuildSandboxImageResponse](
 			httpClient,
-			baseURL+WorkspaceServiceBuildSandboxImageProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("BuildSandboxImage")),
+			baseURL+BranchSessionServiceBuildSandboxImageProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("BuildSandboxImage")),
 			connect.WithClientOptions(opts...),
 		),
 		listSandboxes: connect.NewClient[v1.ListSandboxesRequest, v1.ListSandboxesResponse](
 			httpClient,
-			baseURL+WorkspaceServiceListSandboxesProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListSandboxes")),
+			baseURL+BranchSessionServiceListSandboxesProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListSandboxes")),
 			connect.WithClientOptions(opts...),
 		),
 		createSandbox: connect.NewClient[v1.CreateSandboxRequest, v1.CreateSandboxResponse](
 			httpClient,
-			baseURL+WorkspaceServiceCreateSandboxProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("CreateSandbox")),
+			baseURL+BranchSessionServiceCreateSandboxProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("CreateSandbox")),
 			connect.WithClientOptions(opts...),
 		),
 		getSandbox: connect.NewClient[v1.GetSandboxRequest, v1.GetSandboxResponse](
 			httpClient,
-			baseURL+WorkspaceServiceGetSandboxProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("GetSandbox")),
+			baseURL+BranchSessionServiceGetSandboxProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("GetSandbox")),
 			connect.WithClientOptions(opts...),
 		),
 		deleteSandbox: connect.NewClient[v1.DeleteSandboxRequest, v1.DeleteSandboxResponse](
 			httpClient,
-			baseURL+WorkspaceServiceDeleteSandboxProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("DeleteSandbox")),
+			baseURL+BranchSessionServiceDeleteSandboxProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("DeleteSandbox")),
 			connect.WithClientOptions(opts...),
 		),
 		resolveSandbox: connect.NewClient[v1.ResolveSandboxRequest, v1.ResolveSandboxResponse](
 			httpClient,
-			baseURL+WorkspaceServiceResolveSandboxProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ResolveSandbox")),
+			baseURL+BranchSessionServiceResolveSandboxProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ResolveSandbox")),
 			connect.WithClientOptions(opts...),
 		),
 		listSandboxJobs: connect.NewClient[v1.ListSandboxJobsRequest, v1.ListSandboxJobsResponse](
 			httpClient,
-			baseURL+WorkspaceServiceListSandboxJobsProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListSandboxJobs")),
+			baseURL+BranchSessionServiceListSandboxJobsProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListSandboxJobs")),
 			connect.WithClientOptions(opts...),
 		),
 		getSandboxJobOutput: connect.NewClient[v1.GetSandboxJobOutputRequest, v1.GetSandboxJobOutputResponse](
 			httpClient,
-			baseURL+WorkspaceServiceGetSandboxJobOutputProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("GetSandboxJobOutput")),
+			baseURL+BranchSessionServiceGetSandboxJobOutputProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("GetSandboxJobOutput")),
 			connect.WithClientOptions(opts...),
 		),
 		watchSandboxJob: connect.NewClient[v1.WatchSandboxJobRequest, v1.WatchSandboxJobResponse](
 			httpClient,
-			baseURL+WorkspaceServiceWatchSandboxJobProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("WatchSandboxJob")),
+			baseURL+BranchSessionServiceWatchSandboxJobProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("WatchSandboxJob")),
 			connect.WithClientOptions(opts...),
 		),
 		deployService: connect.NewClient[v1.DeployServiceRequest, v1.DeployServiceResponse](
 			httpClient,
-			baseURL+WorkspaceServiceDeployServiceProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("DeployService")),
+			baseURL+BranchSessionServiceDeployServiceProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("DeployService")),
 			connect.WithClientOptions(opts...),
 		),
 		listServices: connect.NewClient[v1.ListServicesRequest, v1.ListServicesResponse](
 			httpClient,
-			baseURL+WorkspaceServiceListServicesProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListServices")),
+			baseURL+BranchSessionServiceListServicesProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListServices")),
 			connect.WithClientOptions(opts...),
 		),
 		deleteService: connect.NewClient[v1.DeleteServiceRequest, v1.DeleteServiceResponse](
 			httpClient,
-			baseURL+WorkspaceServiceDeleteServiceProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("DeleteService")),
+			baseURL+BranchSessionServiceDeleteServiceProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("DeleteService")),
 			connect.WithClientOptions(opts...),
 		),
 		health: connect.NewClient[v11.HealthRequest, v11.HealthResponse](
 			httpClient,
-			baseURL+WorkspaceServiceHealthProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("Health")),
+			baseURL+BranchSessionServiceHealthProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("Health")),
 			connect.WithClientOptions(opts...),
 		),
 		getIdentity: connect.NewClient[v11.GetIdentityRequest, v11.GetIdentityResponse](
 			httpClient,
-			baseURL+WorkspaceServiceGetIdentityProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("GetIdentity")),
+			baseURL+BranchSessionServiceGetIdentityProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("GetIdentity")),
 			connect.WithClientOptions(opts...),
 		),
 		listSessions: connect.NewClient[v11.ListSessionsRequest, v11.ListSessionsResponse](
 			httpClient,
-			baseURL+WorkspaceServiceListSessionsProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListSessions")),
+			baseURL+BranchSessionServiceListSessionsProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListSessions")),
 			connect.WithClientOptions(opts...),
 		),
 		getSession: connect.NewClient[v11.GetSessionRequest, v11.GetSessionResponse](
 			httpClient,
-			baseURL+WorkspaceServiceGetSessionProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("GetSession")),
+			baseURL+BranchSessionServiceGetSessionProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("GetSession")),
 			connect.WithClientOptions(opts...),
 		),
 		deleteSession: connect.NewClient[v11.DeleteSessionRequest, v11.DeleteSessionResponse](
 			httpClient,
-			baseURL+WorkspaceServiceDeleteSessionProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("DeleteSession")),
+			baseURL+BranchSessionServiceDeleteSessionProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("DeleteSession")),
 			connect.WithClientOptions(opts...),
 		),
 		listMessages: connect.NewClient[v11.ListMessagesRequest, v11.ListMessagesResponse](
 			httpClient,
-			baseURL+WorkspaceServiceListMessagesProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListMessages")),
+			baseURL+BranchSessionServiceListMessagesProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListMessages")),
 			connect.WithClientOptions(opts...),
 		),
 		prompt: connect.NewClient[v11.PromptRequest, v11.PromptResponse](
 			httpClient,
-			baseURL+WorkspaceServicePromptProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("Prompt")),
+			baseURL+BranchSessionServicePromptProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("Prompt")),
 			connect.WithClientOptions(opts...),
 		),
 		watchSession: connect.NewClient[v11.WatchSessionRequest, v11.WatchSessionResponse](
 			httpClient,
-			baseURL+WorkspaceServiceWatchSessionProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("WatchSession")),
+			baseURL+BranchSessionServiceWatchSessionProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("WatchSession")),
 			connect.WithClientOptions(opts...),
 		),
 		watchSessions: connect.NewClient[v11.WatchSessionsRequest, v11.WatchSessionsResponse](
 			httpClient,
-			baseURL+WorkspaceServiceWatchSessionsProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("WatchSessions")),
+			baseURL+BranchSessionServiceWatchSessionsProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("WatchSessions")),
 			connect.WithClientOptions(opts...),
 		),
 		setModel: connect.NewClient[v11.SetModelRequest, v11.SetModelResponse](
 			httpClient,
-			baseURL+WorkspaceServiceSetModelProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("SetModel")),
+			baseURL+BranchSessionServiceSetModelProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("SetModel")),
 			connect.WithClientOptions(opts...),
 		),
 		undo: connect.NewClient[v11.UndoRequest, v11.UndoResponse](
 			httpClient,
-			baseURL+WorkspaceServiceUndoProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("Undo")),
+			baseURL+BranchSessionServiceUndoProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("Undo")),
 			connect.WithClientOptions(opts...),
 		),
 		state: connect.NewClient[v11.StateRequest, v11.StateResponse](
 			httpClient,
-			baseURL+WorkspaceServiceStateProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("State")),
+			baseURL+BranchSessionServiceStateProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("State")),
 			connect.WithClientOptions(opts...),
 		),
 		mailbox: connect.NewClient[v11.MailboxRequest, v11.MailboxResponse](
 			httpClient,
-			baseURL+WorkspaceServiceMailboxProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("Mailbox")),
+			baseURL+BranchSessionServiceMailboxProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("Mailbox")),
 			connect.WithClientOptions(opts...),
 		),
 		interrupt: connect.NewClient[v11.InterruptRequest, v11.InterruptResponse](
 			httpClient,
-			baseURL+WorkspaceServiceInterruptProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("Interrupt")),
+			baseURL+BranchSessionServiceInterruptProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("Interrupt")),
 			connect.WithClientOptions(opts...),
 		),
 		compact: connect.NewClient[v11.CompactRequest, v11.CompactResponse](
 			httpClient,
-			baseURL+WorkspaceServiceCompactProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("Compact")),
+			baseURL+BranchSessionServiceCompactProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("Compact")),
 			connect.WithClientOptions(opts...),
 		),
 		updateSettings: connect.NewClient[v1.UpdateSettingsRequest, v1.UpdateSettingsResponse](
 			httpClient,
-			baseURL+WorkspaceServiceUpdateSettingsProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("UpdateSettings")),
+			baseURL+BranchSessionServiceUpdateSettingsProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("UpdateSettings")),
 			connect.WithClientOptions(opts...),
 		),
 		listProviders: connect.NewClient[v11.ListProvidersRequest, v11.ListProvidersResponse](
 			httpClient,
-			baseURL+WorkspaceServiceListProvidersProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListProviders")),
+			baseURL+BranchSessionServiceListProvidersProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListProviders")),
 			connect.WithClientOptions(opts...),
 		),
 		listProvidersCatalog: connect.NewClient[v11.ListProvidersCatalogRequest, v11.ListProvidersCatalogResponse](
 			httpClient,
-			baseURL+WorkspaceServiceListProvidersCatalogProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListProvidersCatalog")),
+			baseURL+BranchSessionServiceListProvidersCatalogProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListProvidersCatalog")),
 			connect.WithClientOptions(opts...),
 		),
 		registerProvider: connect.NewClient[v11.RegisterProviderRequest, v11.RegisterProviderResponse](
 			httpClient,
-			baseURL+WorkspaceServiceRegisterProviderProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("RegisterProvider")),
+			baseURL+BranchSessionServiceRegisterProviderProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("RegisterProvider")),
 			connect.WithClientOptions(opts...),
 		),
 		deleteProvider: connect.NewClient[v11.DeleteProviderRequest, v11.DeleteProviderResponse](
 			httpClient,
-			baseURL+WorkspaceServiceDeleteProviderProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("DeleteProvider")),
+			baseURL+BranchSessionServiceDeleteProviderProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("DeleteProvider")),
 			connect.WithClientOptions(opts...),
 		),
 		testProvider: connect.NewClient[v11.TestProviderRequest, v11.TestProviderResponse](
 			httpClient,
-			baseURL+WorkspaceServiceTestProviderProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("TestProvider")),
+			baseURL+BranchSessionServiceTestProviderProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("TestProvider")),
 			connect.WithClientOptions(opts...),
 		),
 		listModels: connect.NewClient[v11.ListModelsRequest, v11.ListModelsResponse](
 			httpClient,
-			baseURL+WorkspaceServiceListModelsProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListModels")),
+			baseURL+BranchSessionServiceListModelsProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListModels")),
 			connect.WithClientOptions(opts...),
 		),
 		listPresets: connect.NewClient[v11.ListPresetsRequest, v11.ListPresetsResponse](
 			httpClient,
-			baseURL+WorkspaceServiceListPresetsProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListPresets")),
+			baseURL+BranchSessionServiceListPresetsProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListPresets")),
 			connect.WithClientOptions(opts...),
 		),
 		previewPreset: connect.NewClient[v11.PreviewPresetRequest, v11.PreviewPresetResponse](
 			httpClient,
-			baseURL+WorkspaceServicePreviewPresetProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("PreviewPreset")),
+			baseURL+BranchSessionServicePreviewPresetProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("PreviewPreset")),
 			connect.WithClientOptions(opts...),
 		),
 		getConfig: connect.NewClient[v11.GetConfigRequest, v11.GetConfigResponse](
 			httpClient,
-			baseURL+WorkspaceServiceGetConfigProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("GetConfig")),
+			baseURL+BranchSessionServiceGetConfigProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("GetConfig")),
 			connect.WithClientOptions(opts...),
 		),
 		setConfig: connect.NewClient[v11.SetConfigRequest, v11.SetConfigResponse](
 			httpClient,
-			baseURL+WorkspaceServiceSetConfigProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("SetConfig")),
+			baseURL+BranchSessionServiceSetConfigProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("SetConfig")),
 			connect.WithClientOptions(opts...),
 		),
 		listTools: connect.NewClient[v11.ListToolsRequest, v11.ListToolsResponse](
 			httpClient,
-			baseURL+WorkspaceServiceListToolsProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("ListTools")),
+			baseURL+BranchSessionServiceListToolsProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListTools")),
 			connect.WithClientOptions(opts...),
 		),
 		getToolConfig: connect.NewClient[v11.GetToolConfigRequest, v11.GetToolConfigResponse](
 			httpClient,
-			baseURL+WorkspaceServiceGetToolConfigProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("GetToolConfig")),
+			baseURL+BranchSessionServiceGetToolConfigProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("GetToolConfig")),
 			connect.WithClientOptions(opts...),
 		),
 		setToolConfig: connect.NewClient[v11.SetToolConfigRequest, v11.SetToolConfigResponse](
 			httpClient,
-			baseURL+WorkspaceServiceSetToolConfigProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("SetToolConfig")),
+			baseURL+BranchSessionServiceSetToolConfigProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("SetToolConfig")),
 			connect.WithClientOptions(opts...),
 		),
 		setExtensionConfig: connect.NewClient[v11.SetExtensionConfigRequest, v11.SetExtensionConfigResponse](
 			httpClient,
-			baseURL+WorkspaceServiceSetExtensionConfigProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("SetExtensionConfig")),
+			baseURL+BranchSessionServiceSetExtensionConfigProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("SetExtensionConfig")),
 			connect.WithClientOptions(opts...),
 		),
 		uploadFile: connect.NewClient[v11.UploadFileRequest, v11.UploadFileResponse](
 			httpClient,
-			baseURL+WorkspaceServiceUploadFileProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("UploadFile")),
+			baseURL+BranchSessionServiceUploadFileProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("UploadFile")),
 			connect.WithClientOptions(opts...),
 		),
 		ingestFile: connect.NewClient[v11.IngestFileRequest, v11.IngestFileResponse](
 			httpClient,
-			baseURL+WorkspaceServiceIngestFileProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("IngestFile")),
+			baseURL+BranchSessionServiceIngestFileProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("IngestFile")),
 			connect.WithClientOptions(opts...),
 		),
 		getFile: connect.NewClient[v11.GetFileRequest, v11.GetFileResponse](
 			httpClient,
-			baseURL+WorkspaceServiceGetFileProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("GetFile")),
+			baseURL+BranchSessionServiceGetFileProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("GetFile")),
 			connect.WithClientOptions(opts...),
 		),
 		getFileMeta: connect.NewClient[v11.GetFileMetaRequest, v11.GetFileMetaResponse](
 			httpClient,
-			baseURL+WorkspaceServiceGetFileMetaProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("GetFileMeta")),
+			baseURL+BranchSessionServiceGetFileMetaProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("GetFileMeta")),
 			connect.WithClientOptions(opts...),
 		),
 		getFileStream: connect.NewClient[v11.GetFileRequest, v11.FileChunk](
 			httpClient,
-			baseURL+WorkspaceServiceGetFileStreamProcedure,
-			connect.WithSchema(workspaceServiceMethods.ByName("GetFileStream")),
+			baseURL+BranchSessionServiceGetFileStreamProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("GetFileStream")),
 			connect.WithClientOptions(opts...),
 		),
 	}
 }
 
-// workspaceServiceClient implements WorkspaceServiceClient.
-type workspaceServiceClient struct {
-	createWorkspace      *connect.Client[v1.CreateWorkspaceRequest, v1.CreateWorkspaceResponse]
-	forkWorkspace        *connect.Client[v1.ForkWorkspaceRequest, v1.ForkWorkspaceResponse]
-	listWorkspaces       *connect.Client[v1.ListWorkspacesRequest, v1.ListWorkspacesResponse]
-	getWorkspace         *connect.Client[v1.GetWorkspaceRequest, v1.GetWorkspaceResponse]
-	deleteWorkspace      *connect.Client[v1.DeleteWorkspaceRequest, v1.DeleteWorkspaceResponse]
+// branchSessionServiceClient implements BranchSessionServiceClient.
+type branchSessionServiceClient struct {
+	ensureBranchSession  *connect.Client[v1.EnsureBranchSessionRequest, v1.EnsureBranchSessionResponse]
+	forkBranchSession    *connect.Client[v1.ForkBranchSessionRequest, v1.ForkBranchSessionResponse]
+	listBranchSessions   *connect.Client[v1.ListBranchSessionsRequest, v1.ListBranchSessionsResponse]
+	getBranchSession     *connect.Client[v1.GetBranchSessionRequest, v1.GetBranchSessionResponse]
+	deleteBranchSession  *connect.Client[v1.DeleteBranchSessionRequest, v1.DeleteBranchSessionResponse]
+	deleteBranch         *connect.Client[v1.DeleteBranchRequest, v1.DeleteBranchResponse]
 	createFreeSession    *connect.Client[v1.CreateFreeSessionRequest, v1.CreateFreeSessionResponse]
 	listRepos            *connect.Client[v1.ListReposRequest, v1.ListReposResponse]
 	tree                 *connect.Client[v1.TreeRequest, v1.TreeResponse]
@@ -881,379 +903,388 @@ type workspaceServiceClient struct {
 	getFileStream        *connect.Client[v11.GetFileRequest, v11.FileChunk]
 }
 
-// CreateWorkspace calls workspace.v1.WorkspaceService.CreateWorkspace.
-func (c *workspaceServiceClient) CreateWorkspace(ctx context.Context, req *connect.Request[v1.CreateWorkspaceRequest]) (*connect.Response[v1.CreateWorkspaceResponse], error) {
-	return c.createWorkspace.CallUnary(ctx, req)
+// EnsureBranchSession calls workspace.v1.BranchSessionService.EnsureBranchSession.
+func (c *branchSessionServiceClient) EnsureBranchSession(ctx context.Context, req *connect.Request[v1.EnsureBranchSessionRequest]) (*connect.Response[v1.EnsureBranchSessionResponse], error) {
+	return c.ensureBranchSession.CallUnary(ctx, req)
 }
 
-// ForkWorkspace calls workspace.v1.WorkspaceService.ForkWorkspace.
-func (c *workspaceServiceClient) ForkWorkspace(ctx context.Context, req *connect.Request[v1.ForkWorkspaceRequest]) (*connect.Response[v1.ForkWorkspaceResponse], error) {
-	return c.forkWorkspace.CallUnary(ctx, req)
+// ForkBranchSession calls workspace.v1.BranchSessionService.ForkBranchSession.
+func (c *branchSessionServiceClient) ForkBranchSession(ctx context.Context, req *connect.Request[v1.ForkBranchSessionRequest]) (*connect.Response[v1.ForkBranchSessionResponse], error) {
+	return c.forkBranchSession.CallUnary(ctx, req)
 }
 
-// ListWorkspaces calls workspace.v1.WorkspaceService.ListWorkspaces.
-func (c *workspaceServiceClient) ListWorkspaces(ctx context.Context, req *connect.Request[v1.ListWorkspacesRequest]) (*connect.Response[v1.ListWorkspacesResponse], error) {
-	return c.listWorkspaces.CallUnary(ctx, req)
+// ListBranchSessions calls workspace.v1.BranchSessionService.ListBranchSessions.
+func (c *branchSessionServiceClient) ListBranchSessions(ctx context.Context, req *connect.Request[v1.ListBranchSessionsRequest]) (*connect.Response[v1.ListBranchSessionsResponse], error) {
+	return c.listBranchSessions.CallUnary(ctx, req)
 }
 
-// GetWorkspace calls workspace.v1.WorkspaceService.GetWorkspace.
-func (c *workspaceServiceClient) GetWorkspace(ctx context.Context, req *connect.Request[v1.GetWorkspaceRequest]) (*connect.Response[v1.GetWorkspaceResponse], error) {
-	return c.getWorkspace.CallUnary(ctx, req)
+// GetBranchSession calls workspace.v1.BranchSessionService.GetBranchSession.
+func (c *branchSessionServiceClient) GetBranchSession(ctx context.Context, req *connect.Request[v1.GetBranchSessionRequest]) (*connect.Response[v1.GetBranchSessionResponse], error) {
+	return c.getBranchSession.CallUnary(ctx, req)
 }
 
-// DeleteWorkspace calls workspace.v1.WorkspaceService.DeleteWorkspace.
-func (c *workspaceServiceClient) DeleteWorkspace(ctx context.Context, req *connect.Request[v1.DeleteWorkspaceRequest]) (*connect.Response[v1.DeleteWorkspaceResponse], error) {
-	return c.deleteWorkspace.CallUnary(ctx, req)
+// DeleteBranchSession calls workspace.v1.BranchSessionService.DeleteBranchSession.
+func (c *branchSessionServiceClient) DeleteBranchSession(ctx context.Context, req *connect.Request[v1.DeleteBranchSessionRequest]) (*connect.Response[v1.DeleteBranchSessionResponse], error) {
+	return c.deleteBranchSession.CallUnary(ctx, req)
 }
 
-// CreateFreeSession calls workspace.v1.WorkspaceService.CreateFreeSession.
-func (c *workspaceServiceClient) CreateFreeSession(ctx context.Context, req *connect.Request[v1.CreateFreeSessionRequest]) (*connect.Response[v1.CreateFreeSessionResponse], error) {
+// DeleteBranch calls workspace.v1.BranchSessionService.DeleteBranch.
+func (c *branchSessionServiceClient) DeleteBranch(ctx context.Context, req *connect.Request[v1.DeleteBranchRequest]) (*connect.Response[v1.DeleteBranchResponse], error) {
+	return c.deleteBranch.CallUnary(ctx, req)
+}
+
+// CreateFreeSession calls workspace.v1.BranchSessionService.CreateFreeSession.
+func (c *branchSessionServiceClient) CreateFreeSession(ctx context.Context, req *connect.Request[v1.CreateFreeSessionRequest]) (*connect.Response[v1.CreateFreeSessionResponse], error) {
 	return c.createFreeSession.CallUnary(ctx, req)
 }
 
-// ListRepos calls workspace.v1.WorkspaceService.ListRepos.
-func (c *workspaceServiceClient) ListRepos(ctx context.Context, req *connect.Request[v1.ListReposRequest]) (*connect.Response[v1.ListReposResponse], error) {
+// ListRepos calls workspace.v1.BranchSessionService.ListRepos.
+func (c *branchSessionServiceClient) ListRepos(ctx context.Context, req *connect.Request[v1.ListReposRequest]) (*connect.Response[v1.ListReposResponse], error) {
 	return c.listRepos.CallUnary(ctx, req)
 }
 
-// Tree calls workspace.v1.WorkspaceService.Tree.
-func (c *workspaceServiceClient) Tree(ctx context.Context, req *connect.Request[v1.TreeRequest]) (*connect.Response[v1.TreeResponse], error) {
+// Tree calls workspace.v1.BranchSessionService.Tree.
+func (c *branchSessionServiceClient) Tree(ctx context.Context, req *connect.Request[v1.TreeRequest]) (*connect.Response[v1.TreeResponse], error) {
 	return c.tree.CallUnary(ctx, req)
 }
 
-// ReadBlob calls workspace.v1.WorkspaceService.ReadBlob.
-func (c *workspaceServiceClient) ReadBlob(ctx context.Context, req *connect.Request[v1.ReadBlobRequest]) (*connect.Response[v1.ReadBlobResponse], error) {
+// ReadBlob calls workspace.v1.BranchSessionService.ReadBlob.
+func (c *branchSessionServiceClient) ReadBlob(ctx context.Context, req *connect.Request[v1.ReadBlobRequest]) (*connect.Response[v1.ReadBlobResponse], error) {
 	return c.readBlob.CallUnary(ctx, req)
 }
 
-// ReadRaw calls workspace.v1.WorkspaceService.ReadRaw.
-func (c *workspaceServiceClient) ReadRaw(ctx context.Context, req *connect.Request[v1.ReadRawRequest]) (*connect.Response[v1.ReadRawResponse], error) {
+// ReadRaw calls workspace.v1.BranchSessionService.ReadRaw.
+func (c *branchSessionServiceClient) ReadRaw(ctx context.Context, req *connect.Request[v1.ReadRawRequest]) (*connect.Response[v1.ReadRawResponse], error) {
 	return c.readRaw.CallUnary(ctx, req)
 }
 
-// Log calls workspace.v1.WorkspaceService.Log.
-func (c *workspaceServiceClient) Log(ctx context.Context, req *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error) {
+// Log calls workspace.v1.BranchSessionService.Log.
+func (c *branchSessionServiceClient) Log(ctx context.Context, req *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error) {
 	return c.log.CallUnary(ctx, req)
 }
 
-// Branches calls workspace.v1.WorkspaceService.Branches.
-func (c *workspaceServiceClient) Branches(ctx context.Context, req *connect.Request[v1.BranchesRequest]) (*connect.Response[v1.BranchesResponse], error) {
+// Branches calls workspace.v1.BranchSessionService.Branches.
+func (c *branchSessionServiceClient) Branches(ctx context.Context, req *connect.Request[v1.BranchesRequest]) (*connect.Response[v1.BranchesResponse], error) {
 	return c.branches.CallUnary(ctx, req)
 }
 
-// Tags calls workspace.v1.WorkspaceService.Tags.
-func (c *workspaceServiceClient) Tags(ctx context.Context, req *connect.Request[v1.TagsRequest]) (*connect.Response[v1.TagsResponse], error) {
+// Tags calls workspace.v1.BranchSessionService.Tags.
+func (c *branchSessionServiceClient) Tags(ctx context.Context, req *connect.Request[v1.TagsRequest]) (*connect.Response[v1.TagsResponse], error) {
 	return c.tags.CallUnary(ctx, req)
 }
 
-// ListReleases calls workspace.v1.WorkspaceService.ListReleases.
-func (c *workspaceServiceClient) ListReleases(ctx context.Context, req *connect.Request[v1.ReleasesRequest]) (*connect.Response[v1.ReleasesResponse], error) {
+// ListReleases calls workspace.v1.BranchSessionService.ListReleases.
+func (c *branchSessionServiceClient) ListReleases(ctx context.Context, req *connect.Request[v1.ReleasesRequest]) (*connect.Response[v1.ReleasesResponse], error) {
 	return c.listReleases.CallUnary(ctx, req)
 }
 
-// GetReleaseAsset calls workspace.v1.WorkspaceService.GetReleaseAsset.
-func (c *workspaceServiceClient) GetReleaseAsset(ctx context.Context, req *connect.Request[v1.ReleaseAssetRequest]) (*connect.Response[v1.ReleaseAssetResponse], error) {
+// GetReleaseAsset calls workspace.v1.BranchSessionService.GetReleaseAsset.
+func (c *branchSessionServiceClient) GetReleaseAsset(ctx context.Context, req *connect.Request[v1.ReleaseAssetRequest]) (*connect.Response[v1.ReleaseAssetResponse], error) {
 	return c.getReleaseAsset.CallUnary(ctx, req)
 }
 
-// GetCommit calls workspace.v1.WorkspaceService.GetCommit.
-func (c *workspaceServiceClient) GetCommit(ctx context.Context, req *connect.Request[v1.GetCommitRequest]) (*connect.Response[v1.GetCommitResponse], error) {
+// GetCommit calls workspace.v1.BranchSessionService.GetCommit.
+func (c *branchSessionServiceClient) GetCommit(ctx context.Context, req *connect.Request[v1.GetCommitRequest]) (*connect.Response[v1.GetCommitResponse], error) {
 	return c.getCommit.CallUnary(ctx, req)
 }
 
-// CommitDiff calls workspace.v1.WorkspaceService.CommitDiff.
-func (c *workspaceServiceClient) CommitDiff(ctx context.Context, req *connect.Request[v1.CommitDiffRequest]) (*connect.Response[v1.DiffResponse], error) {
+// CommitDiff calls workspace.v1.BranchSessionService.CommitDiff.
+func (c *branchSessionServiceClient) CommitDiff(ctx context.Context, req *connect.Request[v1.CommitDiffRequest]) (*connect.Response[v1.DiffResponse], error) {
 	return c.commitDiff.CallUnary(ctx, req)
 }
 
-// EnsureRepo calls workspace.v1.WorkspaceService.EnsureRepo.
-func (c *workspaceServiceClient) EnsureRepo(ctx context.Context, req *connect.Request[v1.EnsureRepoRequest]) (*connect.Response[v1.EnsureRepoResponse], error) {
+// EnsureRepo calls workspace.v1.BranchSessionService.EnsureRepo.
+func (c *branchSessionServiceClient) EnsureRepo(ctx context.Context, req *connect.Request[v1.EnsureRepoRequest]) (*connect.Response[v1.EnsureRepoResponse], error) {
 	return c.ensureRepo.CallUnary(ctx, req)
 }
 
-// ListMRs calls workspace.v1.WorkspaceService.ListMRs.
-func (c *workspaceServiceClient) ListMRs(ctx context.Context, req *connect.Request[v1.ListMRsRequest]) (*connect.Response[v1.ListMRsResponse], error) {
+// ListMRs calls workspace.v1.BranchSessionService.ListMRs.
+func (c *branchSessionServiceClient) ListMRs(ctx context.Context, req *connect.Request[v1.ListMRsRequest]) (*connect.Response[v1.ListMRsResponse], error) {
 	return c.listMRs.CallUnary(ctx, req)
 }
 
-// GetMR calls workspace.v1.WorkspaceService.GetMR.
-func (c *workspaceServiceClient) GetMR(ctx context.Context, req *connect.Request[v1.GetMRRequest]) (*connect.Response[v1.GetMRResponse], error) {
+// GetMR calls workspace.v1.BranchSessionService.GetMR.
+func (c *branchSessionServiceClient) GetMR(ctx context.Context, req *connect.Request[v1.GetMRRequest]) (*connect.Response[v1.GetMRResponse], error) {
 	return c.getMR.CallUnary(ctx, req)
 }
 
-// MRDiff calls workspace.v1.WorkspaceService.MRDiff.
-func (c *workspaceServiceClient) MRDiff(ctx context.Context, req *connect.Request[v1.MRDiffRequest]) (*connect.Response[v1.MRDiffResponse], error) {
+// MRDiff calls workspace.v1.BranchSessionService.MRDiff.
+func (c *branchSessionServiceClient) MRDiff(ctx context.Context, req *connect.Request[v1.MRDiffRequest]) (*connect.Response[v1.MRDiffResponse], error) {
 	return c.mRDiff.CallUnary(ctx, req)
 }
 
-// ListMRComments calls workspace.v1.WorkspaceService.ListMRComments.
-func (c *workspaceServiceClient) ListMRComments(ctx context.Context, req *connect.Request[v1.ListMRCommentsRequest]) (*connect.Response[v1.ListMRCommentsResponse], error) {
+// ListMRComments calls workspace.v1.BranchSessionService.ListMRComments.
+func (c *branchSessionServiceClient) ListMRComments(ctx context.Context, req *connect.Request[v1.ListMRCommentsRequest]) (*connect.Response[v1.ListMRCommentsResponse], error) {
 	return c.listMRComments.CallUnary(ctx, req)
 }
 
-// CreateMR calls workspace.v1.WorkspaceService.CreateMR.
-func (c *workspaceServiceClient) CreateMR(ctx context.Context, req *connect.Request[v1.CreateMRRequest]) (*connect.Response[v1.CreateMRResponse], error) {
+// CreateMR calls workspace.v1.BranchSessionService.CreateMR.
+func (c *branchSessionServiceClient) CreateMR(ctx context.Context, req *connect.Request[v1.CreateMRRequest]) (*connect.Response[v1.CreateMRResponse], error) {
 	return c.createMR.CallUnary(ctx, req)
 }
 
-// CommentMR calls workspace.v1.WorkspaceService.CommentMR.
-func (c *workspaceServiceClient) CommentMR(ctx context.Context, req *connect.Request[v1.CommentMRRequest]) (*connect.Response[v1.CommentMRResponse], error) {
+// CommentMR calls workspace.v1.BranchSessionService.CommentMR.
+func (c *branchSessionServiceClient) CommentMR(ctx context.Context, req *connect.Request[v1.CommentMRRequest]) (*connect.Response[v1.CommentMRResponse], error) {
 	return c.commentMR.CallUnary(ctx, req)
 }
 
-// MergeMR calls workspace.v1.WorkspaceService.MergeMR.
-func (c *workspaceServiceClient) MergeMR(ctx context.Context, req *connect.Request[v1.MergeMRRequest]) (*connect.Response[v1.MergeMRResponse], error) {
+// MergeMR calls workspace.v1.BranchSessionService.MergeMR.
+func (c *branchSessionServiceClient) MergeMR(ctx context.Context, req *connect.Request[v1.MergeMRRequest]) (*connect.Response[v1.MergeMRResponse], error) {
 	return c.mergeMR.CallUnary(ctx, req)
 }
 
-// ListOCIImages calls workspace.v1.WorkspaceService.ListOCIImages.
-func (c *workspaceServiceClient) ListOCIImages(ctx context.Context, req *connect.Request[v1.ListOCIImagesRequest]) (*connect.Response[v1.ListOCIImagesResponse], error) {
+// ListOCIImages calls workspace.v1.BranchSessionService.ListOCIImages.
+func (c *branchSessionServiceClient) ListOCIImages(ctx context.Context, req *connect.Request[v1.ListOCIImagesRequest]) (*connect.Response[v1.ListOCIImagesResponse], error) {
 	return c.listOCIImages.CallUnary(ctx, req)
 }
 
-// BuildSandboxImage calls workspace.v1.WorkspaceService.BuildSandboxImage.
-func (c *workspaceServiceClient) BuildSandboxImage(ctx context.Context, req *connect.Request[v1.BuildSandboxImageRequest]) (*connect.Response[v1.BuildSandboxImageResponse], error) {
+// BuildSandboxImage calls workspace.v1.BranchSessionService.BuildSandboxImage.
+func (c *branchSessionServiceClient) BuildSandboxImage(ctx context.Context, req *connect.Request[v1.BuildSandboxImageRequest]) (*connect.Response[v1.BuildSandboxImageResponse], error) {
 	return c.buildSandboxImage.CallUnary(ctx, req)
 }
 
-// ListSandboxes calls workspace.v1.WorkspaceService.ListSandboxes.
-func (c *workspaceServiceClient) ListSandboxes(ctx context.Context, req *connect.Request[v1.ListSandboxesRequest]) (*connect.Response[v1.ListSandboxesResponse], error) {
+// ListSandboxes calls workspace.v1.BranchSessionService.ListSandboxes.
+func (c *branchSessionServiceClient) ListSandboxes(ctx context.Context, req *connect.Request[v1.ListSandboxesRequest]) (*connect.Response[v1.ListSandboxesResponse], error) {
 	return c.listSandboxes.CallUnary(ctx, req)
 }
 
-// CreateSandbox calls workspace.v1.WorkspaceService.CreateSandbox.
-func (c *workspaceServiceClient) CreateSandbox(ctx context.Context, req *connect.Request[v1.CreateSandboxRequest]) (*connect.Response[v1.CreateSandboxResponse], error) {
+// CreateSandbox calls workspace.v1.BranchSessionService.CreateSandbox.
+func (c *branchSessionServiceClient) CreateSandbox(ctx context.Context, req *connect.Request[v1.CreateSandboxRequest]) (*connect.Response[v1.CreateSandboxResponse], error) {
 	return c.createSandbox.CallUnary(ctx, req)
 }
 
-// GetSandbox calls workspace.v1.WorkspaceService.GetSandbox.
-func (c *workspaceServiceClient) GetSandbox(ctx context.Context, req *connect.Request[v1.GetSandboxRequest]) (*connect.Response[v1.GetSandboxResponse], error) {
+// GetSandbox calls workspace.v1.BranchSessionService.GetSandbox.
+func (c *branchSessionServiceClient) GetSandbox(ctx context.Context, req *connect.Request[v1.GetSandboxRequest]) (*connect.Response[v1.GetSandboxResponse], error) {
 	return c.getSandbox.CallUnary(ctx, req)
 }
 
-// DeleteSandbox calls workspace.v1.WorkspaceService.DeleteSandbox.
-func (c *workspaceServiceClient) DeleteSandbox(ctx context.Context, req *connect.Request[v1.DeleteSandboxRequest]) (*connect.Response[v1.DeleteSandboxResponse], error) {
+// DeleteSandbox calls workspace.v1.BranchSessionService.DeleteSandbox.
+func (c *branchSessionServiceClient) DeleteSandbox(ctx context.Context, req *connect.Request[v1.DeleteSandboxRequest]) (*connect.Response[v1.DeleteSandboxResponse], error) {
 	return c.deleteSandbox.CallUnary(ctx, req)
 }
 
-// ResolveSandbox calls workspace.v1.WorkspaceService.ResolveSandbox.
-func (c *workspaceServiceClient) ResolveSandbox(ctx context.Context, req *connect.Request[v1.ResolveSandboxRequest]) (*connect.Response[v1.ResolveSandboxResponse], error) {
+// ResolveSandbox calls workspace.v1.BranchSessionService.ResolveSandbox.
+func (c *branchSessionServiceClient) ResolveSandbox(ctx context.Context, req *connect.Request[v1.ResolveSandboxRequest]) (*connect.Response[v1.ResolveSandboxResponse], error) {
 	return c.resolveSandbox.CallUnary(ctx, req)
 }
 
-// ListSandboxJobs calls workspace.v1.WorkspaceService.ListSandboxJobs.
-func (c *workspaceServiceClient) ListSandboxJobs(ctx context.Context, req *connect.Request[v1.ListSandboxJobsRequest]) (*connect.Response[v1.ListSandboxJobsResponse], error) {
+// ListSandboxJobs calls workspace.v1.BranchSessionService.ListSandboxJobs.
+func (c *branchSessionServiceClient) ListSandboxJobs(ctx context.Context, req *connect.Request[v1.ListSandboxJobsRequest]) (*connect.Response[v1.ListSandboxJobsResponse], error) {
 	return c.listSandboxJobs.CallUnary(ctx, req)
 }
 
-// GetSandboxJobOutput calls workspace.v1.WorkspaceService.GetSandboxJobOutput.
-func (c *workspaceServiceClient) GetSandboxJobOutput(ctx context.Context, req *connect.Request[v1.GetSandboxJobOutputRequest]) (*connect.Response[v1.GetSandboxJobOutputResponse], error) {
+// GetSandboxJobOutput calls workspace.v1.BranchSessionService.GetSandboxJobOutput.
+func (c *branchSessionServiceClient) GetSandboxJobOutput(ctx context.Context, req *connect.Request[v1.GetSandboxJobOutputRequest]) (*connect.Response[v1.GetSandboxJobOutputResponse], error) {
 	return c.getSandboxJobOutput.CallUnary(ctx, req)
 }
 
-// WatchSandboxJob calls workspace.v1.WorkspaceService.WatchSandboxJob.
-func (c *workspaceServiceClient) WatchSandboxJob(ctx context.Context, req *connect.Request[v1.WatchSandboxJobRequest]) (*connect.ServerStreamForClient[v1.WatchSandboxJobResponse], error) {
+// WatchSandboxJob calls workspace.v1.BranchSessionService.WatchSandboxJob.
+func (c *branchSessionServiceClient) WatchSandboxJob(ctx context.Context, req *connect.Request[v1.WatchSandboxJobRequest]) (*connect.ServerStreamForClient[v1.WatchSandboxJobResponse], error) {
 	return c.watchSandboxJob.CallServerStream(ctx, req)
 }
 
-// DeployService calls workspace.v1.WorkspaceService.DeployService.
-func (c *workspaceServiceClient) DeployService(ctx context.Context, req *connect.Request[v1.DeployServiceRequest]) (*connect.Response[v1.DeployServiceResponse], error) {
+// DeployService calls workspace.v1.BranchSessionService.DeployService.
+func (c *branchSessionServiceClient) DeployService(ctx context.Context, req *connect.Request[v1.DeployServiceRequest]) (*connect.Response[v1.DeployServiceResponse], error) {
 	return c.deployService.CallUnary(ctx, req)
 }
 
-// ListServices calls workspace.v1.WorkspaceService.ListServices.
-func (c *workspaceServiceClient) ListServices(ctx context.Context, req *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error) {
+// ListServices calls workspace.v1.BranchSessionService.ListServices.
+func (c *branchSessionServiceClient) ListServices(ctx context.Context, req *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error) {
 	return c.listServices.CallUnary(ctx, req)
 }
 
-// DeleteService calls workspace.v1.WorkspaceService.DeleteService.
-func (c *workspaceServiceClient) DeleteService(ctx context.Context, req *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error) {
+// DeleteService calls workspace.v1.BranchSessionService.DeleteService.
+func (c *branchSessionServiceClient) DeleteService(ctx context.Context, req *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error) {
 	return c.deleteService.CallUnary(ctx, req)
 }
 
-// Health calls workspace.v1.WorkspaceService.Health.
-func (c *workspaceServiceClient) Health(ctx context.Context, req *connect.Request[v11.HealthRequest]) (*connect.Response[v11.HealthResponse], error) {
+// Health calls workspace.v1.BranchSessionService.Health.
+func (c *branchSessionServiceClient) Health(ctx context.Context, req *connect.Request[v11.HealthRequest]) (*connect.Response[v11.HealthResponse], error) {
 	return c.health.CallUnary(ctx, req)
 }
 
-// GetIdentity calls workspace.v1.WorkspaceService.GetIdentity.
-func (c *workspaceServiceClient) GetIdentity(ctx context.Context, req *connect.Request[v11.GetIdentityRequest]) (*connect.Response[v11.GetIdentityResponse], error) {
+// GetIdentity calls workspace.v1.BranchSessionService.GetIdentity.
+func (c *branchSessionServiceClient) GetIdentity(ctx context.Context, req *connect.Request[v11.GetIdentityRequest]) (*connect.Response[v11.GetIdentityResponse], error) {
 	return c.getIdentity.CallUnary(ctx, req)
 }
 
-// ListSessions calls workspace.v1.WorkspaceService.ListSessions.
-func (c *workspaceServiceClient) ListSessions(ctx context.Context, req *connect.Request[v11.ListSessionsRequest]) (*connect.Response[v11.ListSessionsResponse], error) {
+// ListSessions calls workspace.v1.BranchSessionService.ListSessions.
+func (c *branchSessionServiceClient) ListSessions(ctx context.Context, req *connect.Request[v11.ListSessionsRequest]) (*connect.Response[v11.ListSessionsResponse], error) {
 	return c.listSessions.CallUnary(ctx, req)
 }
 
-// GetSession calls workspace.v1.WorkspaceService.GetSession.
-func (c *workspaceServiceClient) GetSession(ctx context.Context, req *connect.Request[v11.GetSessionRequest]) (*connect.Response[v11.GetSessionResponse], error) {
+// GetSession calls workspace.v1.BranchSessionService.GetSession.
+func (c *branchSessionServiceClient) GetSession(ctx context.Context, req *connect.Request[v11.GetSessionRequest]) (*connect.Response[v11.GetSessionResponse], error) {
 	return c.getSession.CallUnary(ctx, req)
 }
 
-// DeleteSession calls workspace.v1.WorkspaceService.DeleteSession.
-func (c *workspaceServiceClient) DeleteSession(ctx context.Context, req *connect.Request[v11.DeleteSessionRequest]) (*connect.Response[v11.DeleteSessionResponse], error) {
+// DeleteSession calls workspace.v1.BranchSessionService.DeleteSession.
+func (c *branchSessionServiceClient) DeleteSession(ctx context.Context, req *connect.Request[v11.DeleteSessionRequest]) (*connect.Response[v11.DeleteSessionResponse], error) {
 	return c.deleteSession.CallUnary(ctx, req)
 }
 
-// ListMessages calls workspace.v1.WorkspaceService.ListMessages.
-func (c *workspaceServiceClient) ListMessages(ctx context.Context, req *connect.Request[v11.ListMessagesRequest]) (*connect.Response[v11.ListMessagesResponse], error) {
+// ListMessages calls workspace.v1.BranchSessionService.ListMessages.
+func (c *branchSessionServiceClient) ListMessages(ctx context.Context, req *connect.Request[v11.ListMessagesRequest]) (*connect.Response[v11.ListMessagesResponse], error) {
 	return c.listMessages.CallUnary(ctx, req)
 }
 
-// Prompt calls workspace.v1.WorkspaceService.Prompt.
-func (c *workspaceServiceClient) Prompt(ctx context.Context, req *connect.Request[v11.PromptRequest]) (*connect.ServerStreamForClient[v11.PromptResponse], error) {
+// Prompt calls workspace.v1.BranchSessionService.Prompt.
+func (c *branchSessionServiceClient) Prompt(ctx context.Context, req *connect.Request[v11.PromptRequest]) (*connect.ServerStreamForClient[v11.PromptResponse], error) {
 	return c.prompt.CallServerStream(ctx, req)
 }
 
-// WatchSession calls workspace.v1.WorkspaceService.WatchSession.
-func (c *workspaceServiceClient) WatchSession(ctx context.Context, req *connect.Request[v11.WatchSessionRequest]) (*connect.ServerStreamForClient[v11.WatchSessionResponse], error) {
+// WatchSession calls workspace.v1.BranchSessionService.WatchSession.
+func (c *branchSessionServiceClient) WatchSession(ctx context.Context, req *connect.Request[v11.WatchSessionRequest]) (*connect.ServerStreamForClient[v11.WatchSessionResponse], error) {
 	return c.watchSession.CallServerStream(ctx, req)
 }
 
-// WatchSessions calls workspace.v1.WorkspaceService.WatchSessions.
-func (c *workspaceServiceClient) WatchSessions(ctx context.Context, req *connect.Request[v11.WatchSessionsRequest]) (*connect.ServerStreamForClient[v11.WatchSessionsResponse], error) {
+// WatchSessions calls workspace.v1.BranchSessionService.WatchSessions.
+func (c *branchSessionServiceClient) WatchSessions(ctx context.Context, req *connect.Request[v11.WatchSessionsRequest]) (*connect.ServerStreamForClient[v11.WatchSessionsResponse], error) {
 	return c.watchSessions.CallServerStream(ctx, req)
 }
 
-// SetModel calls workspace.v1.WorkspaceService.SetModel.
-func (c *workspaceServiceClient) SetModel(ctx context.Context, req *connect.Request[v11.SetModelRequest]) (*connect.Response[v11.SetModelResponse], error) {
+// SetModel calls workspace.v1.BranchSessionService.SetModel.
+func (c *branchSessionServiceClient) SetModel(ctx context.Context, req *connect.Request[v11.SetModelRequest]) (*connect.Response[v11.SetModelResponse], error) {
 	return c.setModel.CallUnary(ctx, req)
 }
 
-// Undo calls workspace.v1.WorkspaceService.Undo.
-func (c *workspaceServiceClient) Undo(ctx context.Context, req *connect.Request[v11.UndoRequest]) (*connect.Response[v11.UndoResponse], error) {
+// Undo calls workspace.v1.BranchSessionService.Undo.
+func (c *branchSessionServiceClient) Undo(ctx context.Context, req *connect.Request[v11.UndoRequest]) (*connect.Response[v11.UndoResponse], error) {
 	return c.undo.CallUnary(ctx, req)
 }
 
-// State calls workspace.v1.WorkspaceService.State.
-func (c *workspaceServiceClient) State(ctx context.Context, req *connect.Request[v11.StateRequest]) (*connect.Response[v11.StateResponse], error) {
+// State calls workspace.v1.BranchSessionService.State.
+func (c *branchSessionServiceClient) State(ctx context.Context, req *connect.Request[v11.StateRequest]) (*connect.Response[v11.StateResponse], error) {
 	return c.state.CallUnary(ctx, req)
 }
 
-// Mailbox calls workspace.v1.WorkspaceService.Mailbox.
-func (c *workspaceServiceClient) Mailbox(ctx context.Context, req *connect.Request[v11.MailboxRequest]) (*connect.Response[v11.MailboxResponse], error) {
+// Mailbox calls workspace.v1.BranchSessionService.Mailbox.
+func (c *branchSessionServiceClient) Mailbox(ctx context.Context, req *connect.Request[v11.MailboxRequest]) (*connect.Response[v11.MailboxResponse], error) {
 	return c.mailbox.CallUnary(ctx, req)
 }
 
-// Interrupt calls workspace.v1.WorkspaceService.Interrupt.
-func (c *workspaceServiceClient) Interrupt(ctx context.Context, req *connect.Request[v11.InterruptRequest]) (*connect.Response[v11.InterruptResponse], error) {
+// Interrupt calls workspace.v1.BranchSessionService.Interrupt.
+func (c *branchSessionServiceClient) Interrupt(ctx context.Context, req *connect.Request[v11.InterruptRequest]) (*connect.Response[v11.InterruptResponse], error) {
 	return c.interrupt.CallUnary(ctx, req)
 }
 
-// Compact calls workspace.v1.WorkspaceService.Compact.
-func (c *workspaceServiceClient) Compact(ctx context.Context, req *connect.Request[v11.CompactRequest]) (*connect.Response[v11.CompactResponse], error) {
+// Compact calls workspace.v1.BranchSessionService.Compact.
+func (c *branchSessionServiceClient) Compact(ctx context.Context, req *connect.Request[v11.CompactRequest]) (*connect.Response[v11.CompactResponse], error) {
 	return c.compact.CallUnary(ctx, req)
 }
 
-// UpdateSettings calls workspace.v1.WorkspaceService.UpdateSettings.
-func (c *workspaceServiceClient) UpdateSettings(ctx context.Context, req *connect.Request[v1.UpdateSettingsRequest]) (*connect.Response[v1.UpdateSettingsResponse], error) {
+// UpdateSettings calls workspace.v1.BranchSessionService.UpdateSettings.
+func (c *branchSessionServiceClient) UpdateSettings(ctx context.Context, req *connect.Request[v1.UpdateSettingsRequest]) (*connect.Response[v1.UpdateSettingsResponse], error) {
 	return c.updateSettings.CallUnary(ctx, req)
 }
 
-// ListProviders calls workspace.v1.WorkspaceService.ListProviders.
-func (c *workspaceServiceClient) ListProviders(ctx context.Context, req *connect.Request[v11.ListProvidersRequest]) (*connect.Response[v11.ListProvidersResponse], error) {
+// ListProviders calls workspace.v1.BranchSessionService.ListProviders.
+func (c *branchSessionServiceClient) ListProviders(ctx context.Context, req *connect.Request[v11.ListProvidersRequest]) (*connect.Response[v11.ListProvidersResponse], error) {
 	return c.listProviders.CallUnary(ctx, req)
 }
 
-// ListProvidersCatalog calls workspace.v1.WorkspaceService.ListProvidersCatalog.
-func (c *workspaceServiceClient) ListProvidersCatalog(ctx context.Context, req *connect.Request[v11.ListProvidersCatalogRequest]) (*connect.Response[v11.ListProvidersCatalogResponse], error) {
+// ListProvidersCatalog calls workspace.v1.BranchSessionService.ListProvidersCatalog.
+func (c *branchSessionServiceClient) ListProvidersCatalog(ctx context.Context, req *connect.Request[v11.ListProvidersCatalogRequest]) (*connect.Response[v11.ListProvidersCatalogResponse], error) {
 	return c.listProvidersCatalog.CallUnary(ctx, req)
 }
 
-// RegisterProvider calls workspace.v1.WorkspaceService.RegisterProvider.
-func (c *workspaceServiceClient) RegisterProvider(ctx context.Context, req *connect.Request[v11.RegisterProviderRequest]) (*connect.Response[v11.RegisterProviderResponse], error) {
+// RegisterProvider calls workspace.v1.BranchSessionService.RegisterProvider.
+func (c *branchSessionServiceClient) RegisterProvider(ctx context.Context, req *connect.Request[v11.RegisterProviderRequest]) (*connect.Response[v11.RegisterProviderResponse], error) {
 	return c.registerProvider.CallUnary(ctx, req)
 }
 
-// DeleteProvider calls workspace.v1.WorkspaceService.DeleteProvider.
-func (c *workspaceServiceClient) DeleteProvider(ctx context.Context, req *connect.Request[v11.DeleteProviderRequest]) (*connect.Response[v11.DeleteProviderResponse], error) {
+// DeleteProvider calls workspace.v1.BranchSessionService.DeleteProvider.
+func (c *branchSessionServiceClient) DeleteProvider(ctx context.Context, req *connect.Request[v11.DeleteProviderRequest]) (*connect.Response[v11.DeleteProviderResponse], error) {
 	return c.deleteProvider.CallUnary(ctx, req)
 }
 
-// TestProvider calls workspace.v1.WorkspaceService.TestProvider.
-func (c *workspaceServiceClient) TestProvider(ctx context.Context, req *connect.Request[v11.TestProviderRequest]) (*connect.Response[v11.TestProviderResponse], error) {
+// TestProvider calls workspace.v1.BranchSessionService.TestProvider.
+func (c *branchSessionServiceClient) TestProvider(ctx context.Context, req *connect.Request[v11.TestProviderRequest]) (*connect.Response[v11.TestProviderResponse], error) {
 	return c.testProvider.CallUnary(ctx, req)
 }
 
-// ListModels calls workspace.v1.WorkspaceService.ListModels.
-func (c *workspaceServiceClient) ListModels(ctx context.Context, req *connect.Request[v11.ListModelsRequest]) (*connect.Response[v11.ListModelsResponse], error) {
+// ListModels calls workspace.v1.BranchSessionService.ListModels.
+func (c *branchSessionServiceClient) ListModels(ctx context.Context, req *connect.Request[v11.ListModelsRequest]) (*connect.Response[v11.ListModelsResponse], error) {
 	return c.listModels.CallUnary(ctx, req)
 }
 
-// ListPresets calls workspace.v1.WorkspaceService.ListPresets.
-func (c *workspaceServiceClient) ListPresets(ctx context.Context, req *connect.Request[v11.ListPresetsRequest]) (*connect.Response[v11.ListPresetsResponse], error) {
+// ListPresets calls workspace.v1.BranchSessionService.ListPresets.
+func (c *branchSessionServiceClient) ListPresets(ctx context.Context, req *connect.Request[v11.ListPresetsRequest]) (*connect.Response[v11.ListPresetsResponse], error) {
 	return c.listPresets.CallUnary(ctx, req)
 }
 
-// PreviewPreset calls workspace.v1.WorkspaceService.PreviewPreset.
-func (c *workspaceServiceClient) PreviewPreset(ctx context.Context, req *connect.Request[v11.PreviewPresetRequest]) (*connect.Response[v11.PreviewPresetResponse], error) {
+// PreviewPreset calls workspace.v1.BranchSessionService.PreviewPreset.
+func (c *branchSessionServiceClient) PreviewPreset(ctx context.Context, req *connect.Request[v11.PreviewPresetRequest]) (*connect.Response[v11.PreviewPresetResponse], error) {
 	return c.previewPreset.CallUnary(ctx, req)
 }
 
-// GetConfig calls workspace.v1.WorkspaceService.GetConfig.
-func (c *workspaceServiceClient) GetConfig(ctx context.Context, req *connect.Request[v11.GetConfigRequest]) (*connect.Response[v11.GetConfigResponse], error) {
+// GetConfig calls workspace.v1.BranchSessionService.GetConfig.
+func (c *branchSessionServiceClient) GetConfig(ctx context.Context, req *connect.Request[v11.GetConfigRequest]) (*connect.Response[v11.GetConfigResponse], error) {
 	return c.getConfig.CallUnary(ctx, req)
 }
 
-// SetConfig calls workspace.v1.WorkspaceService.SetConfig.
-func (c *workspaceServiceClient) SetConfig(ctx context.Context, req *connect.Request[v11.SetConfigRequest]) (*connect.Response[v11.SetConfigResponse], error) {
+// SetConfig calls workspace.v1.BranchSessionService.SetConfig.
+func (c *branchSessionServiceClient) SetConfig(ctx context.Context, req *connect.Request[v11.SetConfigRequest]) (*connect.Response[v11.SetConfigResponse], error) {
 	return c.setConfig.CallUnary(ctx, req)
 }
 
-// ListTools calls workspace.v1.WorkspaceService.ListTools.
-func (c *workspaceServiceClient) ListTools(ctx context.Context, req *connect.Request[v11.ListToolsRequest]) (*connect.Response[v11.ListToolsResponse], error) {
+// ListTools calls workspace.v1.BranchSessionService.ListTools.
+func (c *branchSessionServiceClient) ListTools(ctx context.Context, req *connect.Request[v11.ListToolsRequest]) (*connect.Response[v11.ListToolsResponse], error) {
 	return c.listTools.CallUnary(ctx, req)
 }
 
-// GetToolConfig calls workspace.v1.WorkspaceService.GetToolConfig.
-func (c *workspaceServiceClient) GetToolConfig(ctx context.Context, req *connect.Request[v11.GetToolConfigRequest]) (*connect.Response[v11.GetToolConfigResponse], error) {
+// GetToolConfig calls workspace.v1.BranchSessionService.GetToolConfig.
+func (c *branchSessionServiceClient) GetToolConfig(ctx context.Context, req *connect.Request[v11.GetToolConfigRequest]) (*connect.Response[v11.GetToolConfigResponse], error) {
 	return c.getToolConfig.CallUnary(ctx, req)
 }
 
-// SetToolConfig calls workspace.v1.WorkspaceService.SetToolConfig.
-func (c *workspaceServiceClient) SetToolConfig(ctx context.Context, req *connect.Request[v11.SetToolConfigRequest]) (*connect.Response[v11.SetToolConfigResponse], error) {
+// SetToolConfig calls workspace.v1.BranchSessionService.SetToolConfig.
+func (c *branchSessionServiceClient) SetToolConfig(ctx context.Context, req *connect.Request[v11.SetToolConfigRequest]) (*connect.Response[v11.SetToolConfigResponse], error) {
 	return c.setToolConfig.CallUnary(ctx, req)
 }
 
-// SetExtensionConfig calls workspace.v1.WorkspaceService.SetExtensionConfig.
-func (c *workspaceServiceClient) SetExtensionConfig(ctx context.Context, req *connect.Request[v11.SetExtensionConfigRequest]) (*connect.Response[v11.SetExtensionConfigResponse], error) {
+// SetExtensionConfig calls workspace.v1.BranchSessionService.SetExtensionConfig.
+func (c *branchSessionServiceClient) SetExtensionConfig(ctx context.Context, req *connect.Request[v11.SetExtensionConfigRequest]) (*connect.Response[v11.SetExtensionConfigResponse], error) {
 	return c.setExtensionConfig.CallUnary(ctx, req)
 }
 
-// UploadFile calls workspace.v1.WorkspaceService.UploadFile.
-func (c *workspaceServiceClient) UploadFile(ctx context.Context, req *connect.Request[v11.UploadFileRequest]) (*connect.Response[v11.UploadFileResponse], error) {
+// UploadFile calls workspace.v1.BranchSessionService.UploadFile.
+func (c *branchSessionServiceClient) UploadFile(ctx context.Context, req *connect.Request[v11.UploadFileRequest]) (*connect.Response[v11.UploadFileResponse], error) {
 	return c.uploadFile.CallUnary(ctx, req)
 }
 
-// IngestFile calls workspace.v1.WorkspaceService.IngestFile.
-func (c *workspaceServiceClient) IngestFile(ctx context.Context, req *connect.Request[v11.IngestFileRequest]) (*connect.Response[v11.IngestFileResponse], error) {
+// IngestFile calls workspace.v1.BranchSessionService.IngestFile.
+func (c *branchSessionServiceClient) IngestFile(ctx context.Context, req *connect.Request[v11.IngestFileRequest]) (*connect.Response[v11.IngestFileResponse], error) {
 	return c.ingestFile.CallUnary(ctx, req)
 }
 
-// GetFile calls workspace.v1.WorkspaceService.GetFile.
-func (c *workspaceServiceClient) GetFile(ctx context.Context, req *connect.Request[v11.GetFileRequest]) (*connect.Response[v11.GetFileResponse], error) {
+// GetFile calls workspace.v1.BranchSessionService.GetFile.
+func (c *branchSessionServiceClient) GetFile(ctx context.Context, req *connect.Request[v11.GetFileRequest]) (*connect.Response[v11.GetFileResponse], error) {
 	return c.getFile.CallUnary(ctx, req)
 }
 
-// GetFileMeta calls workspace.v1.WorkspaceService.GetFileMeta.
-func (c *workspaceServiceClient) GetFileMeta(ctx context.Context, req *connect.Request[v11.GetFileMetaRequest]) (*connect.Response[v11.GetFileMetaResponse], error) {
+// GetFileMeta calls workspace.v1.BranchSessionService.GetFileMeta.
+func (c *branchSessionServiceClient) GetFileMeta(ctx context.Context, req *connect.Request[v11.GetFileMetaRequest]) (*connect.Response[v11.GetFileMetaResponse], error) {
 	return c.getFileMeta.CallUnary(ctx, req)
 }
 
-// GetFileStream calls workspace.v1.WorkspaceService.GetFileStream.
-func (c *workspaceServiceClient) GetFileStream(ctx context.Context, req *connect.Request[v11.GetFileRequest]) (*connect.ServerStreamForClient[v11.FileChunk], error) {
+// GetFileStream calls workspace.v1.BranchSessionService.GetFileStream.
+func (c *branchSessionServiceClient) GetFileStream(ctx context.Context, req *connect.Request[v11.GetFileRequest]) (*connect.ServerStreamForClient[v11.FileChunk], error) {
 	return c.getFileStream.CallServerStream(ctx, req)
 }
 
-// WorkspaceServiceHandler is an implementation of the workspace.v1.WorkspaceService service.
-type WorkspaceServiceHandler interface {
-	// workspaces (repo-bound sessions)
-	CreateWorkspace(context.Context, *connect.Request[v1.CreateWorkspaceRequest]) (*connect.Response[v1.CreateWorkspaceResponse], error)
-	ForkWorkspace(context.Context, *connect.Request[v1.ForkWorkspaceRequest]) (*connect.Response[v1.ForkWorkspaceResponse], error)
-	ListWorkspaces(context.Context, *connect.Request[v1.ListWorkspacesRequest]) (*connect.Response[v1.ListWorkspacesResponse], error)
-	GetWorkspace(context.Context, *connect.Request[v1.GetWorkspaceRequest]) (*connect.Response[v1.GetWorkspaceResponse], error)
-	DeleteWorkspace(context.Context, *connect.Request[v1.DeleteWorkspaceRequest]) (*connect.Response[v1.DeleteWorkspaceResponse], error)
+// BranchSessionServiceHandler is an implementation of the workspace.v1.BranchSessionService
+// service.
+type BranchSessionServiceHandler interface {
+	// branch sessions (repo:branch <-> session, 1:1)
+	EnsureBranchSession(context.Context, *connect.Request[v1.EnsureBranchSessionRequest]) (*connect.Response[v1.EnsureBranchSessionResponse], error)
+	ForkBranchSession(context.Context, *connect.Request[v1.ForkBranchSessionRequest]) (*connect.Response[v1.ForkBranchSessionResponse], error)
+	ListBranchSessions(context.Context, *connect.Request[v1.ListBranchSessionsRequest]) (*connect.Response[v1.ListBranchSessionsResponse], error)
+	GetBranchSession(context.Context, *connect.Request[v1.GetBranchSessionRequest]) (*connect.Response[v1.GetBranchSessionResponse], error)
+	DeleteBranchSession(context.Context, *connect.Request[v1.DeleteBranchSessionRequest]) (*connect.Response[v1.DeleteBranchSessionResponse], error)
+	// DeleteBranch removes a repo branch AND its branch session (session +
+	// sandboxes cascade); requires the branch owner (non-main).
+	DeleteBranch(context.Context, *connect.Request[v1.DeleteBranchRequest]) (*connect.Response[v1.DeleteBranchResponse], error)
 	// standalone sessions
 	CreateFreeSession(context.Context, *connect.Request[v1.CreateFreeSessionRequest]) (*connect.Response[v1.CreateFreeSessionResponse], error)
 	// git browse (read-only) + ensure
@@ -1340,896 +1371,908 @@ type WorkspaceServiceHandler interface {
 	GetFileStream(context.Context, *connect.Request[v11.GetFileRequest], *connect.ServerStream[v11.FileChunk]) error
 }
 
-// NewWorkspaceServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
+// NewBranchSessionServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
 //
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
-func NewWorkspaceServiceHandler(svc WorkspaceServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	workspaceServiceMethods := v1.File_workspace_v1_workspace_proto.Services().ByName("WorkspaceService").Methods()
-	workspaceServiceCreateWorkspaceHandler := connect.NewUnaryHandler(
-		WorkspaceServiceCreateWorkspaceProcedure,
-		svc.CreateWorkspace,
-		connect.WithSchema(workspaceServiceMethods.ByName("CreateWorkspace")),
+func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	branchSessionServiceMethods := v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods()
+	branchSessionServiceEnsureBranchSessionHandler := connect.NewUnaryHandler(
+		BranchSessionServiceEnsureBranchSessionProcedure,
+		svc.EnsureBranchSession,
+		connect.WithSchema(branchSessionServiceMethods.ByName("EnsureBranchSession")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceForkWorkspaceHandler := connect.NewUnaryHandler(
-		WorkspaceServiceForkWorkspaceProcedure,
-		svc.ForkWorkspace,
-		connect.WithSchema(workspaceServiceMethods.ByName("ForkWorkspace")),
+	branchSessionServiceForkBranchSessionHandler := connect.NewUnaryHandler(
+		BranchSessionServiceForkBranchSessionProcedure,
+		svc.ForkBranchSession,
+		connect.WithSchema(branchSessionServiceMethods.ByName("ForkBranchSession")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceListWorkspacesHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListWorkspacesProcedure,
-		svc.ListWorkspaces,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListWorkspaces")),
+	branchSessionServiceListBranchSessionsHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListBranchSessionsProcedure,
+		svc.ListBranchSessions,
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListBranchSessions")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceGetWorkspaceHandler := connect.NewUnaryHandler(
-		WorkspaceServiceGetWorkspaceProcedure,
-		svc.GetWorkspace,
-		connect.WithSchema(workspaceServiceMethods.ByName("GetWorkspace")),
+	branchSessionServiceGetBranchSessionHandler := connect.NewUnaryHandler(
+		BranchSessionServiceGetBranchSessionProcedure,
+		svc.GetBranchSession,
+		connect.WithSchema(branchSessionServiceMethods.ByName("GetBranchSession")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceDeleteWorkspaceHandler := connect.NewUnaryHandler(
-		WorkspaceServiceDeleteWorkspaceProcedure,
-		svc.DeleteWorkspace,
-		connect.WithSchema(workspaceServiceMethods.ByName("DeleteWorkspace")),
+	branchSessionServiceDeleteBranchSessionHandler := connect.NewUnaryHandler(
+		BranchSessionServiceDeleteBranchSessionProcedure,
+		svc.DeleteBranchSession,
+		connect.WithSchema(branchSessionServiceMethods.ByName("DeleteBranchSession")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceCreateFreeSessionHandler := connect.NewUnaryHandler(
-		WorkspaceServiceCreateFreeSessionProcedure,
+	branchSessionServiceDeleteBranchHandler := connect.NewUnaryHandler(
+		BranchSessionServiceDeleteBranchProcedure,
+		svc.DeleteBranch,
+		connect.WithSchema(branchSessionServiceMethods.ByName("DeleteBranch")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceCreateFreeSessionHandler := connect.NewUnaryHandler(
+		BranchSessionServiceCreateFreeSessionProcedure,
 		svc.CreateFreeSession,
-		connect.WithSchema(workspaceServiceMethods.ByName("CreateFreeSession")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("CreateFreeSession")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceListReposHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListReposProcedure,
+	branchSessionServiceListReposHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListReposProcedure,
 		svc.ListRepos,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListRepos")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListRepos")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceTreeHandler := connect.NewUnaryHandler(
-		WorkspaceServiceTreeProcedure,
+	branchSessionServiceTreeHandler := connect.NewUnaryHandler(
+		BranchSessionServiceTreeProcedure,
 		svc.Tree,
-		connect.WithSchema(workspaceServiceMethods.ByName("Tree")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("Tree")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceReadBlobHandler := connect.NewUnaryHandler(
-		WorkspaceServiceReadBlobProcedure,
+	branchSessionServiceReadBlobHandler := connect.NewUnaryHandler(
+		BranchSessionServiceReadBlobProcedure,
 		svc.ReadBlob,
-		connect.WithSchema(workspaceServiceMethods.ByName("ReadBlob")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ReadBlob")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceReadRawHandler := connect.NewUnaryHandler(
-		WorkspaceServiceReadRawProcedure,
+	branchSessionServiceReadRawHandler := connect.NewUnaryHandler(
+		BranchSessionServiceReadRawProcedure,
 		svc.ReadRaw,
-		connect.WithSchema(workspaceServiceMethods.ByName("ReadRaw")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ReadRaw")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceLogHandler := connect.NewUnaryHandler(
-		WorkspaceServiceLogProcedure,
+	branchSessionServiceLogHandler := connect.NewUnaryHandler(
+		BranchSessionServiceLogProcedure,
 		svc.Log,
-		connect.WithSchema(workspaceServiceMethods.ByName("Log")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("Log")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceBranchesHandler := connect.NewUnaryHandler(
-		WorkspaceServiceBranchesProcedure,
+	branchSessionServiceBranchesHandler := connect.NewUnaryHandler(
+		BranchSessionServiceBranchesProcedure,
 		svc.Branches,
-		connect.WithSchema(workspaceServiceMethods.ByName("Branches")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("Branches")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceTagsHandler := connect.NewUnaryHandler(
-		WorkspaceServiceTagsProcedure,
+	branchSessionServiceTagsHandler := connect.NewUnaryHandler(
+		BranchSessionServiceTagsProcedure,
 		svc.Tags,
-		connect.WithSchema(workspaceServiceMethods.ByName("Tags")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("Tags")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceListReleasesHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListReleasesProcedure,
+	branchSessionServiceListReleasesHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListReleasesProcedure,
 		svc.ListReleases,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListReleases")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListReleases")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceGetReleaseAssetHandler := connect.NewUnaryHandler(
-		WorkspaceServiceGetReleaseAssetProcedure,
+	branchSessionServiceGetReleaseAssetHandler := connect.NewUnaryHandler(
+		BranchSessionServiceGetReleaseAssetProcedure,
 		svc.GetReleaseAsset,
-		connect.WithSchema(workspaceServiceMethods.ByName("GetReleaseAsset")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("GetReleaseAsset")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceGetCommitHandler := connect.NewUnaryHandler(
-		WorkspaceServiceGetCommitProcedure,
+	branchSessionServiceGetCommitHandler := connect.NewUnaryHandler(
+		BranchSessionServiceGetCommitProcedure,
 		svc.GetCommit,
-		connect.WithSchema(workspaceServiceMethods.ByName("GetCommit")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("GetCommit")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceCommitDiffHandler := connect.NewUnaryHandler(
-		WorkspaceServiceCommitDiffProcedure,
+	branchSessionServiceCommitDiffHandler := connect.NewUnaryHandler(
+		BranchSessionServiceCommitDiffProcedure,
 		svc.CommitDiff,
-		connect.WithSchema(workspaceServiceMethods.ByName("CommitDiff")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("CommitDiff")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceEnsureRepoHandler := connect.NewUnaryHandler(
-		WorkspaceServiceEnsureRepoProcedure,
+	branchSessionServiceEnsureRepoHandler := connect.NewUnaryHandler(
+		BranchSessionServiceEnsureRepoProcedure,
 		svc.EnsureRepo,
-		connect.WithSchema(workspaceServiceMethods.ByName("EnsureRepo")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("EnsureRepo")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceListMRsHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListMRsProcedure,
+	branchSessionServiceListMRsHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListMRsProcedure,
 		svc.ListMRs,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListMRs")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListMRs")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceGetMRHandler := connect.NewUnaryHandler(
-		WorkspaceServiceGetMRProcedure,
+	branchSessionServiceGetMRHandler := connect.NewUnaryHandler(
+		BranchSessionServiceGetMRProcedure,
 		svc.GetMR,
-		connect.WithSchema(workspaceServiceMethods.ByName("GetMR")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("GetMR")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceMRDiffHandler := connect.NewUnaryHandler(
-		WorkspaceServiceMRDiffProcedure,
+	branchSessionServiceMRDiffHandler := connect.NewUnaryHandler(
+		BranchSessionServiceMRDiffProcedure,
 		svc.MRDiff,
-		connect.WithSchema(workspaceServiceMethods.ByName("MRDiff")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("MRDiff")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceListMRCommentsHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListMRCommentsProcedure,
+	branchSessionServiceListMRCommentsHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListMRCommentsProcedure,
 		svc.ListMRComments,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListMRComments")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListMRComments")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceCreateMRHandler := connect.NewUnaryHandler(
-		WorkspaceServiceCreateMRProcedure,
+	branchSessionServiceCreateMRHandler := connect.NewUnaryHandler(
+		BranchSessionServiceCreateMRProcedure,
 		svc.CreateMR,
-		connect.WithSchema(workspaceServiceMethods.ByName("CreateMR")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("CreateMR")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceCommentMRHandler := connect.NewUnaryHandler(
-		WorkspaceServiceCommentMRProcedure,
+	branchSessionServiceCommentMRHandler := connect.NewUnaryHandler(
+		BranchSessionServiceCommentMRProcedure,
 		svc.CommentMR,
-		connect.WithSchema(workspaceServiceMethods.ByName("CommentMR")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("CommentMR")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceMergeMRHandler := connect.NewUnaryHandler(
-		WorkspaceServiceMergeMRProcedure,
+	branchSessionServiceMergeMRHandler := connect.NewUnaryHandler(
+		BranchSessionServiceMergeMRProcedure,
 		svc.MergeMR,
-		connect.WithSchema(workspaceServiceMethods.ByName("MergeMR")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("MergeMR")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceListOCIImagesHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListOCIImagesProcedure,
+	branchSessionServiceListOCIImagesHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListOCIImagesProcedure,
 		svc.ListOCIImages,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListOCIImages")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListOCIImages")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceBuildSandboxImageHandler := connect.NewUnaryHandler(
-		WorkspaceServiceBuildSandboxImageProcedure,
+	branchSessionServiceBuildSandboxImageHandler := connect.NewUnaryHandler(
+		BranchSessionServiceBuildSandboxImageProcedure,
 		svc.BuildSandboxImage,
-		connect.WithSchema(workspaceServiceMethods.ByName("BuildSandboxImage")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("BuildSandboxImage")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceListSandboxesHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListSandboxesProcedure,
+	branchSessionServiceListSandboxesHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListSandboxesProcedure,
 		svc.ListSandboxes,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListSandboxes")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListSandboxes")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceCreateSandboxHandler := connect.NewUnaryHandler(
-		WorkspaceServiceCreateSandboxProcedure,
+	branchSessionServiceCreateSandboxHandler := connect.NewUnaryHandler(
+		BranchSessionServiceCreateSandboxProcedure,
 		svc.CreateSandbox,
-		connect.WithSchema(workspaceServiceMethods.ByName("CreateSandbox")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("CreateSandbox")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceGetSandboxHandler := connect.NewUnaryHandler(
-		WorkspaceServiceGetSandboxProcedure,
+	branchSessionServiceGetSandboxHandler := connect.NewUnaryHandler(
+		BranchSessionServiceGetSandboxProcedure,
 		svc.GetSandbox,
-		connect.WithSchema(workspaceServiceMethods.ByName("GetSandbox")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("GetSandbox")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceDeleteSandboxHandler := connect.NewUnaryHandler(
-		WorkspaceServiceDeleteSandboxProcedure,
+	branchSessionServiceDeleteSandboxHandler := connect.NewUnaryHandler(
+		BranchSessionServiceDeleteSandboxProcedure,
 		svc.DeleteSandbox,
-		connect.WithSchema(workspaceServiceMethods.ByName("DeleteSandbox")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("DeleteSandbox")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceResolveSandboxHandler := connect.NewUnaryHandler(
-		WorkspaceServiceResolveSandboxProcedure,
+	branchSessionServiceResolveSandboxHandler := connect.NewUnaryHandler(
+		BranchSessionServiceResolveSandboxProcedure,
 		svc.ResolveSandbox,
-		connect.WithSchema(workspaceServiceMethods.ByName("ResolveSandbox")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ResolveSandbox")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceListSandboxJobsHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListSandboxJobsProcedure,
+	branchSessionServiceListSandboxJobsHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListSandboxJobsProcedure,
 		svc.ListSandboxJobs,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListSandboxJobs")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListSandboxJobs")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceGetSandboxJobOutputHandler := connect.NewUnaryHandler(
-		WorkspaceServiceGetSandboxJobOutputProcedure,
+	branchSessionServiceGetSandboxJobOutputHandler := connect.NewUnaryHandler(
+		BranchSessionServiceGetSandboxJobOutputProcedure,
 		svc.GetSandboxJobOutput,
-		connect.WithSchema(workspaceServiceMethods.ByName("GetSandboxJobOutput")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("GetSandboxJobOutput")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceWatchSandboxJobHandler := connect.NewServerStreamHandler(
-		WorkspaceServiceWatchSandboxJobProcedure,
+	branchSessionServiceWatchSandboxJobHandler := connect.NewServerStreamHandler(
+		BranchSessionServiceWatchSandboxJobProcedure,
 		svc.WatchSandboxJob,
-		connect.WithSchema(workspaceServiceMethods.ByName("WatchSandboxJob")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("WatchSandboxJob")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceDeployServiceHandler := connect.NewUnaryHandler(
-		WorkspaceServiceDeployServiceProcedure,
+	branchSessionServiceDeployServiceHandler := connect.NewUnaryHandler(
+		BranchSessionServiceDeployServiceProcedure,
 		svc.DeployService,
-		connect.WithSchema(workspaceServiceMethods.ByName("DeployService")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("DeployService")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceListServicesHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListServicesProcedure,
+	branchSessionServiceListServicesHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListServicesProcedure,
 		svc.ListServices,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListServices")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListServices")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceDeleteServiceHandler := connect.NewUnaryHandler(
-		WorkspaceServiceDeleteServiceProcedure,
+	branchSessionServiceDeleteServiceHandler := connect.NewUnaryHandler(
+		BranchSessionServiceDeleteServiceProcedure,
 		svc.DeleteService,
-		connect.WithSchema(workspaceServiceMethods.ByName("DeleteService")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("DeleteService")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceHealthHandler := connect.NewUnaryHandler(
-		WorkspaceServiceHealthProcedure,
+	branchSessionServiceHealthHandler := connect.NewUnaryHandler(
+		BranchSessionServiceHealthProcedure,
 		svc.Health,
-		connect.WithSchema(workspaceServiceMethods.ByName("Health")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("Health")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceGetIdentityHandler := connect.NewUnaryHandler(
-		WorkspaceServiceGetIdentityProcedure,
+	branchSessionServiceGetIdentityHandler := connect.NewUnaryHandler(
+		BranchSessionServiceGetIdentityProcedure,
 		svc.GetIdentity,
-		connect.WithSchema(workspaceServiceMethods.ByName("GetIdentity")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("GetIdentity")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceListSessionsHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListSessionsProcedure,
+	branchSessionServiceListSessionsHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListSessionsProcedure,
 		svc.ListSessions,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListSessions")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListSessions")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceGetSessionHandler := connect.NewUnaryHandler(
-		WorkspaceServiceGetSessionProcedure,
+	branchSessionServiceGetSessionHandler := connect.NewUnaryHandler(
+		BranchSessionServiceGetSessionProcedure,
 		svc.GetSession,
-		connect.WithSchema(workspaceServiceMethods.ByName("GetSession")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("GetSession")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceDeleteSessionHandler := connect.NewUnaryHandler(
-		WorkspaceServiceDeleteSessionProcedure,
+	branchSessionServiceDeleteSessionHandler := connect.NewUnaryHandler(
+		BranchSessionServiceDeleteSessionProcedure,
 		svc.DeleteSession,
-		connect.WithSchema(workspaceServiceMethods.ByName("DeleteSession")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("DeleteSession")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceListMessagesHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListMessagesProcedure,
+	branchSessionServiceListMessagesHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListMessagesProcedure,
 		svc.ListMessages,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListMessages")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListMessages")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServicePromptHandler := connect.NewServerStreamHandler(
-		WorkspaceServicePromptProcedure,
+	branchSessionServicePromptHandler := connect.NewServerStreamHandler(
+		BranchSessionServicePromptProcedure,
 		svc.Prompt,
-		connect.WithSchema(workspaceServiceMethods.ByName("Prompt")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("Prompt")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceWatchSessionHandler := connect.NewServerStreamHandler(
-		WorkspaceServiceWatchSessionProcedure,
+	branchSessionServiceWatchSessionHandler := connect.NewServerStreamHandler(
+		BranchSessionServiceWatchSessionProcedure,
 		svc.WatchSession,
-		connect.WithSchema(workspaceServiceMethods.ByName("WatchSession")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("WatchSession")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceWatchSessionsHandler := connect.NewServerStreamHandler(
-		WorkspaceServiceWatchSessionsProcedure,
+	branchSessionServiceWatchSessionsHandler := connect.NewServerStreamHandler(
+		BranchSessionServiceWatchSessionsProcedure,
 		svc.WatchSessions,
-		connect.WithSchema(workspaceServiceMethods.ByName("WatchSessions")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("WatchSessions")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceSetModelHandler := connect.NewUnaryHandler(
-		WorkspaceServiceSetModelProcedure,
+	branchSessionServiceSetModelHandler := connect.NewUnaryHandler(
+		BranchSessionServiceSetModelProcedure,
 		svc.SetModel,
-		connect.WithSchema(workspaceServiceMethods.ByName("SetModel")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("SetModel")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceUndoHandler := connect.NewUnaryHandler(
-		WorkspaceServiceUndoProcedure,
+	branchSessionServiceUndoHandler := connect.NewUnaryHandler(
+		BranchSessionServiceUndoProcedure,
 		svc.Undo,
-		connect.WithSchema(workspaceServiceMethods.ByName("Undo")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("Undo")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceStateHandler := connect.NewUnaryHandler(
-		WorkspaceServiceStateProcedure,
+	branchSessionServiceStateHandler := connect.NewUnaryHandler(
+		BranchSessionServiceStateProcedure,
 		svc.State,
-		connect.WithSchema(workspaceServiceMethods.ByName("State")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("State")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceMailboxHandler := connect.NewUnaryHandler(
-		WorkspaceServiceMailboxProcedure,
+	branchSessionServiceMailboxHandler := connect.NewUnaryHandler(
+		BranchSessionServiceMailboxProcedure,
 		svc.Mailbox,
-		connect.WithSchema(workspaceServiceMethods.ByName("Mailbox")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("Mailbox")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceInterruptHandler := connect.NewUnaryHandler(
-		WorkspaceServiceInterruptProcedure,
+	branchSessionServiceInterruptHandler := connect.NewUnaryHandler(
+		BranchSessionServiceInterruptProcedure,
 		svc.Interrupt,
-		connect.WithSchema(workspaceServiceMethods.ByName("Interrupt")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("Interrupt")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceCompactHandler := connect.NewUnaryHandler(
-		WorkspaceServiceCompactProcedure,
+	branchSessionServiceCompactHandler := connect.NewUnaryHandler(
+		BranchSessionServiceCompactProcedure,
 		svc.Compact,
-		connect.WithSchema(workspaceServiceMethods.ByName("Compact")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("Compact")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceUpdateSettingsHandler := connect.NewUnaryHandler(
-		WorkspaceServiceUpdateSettingsProcedure,
+	branchSessionServiceUpdateSettingsHandler := connect.NewUnaryHandler(
+		BranchSessionServiceUpdateSettingsProcedure,
 		svc.UpdateSettings,
-		connect.WithSchema(workspaceServiceMethods.ByName("UpdateSettings")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("UpdateSettings")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceListProvidersHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListProvidersProcedure,
+	branchSessionServiceListProvidersHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListProvidersProcedure,
 		svc.ListProviders,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListProviders")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListProviders")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceListProvidersCatalogHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListProvidersCatalogProcedure,
+	branchSessionServiceListProvidersCatalogHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListProvidersCatalogProcedure,
 		svc.ListProvidersCatalog,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListProvidersCatalog")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListProvidersCatalog")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceRegisterProviderHandler := connect.NewUnaryHandler(
-		WorkspaceServiceRegisterProviderProcedure,
+	branchSessionServiceRegisterProviderHandler := connect.NewUnaryHandler(
+		BranchSessionServiceRegisterProviderProcedure,
 		svc.RegisterProvider,
-		connect.WithSchema(workspaceServiceMethods.ByName("RegisterProvider")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("RegisterProvider")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceDeleteProviderHandler := connect.NewUnaryHandler(
-		WorkspaceServiceDeleteProviderProcedure,
+	branchSessionServiceDeleteProviderHandler := connect.NewUnaryHandler(
+		BranchSessionServiceDeleteProviderProcedure,
 		svc.DeleteProvider,
-		connect.WithSchema(workspaceServiceMethods.ByName("DeleteProvider")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("DeleteProvider")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceTestProviderHandler := connect.NewUnaryHandler(
-		WorkspaceServiceTestProviderProcedure,
+	branchSessionServiceTestProviderHandler := connect.NewUnaryHandler(
+		BranchSessionServiceTestProviderProcedure,
 		svc.TestProvider,
-		connect.WithSchema(workspaceServiceMethods.ByName("TestProvider")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("TestProvider")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceListModelsHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListModelsProcedure,
+	branchSessionServiceListModelsHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListModelsProcedure,
 		svc.ListModels,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListModels")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListModels")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceListPresetsHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListPresetsProcedure,
+	branchSessionServiceListPresetsHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListPresetsProcedure,
 		svc.ListPresets,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListPresets")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListPresets")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServicePreviewPresetHandler := connect.NewUnaryHandler(
-		WorkspaceServicePreviewPresetProcedure,
+	branchSessionServicePreviewPresetHandler := connect.NewUnaryHandler(
+		BranchSessionServicePreviewPresetProcedure,
 		svc.PreviewPreset,
-		connect.WithSchema(workspaceServiceMethods.ByName("PreviewPreset")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("PreviewPreset")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceGetConfigHandler := connect.NewUnaryHandler(
-		WorkspaceServiceGetConfigProcedure,
+	branchSessionServiceGetConfigHandler := connect.NewUnaryHandler(
+		BranchSessionServiceGetConfigProcedure,
 		svc.GetConfig,
-		connect.WithSchema(workspaceServiceMethods.ByName("GetConfig")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("GetConfig")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceSetConfigHandler := connect.NewUnaryHandler(
-		WorkspaceServiceSetConfigProcedure,
+	branchSessionServiceSetConfigHandler := connect.NewUnaryHandler(
+		BranchSessionServiceSetConfigProcedure,
 		svc.SetConfig,
-		connect.WithSchema(workspaceServiceMethods.ByName("SetConfig")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("SetConfig")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceListToolsHandler := connect.NewUnaryHandler(
-		WorkspaceServiceListToolsProcedure,
+	branchSessionServiceListToolsHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListToolsProcedure,
 		svc.ListTools,
-		connect.WithSchema(workspaceServiceMethods.ByName("ListTools")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListTools")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceGetToolConfigHandler := connect.NewUnaryHandler(
-		WorkspaceServiceGetToolConfigProcedure,
+	branchSessionServiceGetToolConfigHandler := connect.NewUnaryHandler(
+		BranchSessionServiceGetToolConfigProcedure,
 		svc.GetToolConfig,
-		connect.WithSchema(workspaceServiceMethods.ByName("GetToolConfig")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("GetToolConfig")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceSetToolConfigHandler := connect.NewUnaryHandler(
-		WorkspaceServiceSetToolConfigProcedure,
+	branchSessionServiceSetToolConfigHandler := connect.NewUnaryHandler(
+		BranchSessionServiceSetToolConfigProcedure,
 		svc.SetToolConfig,
-		connect.WithSchema(workspaceServiceMethods.ByName("SetToolConfig")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("SetToolConfig")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceSetExtensionConfigHandler := connect.NewUnaryHandler(
-		WorkspaceServiceSetExtensionConfigProcedure,
+	branchSessionServiceSetExtensionConfigHandler := connect.NewUnaryHandler(
+		BranchSessionServiceSetExtensionConfigProcedure,
 		svc.SetExtensionConfig,
-		connect.WithSchema(workspaceServiceMethods.ByName("SetExtensionConfig")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("SetExtensionConfig")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceUploadFileHandler := connect.NewUnaryHandler(
-		WorkspaceServiceUploadFileProcedure,
+	branchSessionServiceUploadFileHandler := connect.NewUnaryHandler(
+		BranchSessionServiceUploadFileProcedure,
 		svc.UploadFile,
-		connect.WithSchema(workspaceServiceMethods.ByName("UploadFile")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("UploadFile")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceIngestFileHandler := connect.NewUnaryHandler(
-		WorkspaceServiceIngestFileProcedure,
+	branchSessionServiceIngestFileHandler := connect.NewUnaryHandler(
+		BranchSessionServiceIngestFileProcedure,
 		svc.IngestFile,
-		connect.WithSchema(workspaceServiceMethods.ByName("IngestFile")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("IngestFile")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceGetFileHandler := connect.NewUnaryHandler(
-		WorkspaceServiceGetFileProcedure,
+	branchSessionServiceGetFileHandler := connect.NewUnaryHandler(
+		BranchSessionServiceGetFileProcedure,
 		svc.GetFile,
-		connect.WithSchema(workspaceServiceMethods.ByName("GetFile")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("GetFile")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceGetFileMetaHandler := connect.NewUnaryHandler(
-		WorkspaceServiceGetFileMetaProcedure,
+	branchSessionServiceGetFileMetaHandler := connect.NewUnaryHandler(
+		BranchSessionServiceGetFileMetaProcedure,
 		svc.GetFileMeta,
-		connect.WithSchema(workspaceServiceMethods.ByName("GetFileMeta")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("GetFileMeta")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workspaceServiceGetFileStreamHandler := connect.NewServerStreamHandler(
-		WorkspaceServiceGetFileStreamProcedure,
+	branchSessionServiceGetFileStreamHandler := connect.NewServerStreamHandler(
+		BranchSessionServiceGetFileStreamProcedure,
 		svc.GetFileStream,
-		connect.WithSchema(workspaceServiceMethods.ByName("GetFileStream")),
+		connect.WithSchema(branchSessionServiceMethods.ByName("GetFileStream")),
 		connect.WithHandlerOptions(opts...),
 	)
-	return "/workspace.v1.WorkspaceService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return "/workspace.v1.BranchSessionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case WorkspaceServiceCreateWorkspaceProcedure:
-			workspaceServiceCreateWorkspaceHandler.ServeHTTP(w, r)
-		case WorkspaceServiceForkWorkspaceProcedure:
-			workspaceServiceForkWorkspaceHandler.ServeHTTP(w, r)
-		case WorkspaceServiceListWorkspacesProcedure:
-			workspaceServiceListWorkspacesHandler.ServeHTTP(w, r)
-		case WorkspaceServiceGetWorkspaceProcedure:
-			workspaceServiceGetWorkspaceHandler.ServeHTTP(w, r)
-		case WorkspaceServiceDeleteWorkspaceProcedure:
-			workspaceServiceDeleteWorkspaceHandler.ServeHTTP(w, r)
-		case WorkspaceServiceCreateFreeSessionProcedure:
-			workspaceServiceCreateFreeSessionHandler.ServeHTTP(w, r)
-		case WorkspaceServiceListReposProcedure:
-			workspaceServiceListReposHandler.ServeHTTP(w, r)
-		case WorkspaceServiceTreeProcedure:
-			workspaceServiceTreeHandler.ServeHTTP(w, r)
-		case WorkspaceServiceReadBlobProcedure:
-			workspaceServiceReadBlobHandler.ServeHTTP(w, r)
-		case WorkspaceServiceReadRawProcedure:
-			workspaceServiceReadRawHandler.ServeHTTP(w, r)
-		case WorkspaceServiceLogProcedure:
-			workspaceServiceLogHandler.ServeHTTP(w, r)
-		case WorkspaceServiceBranchesProcedure:
-			workspaceServiceBranchesHandler.ServeHTTP(w, r)
-		case WorkspaceServiceTagsProcedure:
-			workspaceServiceTagsHandler.ServeHTTP(w, r)
-		case WorkspaceServiceListReleasesProcedure:
-			workspaceServiceListReleasesHandler.ServeHTTP(w, r)
-		case WorkspaceServiceGetReleaseAssetProcedure:
-			workspaceServiceGetReleaseAssetHandler.ServeHTTP(w, r)
-		case WorkspaceServiceGetCommitProcedure:
-			workspaceServiceGetCommitHandler.ServeHTTP(w, r)
-		case WorkspaceServiceCommitDiffProcedure:
-			workspaceServiceCommitDiffHandler.ServeHTTP(w, r)
-		case WorkspaceServiceEnsureRepoProcedure:
-			workspaceServiceEnsureRepoHandler.ServeHTTP(w, r)
-		case WorkspaceServiceListMRsProcedure:
-			workspaceServiceListMRsHandler.ServeHTTP(w, r)
-		case WorkspaceServiceGetMRProcedure:
-			workspaceServiceGetMRHandler.ServeHTTP(w, r)
-		case WorkspaceServiceMRDiffProcedure:
-			workspaceServiceMRDiffHandler.ServeHTTP(w, r)
-		case WorkspaceServiceListMRCommentsProcedure:
-			workspaceServiceListMRCommentsHandler.ServeHTTP(w, r)
-		case WorkspaceServiceCreateMRProcedure:
-			workspaceServiceCreateMRHandler.ServeHTTP(w, r)
-		case WorkspaceServiceCommentMRProcedure:
-			workspaceServiceCommentMRHandler.ServeHTTP(w, r)
-		case WorkspaceServiceMergeMRProcedure:
-			workspaceServiceMergeMRHandler.ServeHTTP(w, r)
-		case WorkspaceServiceListOCIImagesProcedure:
-			workspaceServiceListOCIImagesHandler.ServeHTTP(w, r)
-		case WorkspaceServiceBuildSandboxImageProcedure:
-			workspaceServiceBuildSandboxImageHandler.ServeHTTP(w, r)
-		case WorkspaceServiceListSandboxesProcedure:
-			workspaceServiceListSandboxesHandler.ServeHTTP(w, r)
-		case WorkspaceServiceCreateSandboxProcedure:
-			workspaceServiceCreateSandboxHandler.ServeHTTP(w, r)
-		case WorkspaceServiceGetSandboxProcedure:
-			workspaceServiceGetSandboxHandler.ServeHTTP(w, r)
-		case WorkspaceServiceDeleteSandboxProcedure:
-			workspaceServiceDeleteSandboxHandler.ServeHTTP(w, r)
-		case WorkspaceServiceResolveSandboxProcedure:
-			workspaceServiceResolveSandboxHandler.ServeHTTP(w, r)
-		case WorkspaceServiceListSandboxJobsProcedure:
-			workspaceServiceListSandboxJobsHandler.ServeHTTP(w, r)
-		case WorkspaceServiceGetSandboxJobOutputProcedure:
-			workspaceServiceGetSandboxJobOutputHandler.ServeHTTP(w, r)
-		case WorkspaceServiceWatchSandboxJobProcedure:
-			workspaceServiceWatchSandboxJobHandler.ServeHTTP(w, r)
-		case WorkspaceServiceDeployServiceProcedure:
-			workspaceServiceDeployServiceHandler.ServeHTTP(w, r)
-		case WorkspaceServiceListServicesProcedure:
-			workspaceServiceListServicesHandler.ServeHTTP(w, r)
-		case WorkspaceServiceDeleteServiceProcedure:
-			workspaceServiceDeleteServiceHandler.ServeHTTP(w, r)
-		case WorkspaceServiceHealthProcedure:
-			workspaceServiceHealthHandler.ServeHTTP(w, r)
-		case WorkspaceServiceGetIdentityProcedure:
-			workspaceServiceGetIdentityHandler.ServeHTTP(w, r)
-		case WorkspaceServiceListSessionsProcedure:
-			workspaceServiceListSessionsHandler.ServeHTTP(w, r)
-		case WorkspaceServiceGetSessionProcedure:
-			workspaceServiceGetSessionHandler.ServeHTTP(w, r)
-		case WorkspaceServiceDeleteSessionProcedure:
-			workspaceServiceDeleteSessionHandler.ServeHTTP(w, r)
-		case WorkspaceServiceListMessagesProcedure:
-			workspaceServiceListMessagesHandler.ServeHTTP(w, r)
-		case WorkspaceServicePromptProcedure:
-			workspaceServicePromptHandler.ServeHTTP(w, r)
-		case WorkspaceServiceWatchSessionProcedure:
-			workspaceServiceWatchSessionHandler.ServeHTTP(w, r)
-		case WorkspaceServiceWatchSessionsProcedure:
-			workspaceServiceWatchSessionsHandler.ServeHTTP(w, r)
-		case WorkspaceServiceSetModelProcedure:
-			workspaceServiceSetModelHandler.ServeHTTP(w, r)
-		case WorkspaceServiceUndoProcedure:
-			workspaceServiceUndoHandler.ServeHTTP(w, r)
-		case WorkspaceServiceStateProcedure:
-			workspaceServiceStateHandler.ServeHTTP(w, r)
-		case WorkspaceServiceMailboxProcedure:
-			workspaceServiceMailboxHandler.ServeHTTP(w, r)
-		case WorkspaceServiceInterruptProcedure:
-			workspaceServiceInterruptHandler.ServeHTTP(w, r)
-		case WorkspaceServiceCompactProcedure:
-			workspaceServiceCompactHandler.ServeHTTP(w, r)
-		case WorkspaceServiceUpdateSettingsProcedure:
-			workspaceServiceUpdateSettingsHandler.ServeHTTP(w, r)
-		case WorkspaceServiceListProvidersProcedure:
-			workspaceServiceListProvidersHandler.ServeHTTP(w, r)
-		case WorkspaceServiceListProvidersCatalogProcedure:
-			workspaceServiceListProvidersCatalogHandler.ServeHTTP(w, r)
-		case WorkspaceServiceRegisterProviderProcedure:
-			workspaceServiceRegisterProviderHandler.ServeHTTP(w, r)
-		case WorkspaceServiceDeleteProviderProcedure:
-			workspaceServiceDeleteProviderHandler.ServeHTTP(w, r)
-		case WorkspaceServiceTestProviderProcedure:
-			workspaceServiceTestProviderHandler.ServeHTTP(w, r)
-		case WorkspaceServiceListModelsProcedure:
-			workspaceServiceListModelsHandler.ServeHTTP(w, r)
-		case WorkspaceServiceListPresetsProcedure:
-			workspaceServiceListPresetsHandler.ServeHTTP(w, r)
-		case WorkspaceServicePreviewPresetProcedure:
-			workspaceServicePreviewPresetHandler.ServeHTTP(w, r)
-		case WorkspaceServiceGetConfigProcedure:
-			workspaceServiceGetConfigHandler.ServeHTTP(w, r)
-		case WorkspaceServiceSetConfigProcedure:
-			workspaceServiceSetConfigHandler.ServeHTTP(w, r)
-		case WorkspaceServiceListToolsProcedure:
-			workspaceServiceListToolsHandler.ServeHTTP(w, r)
-		case WorkspaceServiceGetToolConfigProcedure:
-			workspaceServiceGetToolConfigHandler.ServeHTTP(w, r)
-		case WorkspaceServiceSetToolConfigProcedure:
-			workspaceServiceSetToolConfigHandler.ServeHTTP(w, r)
-		case WorkspaceServiceSetExtensionConfigProcedure:
-			workspaceServiceSetExtensionConfigHandler.ServeHTTP(w, r)
-		case WorkspaceServiceUploadFileProcedure:
-			workspaceServiceUploadFileHandler.ServeHTTP(w, r)
-		case WorkspaceServiceIngestFileProcedure:
-			workspaceServiceIngestFileHandler.ServeHTTP(w, r)
-		case WorkspaceServiceGetFileProcedure:
-			workspaceServiceGetFileHandler.ServeHTTP(w, r)
-		case WorkspaceServiceGetFileMetaProcedure:
-			workspaceServiceGetFileMetaHandler.ServeHTTP(w, r)
-		case WorkspaceServiceGetFileStreamProcedure:
-			workspaceServiceGetFileStreamHandler.ServeHTTP(w, r)
+		case BranchSessionServiceEnsureBranchSessionProcedure:
+			branchSessionServiceEnsureBranchSessionHandler.ServeHTTP(w, r)
+		case BranchSessionServiceForkBranchSessionProcedure:
+			branchSessionServiceForkBranchSessionHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListBranchSessionsProcedure:
+			branchSessionServiceListBranchSessionsHandler.ServeHTTP(w, r)
+		case BranchSessionServiceGetBranchSessionProcedure:
+			branchSessionServiceGetBranchSessionHandler.ServeHTTP(w, r)
+		case BranchSessionServiceDeleteBranchSessionProcedure:
+			branchSessionServiceDeleteBranchSessionHandler.ServeHTTP(w, r)
+		case BranchSessionServiceDeleteBranchProcedure:
+			branchSessionServiceDeleteBranchHandler.ServeHTTP(w, r)
+		case BranchSessionServiceCreateFreeSessionProcedure:
+			branchSessionServiceCreateFreeSessionHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListReposProcedure:
+			branchSessionServiceListReposHandler.ServeHTTP(w, r)
+		case BranchSessionServiceTreeProcedure:
+			branchSessionServiceTreeHandler.ServeHTTP(w, r)
+		case BranchSessionServiceReadBlobProcedure:
+			branchSessionServiceReadBlobHandler.ServeHTTP(w, r)
+		case BranchSessionServiceReadRawProcedure:
+			branchSessionServiceReadRawHandler.ServeHTTP(w, r)
+		case BranchSessionServiceLogProcedure:
+			branchSessionServiceLogHandler.ServeHTTP(w, r)
+		case BranchSessionServiceBranchesProcedure:
+			branchSessionServiceBranchesHandler.ServeHTTP(w, r)
+		case BranchSessionServiceTagsProcedure:
+			branchSessionServiceTagsHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListReleasesProcedure:
+			branchSessionServiceListReleasesHandler.ServeHTTP(w, r)
+		case BranchSessionServiceGetReleaseAssetProcedure:
+			branchSessionServiceGetReleaseAssetHandler.ServeHTTP(w, r)
+		case BranchSessionServiceGetCommitProcedure:
+			branchSessionServiceGetCommitHandler.ServeHTTP(w, r)
+		case BranchSessionServiceCommitDiffProcedure:
+			branchSessionServiceCommitDiffHandler.ServeHTTP(w, r)
+		case BranchSessionServiceEnsureRepoProcedure:
+			branchSessionServiceEnsureRepoHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListMRsProcedure:
+			branchSessionServiceListMRsHandler.ServeHTTP(w, r)
+		case BranchSessionServiceGetMRProcedure:
+			branchSessionServiceGetMRHandler.ServeHTTP(w, r)
+		case BranchSessionServiceMRDiffProcedure:
+			branchSessionServiceMRDiffHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListMRCommentsProcedure:
+			branchSessionServiceListMRCommentsHandler.ServeHTTP(w, r)
+		case BranchSessionServiceCreateMRProcedure:
+			branchSessionServiceCreateMRHandler.ServeHTTP(w, r)
+		case BranchSessionServiceCommentMRProcedure:
+			branchSessionServiceCommentMRHandler.ServeHTTP(w, r)
+		case BranchSessionServiceMergeMRProcedure:
+			branchSessionServiceMergeMRHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListOCIImagesProcedure:
+			branchSessionServiceListOCIImagesHandler.ServeHTTP(w, r)
+		case BranchSessionServiceBuildSandboxImageProcedure:
+			branchSessionServiceBuildSandboxImageHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListSandboxesProcedure:
+			branchSessionServiceListSandboxesHandler.ServeHTTP(w, r)
+		case BranchSessionServiceCreateSandboxProcedure:
+			branchSessionServiceCreateSandboxHandler.ServeHTTP(w, r)
+		case BranchSessionServiceGetSandboxProcedure:
+			branchSessionServiceGetSandboxHandler.ServeHTTP(w, r)
+		case BranchSessionServiceDeleteSandboxProcedure:
+			branchSessionServiceDeleteSandboxHandler.ServeHTTP(w, r)
+		case BranchSessionServiceResolveSandboxProcedure:
+			branchSessionServiceResolveSandboxHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListSandboxJobsProcedure:
+			branchSessionServiceListSandboxJobsHandler.ServeHTTP(w, r)
+		case BranchSessionServiceGetSandboxJobOutputProcedure:
+			branchSessionServiceGetSandboxJobOutputHandler.ServeHTTP(w, r)
+		case BranchSessionServiceWatchSandboxJobProcedure:
+			branchSessionServiceWatchSandboxJobHandler.ServeHTTP(w, r)
+		case BranchSessionServiceDeployServiceProcedure:
+			branchSessionServiceDeployServiceHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListServicesProcedure:
+			branchSessionServiceListServicesHandler.ServeHTTP(w, r)
+		case BranchSessionServiceDeleteServiceProcedure:
+			branchSessionServiceDeleteServiceHandler.ServeHTTP(w, r)
+		case BranchSessionServiceHealthProcedure:
+			branchSessionServiceHealthHandler.ServeHTTP(w, r)
+		case BranchSessionServiceGetIdentityProcedure:
+			branchSessionServiceGetIdentityHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListSessionsProcedure:
+			branchSessionServiceListSessionsHandler.ServeHTTP(w, r)
+		case BranchSessionServiceGetSessionProcedure:
+			branchSessionServiceGetSessionHandler.ServeHTTP(w, r)
+		case BranchSessionServiceDeleteSessionProcedure:
+			branchSessionServiceDeleteSessionHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListMessagesProcedure:
+			branchSessionServiceListMessagesHandler.ServeHTTP(w, r)
+		case BranchSessionServicePromptProcedure:
+			branchSessionServicePromptHandler.ServeHTTP(w, r)
+		case BranchSessionServiceWatchSessionProcedure:
+			branchSessionServiceWatchSessionHandler.ServeHTTP(w, r)
+		case BranchSessionServiceWatchSessionsProcedure:
+			branchSessionServiceWatchSessionsHandler.ServeHTTP(w, r)
+		case BranchSessionServiceSetModelProcedure:
+			branchSessionServiceSetModelHandler.ServeHTTP(w, r)
+		case BranchSessionServiceUndoProcedure:
+			branchSessionServiceUndoHandler.ServeHTTP(w, r)
+		case BranchSessionServiceStateProcedure:
+			branchSessionServiceStateHandler.ServeHTTP(w, r)
+		case BranchSessionServiceMailboxProcedure:
+			branchSessionServiceMailboxHandler.ServeHTTP(w, r)
+		case BranchSessionServiceInterruptProcedure:
+			branchSessionServiceInterruptHandler.ServeHTTP(w, r)
+		case BranchSessionServiceCompactProcedure:
+			branchSessionServiceCompactHandler.ServeHTTP(w, r)
+		case BranchSessionServiceUpdateSettingsProcedure:
+			branchSessionServiceUpdateSettingsHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListProvidersProcedure:
+			branchSessionServiceListProvidersHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListProvidersCatalogProcedure:
+			branchSessionServiceListProvidersCatalogHandler.ServeHTTP(w, r)
+		case BranchSessionServiceRegisterProviderProcedure:
+			branchSessionServiceRegisterProviderHandler.ServeHTTP(w, r)
+		case BranchSessionServiceDeleteProviderProcedure:
+			branchSessionServiceDeleteProviderHandler.ServeHTTP(w, r)
+		case BranchSessionServiceTestProviderProcedure:
+			branchSessionServiceTestProviderHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListModelsProcedure:
+			branchSessionServiceListModelsHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListPresetsProcedure:
+			branchSessionServiceListPresetsHandler.ServeHTTP(w, r)
+		case BranchSessionServicePreviewPresetProcedure:
+			branchSessionServicePreviewPresetHandler.ServeHTTP(w, r)
+		case BranchSessionServiceGetConfigProcedure:
+			branchSessionServiceGetConfigHandler.ServeHTTP(w, r)
+		case BranchSessionServiceSetConfigProcedure:
+			branchSessionServiceSetConfigHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListToolsProcedure:
+			branchSessionServiceListToolsHandler.ServeHTTP(w, r)
+		case BranchSessionServiceGetToolConfigProcedure:
+			branchSessionServiceGetToolConfigHandler.ServeHTTP(w, r)
+		case BranchSessionServiceSetToolConfigProcedure:
+			branchSessionServiceSetToolConfigHandler.ServeHTTP(w, r)
+		case BranchSessionServiceSetExtensionConfigProcedure:
+			branchSessionServiceSetExtensionConfigHandler.ServeHTTP(w, r)
+		case BranchSessionServiceUploadFileProcedure:
+			branchSessionServiceUploadFileHandler.ServeHTTP(w, r)
+		case BranchSessionServiceIngestFileProcedure:
+			branchSessionServiceIngestFileHandler.ServeHTTP(w, r)
+		case BranchSessionServiceGetFileProcedure:
+			branchSessionServiceGetFileHandler.ServeHTTP(w, r)
+		case BranchSessionServiceGetFileMetaProcedure:
+			branchSessionServiceGetFileMetaHandler.ServeHTTP(w, r)
+		case BranchSessionServiceGetFileStreamProcedure:
+			branchSessionServiceGetFileStreamHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
 	})
 }
 
-// UnimplementedWorkspaceServiceHandler returns CodeUnimplemented from all methods.
-type UnimplementedWorkspaceServiceHandler struct{}
+// UnimplementedBranchSessionServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedBranchSessionServiceHandler struct{}
 
-func (UnimplementedWorkspaceServiceHandler) CreateWorkspace(context.Context, *connect.Request[v1.CreateWorkspaceRequest]) (*connect.Response[v1.CreateWorkspaceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.CreateWorkspace is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) EnsureBranchSession(context.Context, *connect.Request[v1.EnsureBranchSessionRequest]) (*connect.Response[v1.EnsureBranchSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.EnsureBranchSession is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ForkWorkspace(context.Context, *connect.Request[v1.ForkWorkspaceRequest]) (*connect.Response[v1.ForkWorkspaceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ForkWorkspace is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ForkBranchSession(context.Context, *connect.Request[v1.ForkBranchSessionRequest]) (*connect.Response[v1.ForkBranchSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ForkBranchSession is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ListWorkspaces(context.Context, *connect.Request[v1.ListWorkspacesRequest]) (*connect.Response[v1.ListWorkspacesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ListWorkspaces is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListBranchSessions(context.Context, *connect.Request[v1.ListBranchSessionsRequest]) (*connect.Response[v1.ListBranchSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListBranchSessions is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) GetWorkspace(context.Context, *connect.Request[v1.GetWorkspaceRequest]) (*connect.Response[v1.GetWorkspaceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.GetWorkspace is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetBranchSession(context.Context, *connect.Request[v1.GetBranchSessionRequest]) (*connect.Response[v1.GetBranchSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetBranchSession is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) DeleteWorkspace(context.Context, *connect.Request[v1.DeleteWorkspaceRequest]) (*connect.Response[v1.DeleteWorkspaceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.DeleteWorkspace is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) DeleteBranchSession(context.Context, *connect.Request[v1.DeleteBranchSessionRequest]) (*connect.Response[v1.DeleteBranchSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeleteBranchSession is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) CreateFreeSession(context.Context, *connect.Request[v1.CreateFreeSessionRequest]) (*connect.Response[v1.CreateFreeSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.CreateFreeSession is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) DeleteBranch(context.Context, *connect.Request[v1.DeleteBranchRequest]) (*connect.Response[v1.DeleteBranchResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeleteBranch is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ListRepos(context.Context, *connect.Request[v1.ListReposRequest]) (*connect.Response[v1.ListReposResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ListRepos is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) CreateFreeSession(context.Context, *connect.Request[v1.CreateFreeSessionRequest]) (*connect.Response[v1.CreateFreeSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CreateFreeSession is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) Tree(context.Context, *connect.Request[v1.TreeRequest]) (*connect.Response[v1.TreeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.Tree is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListRepos(context.Context, *connect.Request[v1.ListReposRequest]) (*connect.Response[v1.ListReposResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListRepos is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ReadBlob(context.Context, *connect.Request[v1.ReadBlobRequest]) (*connect.Response[v1.ReadBlobResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ReadBlob is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Tree(context.Context, *connect.Request[v1.TreeRequest]) (*connect.Response[v1.TreeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Tree is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ReadRaw(context.Context, *connect.Request[v1.ReadRawRequest]) (*connect.Response[v1.ReadRawResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ReadRaw is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ReadBlob(context.Context, *connect.Request[v1.ReadBlobRequest]) (*connect.Response[v1.ReadBlobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ReadBlob is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) Log(context.Context, *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.Log is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ReadRaw(context.Context, *connect.Request[v1.ReadRawRequest]) (*connect.Response[v1.ReadRawResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ReadRaw is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) Branches(context.Context, *connect.Request[v1.BranchesRequest]) (*connect.Response[v1.BranchesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.Branches is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Log(context.Context, *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Log is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) Tags(context.Context, *connect.Request[v1.TagsRequest]) (*connect.Response[v1.TagsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.Tags is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Branches(context.Context, *connect.Request[v1.BranchesRequest]) (*connect.Response[v1.BranchesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Branches is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ListReleases(context.Context, *connect.Request[v1.ReleasesRequest]) (*connect.Response[v1.ReleasesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ListReleases is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Tags(context.Context, *connect.Request[v1.TagsRequest]) (*connect.Response[v1.TagsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Tags is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) GetReleaseAsset(context.Context, *connect.Request[v1.ReleaseAssetRequest]) (*connect.Response[v1.ReleaseAssetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.GetReleaseAsset is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListReleases(context.Context, *connect.Request[v1.ReleasesRequest]) (*connect.Response[v1.ReleasesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListReleases is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) GetCommit(context.Context, *connect.Request[v1.GetCommitRequest]) (*connect.Response[v1.GetCommitResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.GetCommit is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetReleaseAsset(context.Context, *connect.Request[v1.ReleaseAssetRequest]) (*connect.Response[v1.ReleaseAssetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetReleaseAsset is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) CommitDiff(context.Context, *connect.Request[v1.CommitDiffRequest]) (*connect.Response[v1.DiffResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.CommitDiff is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetCommit(context.Context, *connect.Request[v1.GetCommitRequest]) (*connect.Response[v1.GetCommitResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetCommit is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) EnsureRepo(context.Context, *connect.Request[v1.EnsureRepoRequest]) (*connect.Response[v1.EnsureRepoResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.EnsureRepo is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) CommitDiff(context.Context, *connect.Request[v1.CommitDiffRequest]) (*connect.Response[v1.DiffResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CommitDiff is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ListMRs(context.Context, *connect.Request[v1.ListMRsRequest]) (*connect.Response[v1.ListMRsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ListMRs is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) EnsureRepo(context.Context, *connect.Request[v1.EnsureRepoRequest]) (*connect.Response[v1.EnsureRepoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.EnsureRepo is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) GetMR(context.Context, *connect.Request[v1.GetMRRequest]) (*connect.Response[v1.GetMRResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.GetMR is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListMRs(context.Context, *connect.Request[v1.ListMRsRequest]) (*connect.Response[v1.ListMRsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListMRs is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) MRDiff(context.Context, *connect.Request[v1.MRDiffRequest]) (*connect.Response[v1.MRDiffResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.MRDiff is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetMR(context.Context, *connect.Request[v1.GetMRRequest]) (*connect.Response[v1.GetMRResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetMR is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ListMRComments(context.Context, *connect.Request[v1.ListMRCommentsRequest]) (*connect.Response[v1.ListMRCommentsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ListMRComments is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) MRDiff(context.Context, *connect.Request[v1.MRDiffRequest]) (*connect.Response[v1.MRDiffResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.MRDiff is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) CreateMR(context.Context, *connect.Request[v1.CreateMRRequest]) (*connect.Response[v1.CreateMRResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.CreateMR is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListMRComments(context.Context, *connect.Request[v1.ListMRCommentsRequest]) (*connect.Response[v1.ListMRCommentsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListMRComments is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) CommentMR(context.Context, *connect.Request[v1.CommentMRRequest]) (*connect.Response[v1.CommentMRResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.CommentMR is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) CreateMR(context.Context, *connect.Request[v1.CreateMRRequest]) (*connect.Response[v1.CreateMRResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CreateMR is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) MergeMR(context.Context, *connect.Request[v1.MergeMRRequest]) (*connect.Response[v1.MergeMRResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.MergeMR is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) CommentMR(context.Context, *connect.Request[v1.CommentMRRequest]) (*connect.Response[v1.CommentMRResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CommentMR is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ListOCIImages(context.Context, *connect.Request[v1.ListOCIImagesRequest]) (*connect.Response[v1.ListOCIImagesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ListOCIImages is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) MergeMR(context.Context, *connect.Request[v1.MergeMRRequest]) (*connect.Response[v1.MergeMRResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.MergeMR is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) BuildSandboxImage(context.Context, *connect.Request[v1.BuildSandboxImageRequest]) (*connect.Response[v1.BuildSandboxImageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.BuildSandboxImage is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListOCIImages(context.Context, *connect.Request[v1.ListOCIImagesRequest]) (*connect.Response[v1.ListOCIImagesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListOCIImages is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ListSandboxes(context.Context, *connect.Request[v1.ListSandboxesRequest]) (*connect.Response[v1.ListSandboxesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ListSandboxes is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) BuildSandboxImage(context.Context, *connect.Request[v1.BuildSandboxImageRequest]) (*connect.Response[v1.BuildSandboxImageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.BuildSandboxImage is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) CreateSandbox(context.Context, *connect.Request[v1.CreateSandboxRequest]) (*connect.Response[v1.CreateSandboxResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.CreateSandbox is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListSandboxes(context.Context, *connect.Request[v1.ListSandboxesRequest]) (*connect.Response[v1.ListSandboxesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListSandboxes is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) GetSandbox(context.Context, *connect.Request[v1.GetSandboxRequest]) (*connect.Response[v1.GetSandboxResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.GetSandbox is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) CreateSandbox(context.Context, *connect.Request[v1.CreateSandboxRequest]) (*connect.Response[v1.CreateSandboxResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CreateSandbox is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) DeleteSandbox(context.Context, *connect.Request[v1.DeleteSandboxRequest]) (*connect.Response[v1.DeleteSandboxResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.DeleteSandbox is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetSandbox(context.Context, *connect.Request[v1.GetSandboxRequest]) (*connect.Response[v1.GetSandboxResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetSandbox is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ResolveSandbox(context.Context, *connect.Request[v1.ResolveSandboxRequest]) (*connect.Response[v1.ResolveSandboxResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ResolveSandbox is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) DeleteSandbox(context.Context, *connect.Request[v1.DeleteSandboxRequest]) (*connect.Response[v1.DeleteSandboxResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeleteSandbox is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ListSandboxJobs(context.Context, *connect.Request[v1.ListSandboxJobsRequest]) (*connect.Response[v1.ListSandboxJobsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ListSandboxJobs is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ResolveSandbox(context.Context, *connect.Request[v1.ResolveSandboxRequest]) (*connect.Response[v1.ResolveSandboxResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ResolveSandbox is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) GetSandboxJobOutput(context.Context, *connect.Request[v1.GetSandboxJobOutputRequest]) (*connect.Response[v1.GetSandboxJobOutputResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.GetSandboxJobOutput is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListSandboxJobs(context.Context, *connect.Request[v1.ListSandboxJobsRequest]) (*connect.Response[v1.ListSandboxJobsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListSandboxJobs is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) WatchSandboxJob(context.Context, *connect.Request[v1.WatchSandboxJobRequest], *connect.ServerStream[v1.WatchSandboxJobResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.WatchSandboxJob is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetSandboxJobOutput(context.Context, *connect.Request[v1.GetSandboxJobOutputRequest]) (*connect.Response[v1.GetSandboxJobOutputResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetSandboxJobOutput is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) DeployService(context.Context, *connect.Request[v1.DeployServiceRequest]) (*connect.Response[v1.DeployServiceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.DeployService is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) WatchSandboxJob(context.Context, *connect.Request[v1.WatchSandboxJobRequest], *connect.ServerStream[v1.WatchSandboxJobResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.WatchSandboxJob is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ListServices(context.Context, *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ListServices is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) DeployService(context.Context, *connect.Request[v1.DeployServiceRequest]) (*connect.Response[v1.DeployServiceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeployService is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) DeleteService(context.Context, *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.DeleteService is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListServices(context.Context, *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListServices is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) Health(context.Context, *connect.Request[v11.HealthRequest]) (*connect.Response[v11.HealthResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.Health is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) DeleteService(context.Context, *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeleteService is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) GetIdentity(context.Context, *connect.Request[v11.GetIdentityRequest]) (*connect.Response[v11.GetIdentityResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.GetIdentity is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Health(context.Context, *connect.Request[v11.HealthRequest]) (*connect.Response[v11.HealthResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Health is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ListSessions(context.Context, *connect.Request[v11.ListSessionsRequest]) (*connect.Response[v11.ListSessionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ListSessions is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetIdentity(context.Context, *connect.Request[v11.GetIdentityRequest]) (*connect.Response[v11.GetIdentityResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetIdentity is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) GetSession(context.Context, *connect.Request[v11.GetSessionRequest]) (*connect.Response[v11.GetSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.GetSession is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListSessions(context.Context, *connect.Request[v11.ListSessionsRequest]) (*connect.Response[v11.ListSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListSessions is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) DeleteSession(context.Context, *connect.Request[v11.DeleteSessionRequest]) (*connect.Response[v11.DeleteSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.DeleteSession is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetSession(context.Context, *connect.Request[v11.GetSessionRequest]) (*connect.Response[v11.GetSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetSession is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ListMessages(context.Context, *connect.Request[v11.ListMessagesRequest]) (*connect.Response[v11.ListMessagesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ListMessages is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) DeleteSession(context.Context, *connect.Request[v11.DeleteSessionRequest]) (*connect.Response[v11.DeleteSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeleteSession is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) Prompt(context.Context, *connect.Request[v11.PromptRequest], *connect.ServerStream[v11.PromptResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.Prompt is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListMessages(context.Context, *connect.Request[v11.ListMessagesRequest]) (*connect.Response[v11.ListMessagesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListMessages is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) WatchSession(context.Context, *connect.Request[v11.WatchSessionRequest], *connect.ServerStream[v11.WatchSessionResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.WatchSession is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Prompt(context.Context, *connect.Request[v11.PromptRequest], *connect.ServerStream[v11.PromptResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Prompt is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) WatchSessions(context.Context, *connect.Request[v11.WatchSessionsRequest], *connect.ServerStream[v11.WatchSessionsResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.WatchSessions is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) WatchSession(context.Context, *connect.Request[v11.WatchSessionRequest], *connect.ServerStream[v11.WatchSessionResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.WatchSession is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) SetModel(context.Context, *connect.Request[v11.SetModelRequest]) (*connect.Response[v11.SetModelResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.SetModel is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) WatchSessions(context.Context, *connect.Request[v11.WatchSessionsRequest], *connect.ServerStream[v11.WatchSessionsResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.WatchSessions is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) Undo(context.Context, *connect.Request[v11.UndoRequest]) (*connect.Response[v11.UndoResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.Undo is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) SetModel(context.Context, *connect.Request[v11.SetModelRequest]) (*connect.Response[v11.SetModelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.SetModel is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) State(context.Context, *connect.Request[v11.StateRequest]) (*connect.Response[v11.StateResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.State is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Undo(context.Context, *connect.Request[v11.UndoRequest]) (*connect.Response[v11.UndoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Undo is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) Mailbox(context.Context, *connect.Request[v11.MailboxRequest]) (*connect.Response[v11.MailboxResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.Mailbox is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) State(context.Context, *connect.Request[v11.StateRequest]) (*connect.Response[v11.StateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.State is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) Interrupt(context.Context, *connect.Request[v11.InterruptRequest]) (*connect.Response[v11.InterruptResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.Interrupt is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Mailbox(context.Context, *connect.Request[v11.MailboxRequest]) (*connect.Response[v11.MailboxResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Mailbox is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) Compact(context.Context, *connect.Request[v11.CompactRequest]) (*connect.Response[v11.CompactResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.Compact is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Interrupt(context.Context, *connect.Request[v11.InterruptRequest]) (*connect.Response[v11.InterruptResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Interrupt is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) UpdateSettings(context.Context, *connect.Request[v1.UpdateSettingsRequest]) (*connect.Response[v1.UpdateSettingsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.UpdateSettings is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Compact(context.Context, *connect.Request[v11.CompactRequest]) (*connect.Response[v11.CompactResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Compact is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ListProviders(context.Context, *connect.Request[v11.ListProvidersRequest]) (*connect.Response[v11.ListProvidersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ListProviders is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) UpdateSettings(context.Context, *connect.Request[v1.UpdateSettingsRequest]) (*connect.Response[v1.UpdateSettingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.UpdateSettings is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ListProvidersCatalog(context.Context, *connect.Request[v11.ListProvidersCatalogRequest]) (*connect.Response[v11.ListProvidersCatalogResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ListProvidersCatalog is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListProviders(context.Context, *connect.Request[v11.ListProvidersRequest]) (*connect.Response[v11.ListProvidersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListProviders is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) RegisterProvider(context.Context, *connect.Request[v11.RegisterProviderRequest]) (*connect.Response[v11.RegisterProviderResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.RegisterProvider is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListProvidersCatalog(context.Context, *connect.Request[v11.ListProvidersCatalogRequest]) (*connect.Response[v11.ListProvidersCatalogResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListProvidersCatalog is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) DeleteProvider(context.Context, *connect.Request[v11.DeleteProviderRequest]) (*connect.Response[v11.DeleteProviderResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.DeleteProvider is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) RegisterProvider(context.Context, *connect.Request[v11.RegisterProviderRequest]) (*connect.Response[v11.RegisterProviderResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.RegisterProvider is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) TestProvider(context.Context, *connect.Request[v11.TestProviderRequest]) (*connect.Response[v11.TestProviderResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.TestProvider is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) DeleteProvider(context.Context, *connect.Request[v11.DeleteProviderRequest]) (*connect.Response[v11.DeleteProviderResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeleteProvider is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ListModels(context.Context, *connect.Request[v11.ListModelsRequest]) (*connect.Response[v11.ListModelsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ListModels is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) TestProvider(context.Context, *connect.Request[v11.TestProviderRequest]) (*connect.Response[v11.TestProviderResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.TestProvider is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ListPresets(context.Context, *connect.Request[v11.ListPresetsRequest]) (*connect.Response[v11.ListPresetsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ListPresets is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListModels(context.Context, *connect.Request[v11.ListModelsRequest]) (*connect.Response[v11.ListModelsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListModels is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) PreviewPreset(context.Context, *connect.Request[v11.PreviewPresetRequest]) (*connect.Response[v11.PreviewPresetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.PreviewPreset is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListPresets(context.Context, *connect.Request[v11.ListPresetsRequest]) (*connect.Response[v11.ListPresetsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListPresets is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) GetConfig(context.Context, *connect.Request[v11.GetConfigRequest]) (*connect.Response[v11.GetConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.GetConfig is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) PreviewPreset(context.Context, *connect.Request[v11.PreviewPresetRequest]) (*connect.Response[v11.PreviewPresetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.PreviewPreset is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) SetConfig(context.Context, *connect.Request[v11.SetConfigRequest]) (*connect.Response[v11.SetConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.SetConfig is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetConfig(context.Context, *connect.Request[v11.GetConfigRequest]) (*connect.Response[v11.GetConfigResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetConfig is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) ListTools(context.Context, *connect.Request[v11.ListToolsRequest]) (*connect.Response[v11.ListToolsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.ListTools is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) SetConfig(context.Context, *connect.Request[v11.SetConfigRequest]) (*connect.Response[v11.SetConfigResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.SetConfig is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) GetToolConfig(context.Context, *connect.Request[v11.GetToolConfigRequest]) (*connect.Response[v11.GetToolConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.GetToolConfig is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListTools(context.Context, *connect.Request[v11.ListToolsRequest]) (*connect.Response[v11.ListToolsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListTools is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) SetToolConfig(context.Context, *connect.Request[v11.SetToolConfigRequest]) (*connect.Response[v11.SetToolConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.SetToolConfig is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetToolConfig(context.Context, *connect.Request[v11.GetToolConfigRequest]) (*connect.Response[v11.GetToolConfigResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetToolConfig is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) SetExtensionConfig(context.Context, *connect.Request[v11.SetExtensionConfigRequest]) (*connect.Response[v11.SetExtensionConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.SetExtensionConfig is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) SetToolConfig(context.Context, *connect.Request[v11.SetToolConfigRequest]) (*connect.Response[v11.SetToolConfigResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.SetToolConfig is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) UploadFile(context.Context, *connect.Request[v11.UploadFileRequest]) (*connect.Response[v11.UploadFileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.UploadFile is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) SetExtensionConfig(context.Context, *connect.Request[v11.SetExtensionConfigRequest]) (*connect.Response[v11.SetExtensionConfigResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.SetExtensionConfig is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) IngestFile(context.Context, *connect.Request[v11.IngestFileRequest]) (*connect.Response[v11.IngestFileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.IngestFile is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) UploadFile(context.Context, *connect.Request[v11.UploadFileRequest]) (*connect.Response[v11.UploadFileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.UploadFile is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) GetFile(context.Context, *connect.Request[v11.GetFileRequest]) (*connect.Response[v11.GetFileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.GetFile is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) IngestFile(context.Context, *connect.Request[v11.IngestFileRequest]) (*connect.Response[v11.IngestFileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.IngestFile is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) GetFileMeta(context.Context, *connect.Request[v11.GetFileMetaRequest]) (*connect.Response[v11.GetFileMetaResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.GetFileMeta is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetFile(context.Context, *connect.Request[v11.GetFileRequest]) (*connect.Response[v11.GetFileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetFile is not implemented"))
 }
 
-func (UnimplementedWorkspaceServiceHandler) GetFileStream(context.Context, *connect.Request[v11.GetFileRequest], *connect.ServerStream[v11.FileChunk]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.WorkspaceService.GetFileStream is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetFileMeta(context.Context, *connect.Request[v11.GetFileMetaRequest]) (*connect.Response[v11.GetFileMetaResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetFileMeta is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) GetFileStream(context.Context, *connect.Request[v11.GetFileRequest], *connect.ServerStream[v11.FileChunk]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetFileStream is not implemented"))
 }

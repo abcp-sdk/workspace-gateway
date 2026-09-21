@@ -293,6 +293,11 @@ func (c *Client) DeleteBranch(ctx context.Context, org, repo, branch string) err
 		if isAlreadyExists(err) {
 			return nil
 		}
+		// Forgejo answers a missing ref with 500 + "object does not exist"
+		// (NOT 404), so treat that as an idempotent no-op too.
+		if strings.Contains(strings.ToLower(err.Error()), "does not exist") {
+			return nil
+		}
 	}
 	return err
 }
