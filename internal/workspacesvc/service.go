@@ -21,6 +21,7 @@ import (
 	wsv1 "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1"
 	"github.com/abcp-sdk/workspace-gateway/gen/workspace/v1/wsv1connect"
 	"github.com/abcp-sdk/workspace-gateway/internal/forgejo"
+	"github.com/abcp-sdk/workspace-gateway/internal/gitimport"
 	"github.com/abcp-sdk/workspace-gateway/internal/imagebuild"
 	"github.com/abcp-sdk/workspace-gateway/internal/members"
 	"github.com/abcp-sdk/workspace-gateway/internal/roles"
@@ -852,38 +853,43 @@ func (s *Service) ImportRepo(ctx context.Context, req *connect.Request[wsv1.Impo
 		return nil, connect.NewError(connect.CodeAlreadyExists, errors.New("repository already exists"))
 	}
 
-	ref := m.GetRef()
-	info, err := s.git.MigrateRepo(ctx, org, repo, url, m.GetAuthUser(), m.GetAuthToken(), m.GetDescription(), m.GetPrivate(), m.GetMirror())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("migrate: %w", err))
+	// Create an EMPTY destination repo (no auto-init): the import push will
+	// establish the branches. Never use Forgejo's mirror-migrate here — it
+	// fetches every `refs/pull/*`, which is multi-GB/multi-minute on a popular
+	// upstream (e.g. octocat/Spoon-Knife with 63k pull refs).
+	if _, err := s.git.CreateEmptyRepo(ctx, org, repo, m.GetDescription(), m.GetPrivate()); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create repo: %w", err))
 	}
-	branch := info.DefaultBranch
+	// From here a failure must not leave an empty orphan behind.
+	cleanup := func(cause error) error {
+		if derr := s.git.DeleteRepo(context.WithoutCancel(ctx), org, repo); derr != nil {
+			log.Printf("warn: cleanup half-imported %s/%s: %v", org, repo, derr)
+		}
+		return connect.NewError(connect.CodeInternal, cause)
+	}
+
+	// Clone the source's HEAD BRANCHES only and push them into the empty repo.
+	// go-git keeps `git` out of the gateway image and opens no subprocess.
+	res, err := gitimport.Import(ctx, gitimport.Options{
+		SourceURL:   url,
+		DestURL:     s.git.GitURL(org, repo),
+		DestUser:    "root",
+		DestToken:   s.git.Token(),
+		SourceUser:  m.GetAuthUser(),
+		SourceToken: m.GetAuthToken(),
+		Ref:         m.GetRef(),
+	})
+	if err != nil {
+		return nil, cleanup(fmt.Errorf("import: %w", err))
+	}
+	branch := res.DefaultBranch
 	if branch == "" {
 		branch = roles.MainBranch
 	}
-	if ref != "" {
-		branches, err := s.git.Branches(ctx, org, repo)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
-		}
-		found := false
-		for _, b := range branches {
-			if b.Name == ref {
-				found = true
-			}
-		}
-		if !found {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("ref %q not found in the imported repository", ref))
-		}
-		if err := s.git.SetDefaultBranch(ctx, org, repo, ref); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
-		}
-		for _, b := range branches {
-			if b.Name != ref {
-				_ = s.git.DeleteBranch(ctx, org, repo, b.Name)
-			}
-		}
-		branch = ref
+	// Point the repo's default branch at the imported one (the empty repo has
+	// none; Forgejo would otherwise guess).
+	if err := s.git.SetDefaultBranch(ctx, org, repo, branch); err != nil {
+		return nil, cleanup(fmt.Errorf("set default branch: %w", err))
 	}
 	// Record ownership so the repo becomes visible to the tenant, protect main
 	// only when the default IS main, and ensure the branch session.
@@ -901,7 +907,7 @@ func (s *Service) ImportRepo(ctx context.Context, req *connect.Request[wsv1.Impo
 		}
 	}
 	return connect.NewResponse(&wsv1.ImportRepoResponse{Repo: &wsv1.RepoInfo{
-		Org: org, Repo: repo, DefaultBranch: branch, Private: info.Private,
+		Org: org, Repo: repo, DefaultBranch: branch, Private: m.GetPrivate(),
 	}}), nil
 }
 

@@ -73,6 +73,8 @@ message Part {
 message MailboxEntry {
   string id = 1;
   string session_name = 2;
+  // Message type: `trigger` (starts a turn), `interrupt`, or `event`
+  // (folded into context only). Free-form on the wire.
   string msg_type = 3;
   string payload = 4;
   string effective_at = 5;
@@ -80,6 +82,13 @@ message MailboxEntry {
   string created_at = 7;
   string consumed_at = 8;
   int64 seq = 9;
+  // ORIGIN of the message, so a consumer can tell a person's prompt from
+  // another session's hand-off or a system event. Open string:
+  //   `user`                 — a human prompt (HTTP Prompt route)
+  //   `session:{session}`    — another session (subsession-create / mail-send)
+  //   `system:{name}`        — a system/automation source
+  //   other                  — extension-defined; consumers degrade gracefully
+  string source = 10;
 }
 
 

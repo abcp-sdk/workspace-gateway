@@ -52,7 +52,7 @@ agent:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/agent
-    tag: "20260921063947"
+    tag: "20260921141115"
     pullPolicy: IfNotPresent
   port: 8080
   service:
@@ -81,7 +81,7 @@ workspaceExtension:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/workspace-extension
-    tag: "20260921130226"
+    tag: "20260921141241"
     pullPolicy: IfNotPresent
   # Tenant seeded with the gateway/forgejo defaults. `"*"` = every tenant.
   seedTenant: "*"
@@ -94,7 +94,7 @@ playwright:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/playwright-extension
-    tag: "20260920113616"
+    tag: "20260921141241"
     pullPolicy: IfNotPresent
   seedTenant: "*"
   viewport: "1280x720"
@@ -109,7 +109,7 @@ gateway:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/workspace-gateway
-    tag: "20260921133629"
+    tag: "20260921151521"
     pullPolicy: IfNotPresent
   # Namespace the sandbox/service backend manages, and where its RBAC lands.
   sandbox:
@@ -157,7 +157,7 @@ webui:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/workspace-webui
-    tag: "20260921130226"
+    tag: "20260921134527"
     pullPolicy: IfNotPresent
   port: 8080
   service:

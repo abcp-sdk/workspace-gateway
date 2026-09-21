@@ -425,16 +425,26 @@ func (x *Part) GetData() string {
 
 // Mailbox entry.
 type MailboxEntry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	SessionName   string                 `protobuf:"bytes,2,opt,name=session_name,json=sessionName,proto3" json:"session_name,omitempty"`
-	MsgType       string                 `protobuf:"bytes,3,opt,name=msg_type,json=msgType,proto3" json:"msg_type,omitempty"`
-	Payload       string                 `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"`
-	EffectiveAt   string                 `protobuf:"bytes,5,opt,name=effective_at,json=effectiveAt,proto3" json:"effective_at,omitempty"`
-	Status        string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"`
-	CreatedAt     string                 `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	ConsumedAt    string                 `protobuf:"bytes,8,opt,name=consumed_at,json=consumedAt,proto3" json:"consumed_at,omitempty"`
-	Seq           int64                  `protobuf:"varint,9,opt,name=seq,proto3" json:"seq,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	SessionName string                 `protobuf:"bytes,2,opt,name=session_name,json=sessionName,proto3" json:"session_name,omitempty"`
+	// Message type: `trigger` (starts a turn), `interrupt`, or `event`
+	// (folded into context only). Free-form on the wire.
+	MsgType     string `protobuf:"bytes,3,opt,name=msg_type,json=msgType,proto3" json:"msg_type,omitempty"`
+	Payload     string `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"`
+	EffectiveAt string `protobuf:"bytes,5,opt,name=effective_at,json=effectiveAt,proto3" json:"effective_at,omitempty"`
+	Status      string `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"`
+	CreatedAt   string `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	ConsumedAt  string `protobuf:"bytes,8,opt,name=consumed_at,json=consumedAt,proto3" json:"consumed_at,omitempty"`
+	Seq         int64  `protobuf:"varint,9,opt,name=seq,proto3" json:"seq,omitempty"`
+	// ORIGIN of the message, so a consumer can tell a person's prompt from
+	// another session's hand-off or a system event. Open string:
+	//
+	//	`user`                 — a human prompt (HTTP Prompt route)
+	//	`session:{session}`    — another session (subsession-create / mail-send)
+	//	`system:{name}`        — a system/automation source
+	//	other                  — extension-defined; consumers degrade gracefully
+	Source        string `protobuf:"bytes,10,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -530,6 +540,13 @@ func (x *MailboxEntry) GetSeq() int64 {
 		return x.Seq
 	}
 	return 0
+}
+
+func (x *MailboxEntry) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
 }
 
 // Preset row.
@@ -6418,7 +6435,7 @@ const file_agent_v1_agent_proto_rawDesc = "" +
 	"message_id\x18\x02 \x01(\tR\tmessageId\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x12\x10\n" +
 	"\x03seq\x18\x04 \x01(\x05R\x03seq\x12\x12\n" +
-	"\x04data\x18\x05 \x01(\tR\x04data\"\x83\x02\n" +
+	"\x04data\x18\x05 \x01(\tR\x04data\"\x9b\x02\n" +
 	"\fMailboxEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fsession_name\x18\x02 \x01(\tR\vsessionName\x12\x19\n" +
@@ -6430,7 +6447,9 @@ const file_agent_v1_agent_proto_rawDesc = "" +
 	"created_at\x18\a \x01(\tR\tcreatedAt\x12\x1f\n" +
 	"\vconsumed_at\x18\b \x01(\tR\n" +
 	"consumedAt\x12\x10\n" +
-	"\x03seq\x18\t \x01(\x03R\x03seq\"\xbb\x01\n" +
+	"\x03seq\x18\t \x01(\x03R\x03seq\x12\x16\n" +
+	"\x06source\x18\n" +
+	" \x01(\tR\x06source\"\xbb\x01\n" +
 	"\x06Preset\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rsystem_prompt\x18\x02 \x01(\tR\fsystemPrompt\x12,\n" +

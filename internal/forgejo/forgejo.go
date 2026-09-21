@@ -32,6 +32,16 @@ func New(base, token string) *Client {
 	}
 }
 
+// GitURL is the HTTP(S) clone/push URL for `org/repo`, derived from the API
+// base. The gateway pushes import results here with the shared token.
+func (c *Client) GitURL(org, repo string) string {
+	return c.base + "/" + seg(org) + "/" + seg(repo) + ".git"
+}
+
+// Token exposes the shared API/git token (the import push authenticates with
+// it). Never log the result.
+func (c *Client) Token() string { return c.token }
+
 // RepoInfo is one repository.
 type RepoInfo struct {
 	Org           string `json:"org"`
@@ -67,6 +77,10 @@ type ErrNotFound struct{ URL string }
 func (e *ErrNotFound) Error() string { return "forgejo: not found: " + e.URL }
 
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body any, out any) error {
+	return c.doWith(c.hc, ctx, method, path, query, body, out)
+}
+
+func (c *Client) doWith(hc *http.Client, ctx context.Context, method, path string, query url.Values, body any, out any) error {
 	u := c.base + "/api/v1" + path
 	if len(query) > 0 {
 		u += "?" + query.Encode()
@@ -90,7 +104,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	if c.token != "" {
 		req.Header.Set("Authorization", "token "+c.token)
 	}
-	res, err := c.hc.Do(req)
+	res, err := hc.Do(req)
 	if err != nil {
 		return err
 	}
@@ -175,39 +189,38 @@ func (c *Client) EnsureRepo(ctx context.Context, org, repo string) (bool, error)
 	return created, nil
 }
 
-// MigrateRepo migrates an EXTERNAL git repository into `org` as `repo`. Forgejo
-// clones the FULL repository (all branches + history); `ref` is NOT a migrate
-// option (the caller trims afterwards). Optional basic/token auth supports
-// private sources; `mirror` keeps it synced.
-func (c *Client) MigrateRepo(ctx context.Context, org, repo, cloneAddr, authUser, authToken, description string, private, mirror bool) (RepoInfo, error) {
-	body := map[string]any{
-		"clone_addr": cloneAddr,
-		"repo_name":  repo,
-		"repo_owner": org,
-		"service":    "git",
-		"private":    private,
-		"mirror":     mirror,
+// CreateEmptyRepo creates `org/repo` WITHOUT auto-init (no initial commit, no
+// default branch) so a subsequent git PUSH establishes the branches. It is the
+// destination step of an import: the external content is fetched by the
+// gateway's git client and pushed, never by Forgejo's mirror-migrate (which
+// would drag in every `refs/pull/*`). The org is created when absent.
+func (c *Client) CreateEmptyRepo(ctx context.Context, org, repo, description string, private bool) (RepoInfo, error) {
+	if err := c.EnsureOrg(ctx, org); err != nil {
+		return RepoInfo{}, err
 	}
-	if authUser != "" {
-		body["auth_username"] = authUser
-	}
-	if authToken != "" {
-		body["auth_token"] = authToken
-	}
+	body := map[string]any{"name": repo, "auto_init": false, "private": private}
 	if description != "" {
 		body["description"] = description
 	}
-	var out map[string]any
-	if err := c.do(ctx, "POST", "/repos/migrate", nil, body, &out); err != nil {
-		return RepoInfo{}, err
+	if err := c.do(ctx, "POST", "/orgs/"+seg(org)+"/repos", nil, body, nil); err != nil {
+		// The owner may be a user, not an org; fall back to the user endpoint.
+		if e := c.do(ctx, "POST", "/user/repos", nil, body, nil); e != nil {
+			return RepoInfo{}, err
+		}
 	}
-	owner, _ := out["owner"].(map[string]any)
-	return RepoInfo{
-		Org:           str(owner["login"]),
-		Repo:          str(out["name"]),
-		DefaultBranch: str(out["default_branch"]),
-		Private:       boolv(out["private"]),
-	}, nil
+	return c.GetRepo(ctx, org, repo)
+}
+
+// DeleteRepo removes a repository. Used to clean up a half-finished import
+// (the repo was created but the push failed) so no empty orphan remains.
+func (c *Client) DeleteRepo(ctx context.Context, org, repo string) error {
+	err := c.do(ctx, "DELETE", "/repos/"+seg(org)+"/"+seg(repo), nil, nil, nil)
+	if err != nil {
+		if _, ok := err.(*ErrNotFound); ok {
+			return nil
+		}
+	}
+	return err
 }
 
 // SetDefaultBranch points a repo's default branch at `branch`.
