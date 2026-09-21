@@ -20,7 +20,8 @@
       "repo-branches",
       "repo-tags",
       "repo-create-org",
-      "repo-create-repo"
+      "repo-create-repo",
+      "repo-import"
     ],
     "max_turns": 25
   },

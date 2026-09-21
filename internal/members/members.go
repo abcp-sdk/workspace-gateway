@@ -19,6 +19,13 @@ func Open(dsn string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS org_owners (
+		tenant TEXT NOT NULL,
+		org    TEXT NOT NULL,
+		PRIMARY KEY (tenant, org)
+	)`); err != nil {
+		return nil, err
+	}
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS repo_owners (
 		tenant TEXT NOT NULL,
 		org    TEXT NOT NULL,
@@ -58,6 +65,45 @@ func (s *Store) OwnsRepo(tenant, org, repo string) (bool, error) {
 		tenant, org, repo,
 	).Scan(&n)
 	return n > 0, err
+}
+
+// AddOrg records that tenant owns org (idempotent).
+func (s *Store) AddOrg(tenant, org string) error {
+	_, err := s.db.Exec(
+		`INSERT OR IGNORE INTO org_owners (tenant, org) VALUES (?,?)`,
+		tenant, org,
+	)
+	return err
+}
+
+// OwnsOrg reports whether tenant owns org.
+func (s *Store) OwnsOrg(tenant, org string) (bool, error) {
+	var n int
+	err := s.db.QueryRow(
+		`SELECT COUNT(1) FROM org_owners WHERE tenant=? AND org=?`,
+		tenant, org,
+	).Scan(&n)
+	return n > 0, err
+}
+
+// ListOrgs returns every org tenant owns.
+func (s *Store) ListOrgs(tenant string) ([]string, error) {
+	rows, err := s.db.Query(
+		`SELECT org FROM org_owners WHERE tenant=? ORDER BY org`, tenant,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var org string
+		if err := rows.Scan(&org); err != nil {
+			return nil, err
+		}
+		out = append(out, org)
+	}
+	return out, rows.Err()
 }
 
 // ListRepos returns every (org, repo) tenant maintains.

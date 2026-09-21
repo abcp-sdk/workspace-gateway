@@ -103,6 +103,9 @@ const (
 	// BranchSessionServiceEnsureRepoProcedure is the fully-qualified name of the BranchSessionService's
 	// EnsureRepo RPC.
 	BranchSessionServiceEnsureRepoProcedure = "/workspace.v1.BranchSessionService/EnsureRepo"
+	// BranchSessionServiceImportRepoProcedure is the fully-qualified name of the BranchSessionService's
+	// ImportRepo RPC.
+	BranchSessionServiceImportRepoProcedure = "/workspace.v1.BranchSessionService/ImportRepo"
 	// BranchSessionServiceListMRsProcedure is the fully-qualified name of the BranchSessionService's
 	// ListMRs RPC.
 	BranchSessionServiceListMRsProcedure = "/workspace.v1.BranchSessionService/ListMRs"
@@ -299,6 +302,8 @@ type BranchSessionServiceClient interface {
 	GetCommit(context.Context, *connect.Request[v1.GetCommitRequest]) (*connect.Response[v1.GetCommitResponse], error)
 	CommitDiff(context.Context, *connect.Request[v1.CommitDiffRequest]) (*connect.Response[v1.DiffResponse], error)
 	EnsureRepo(context.Context, *connect.Request[v1.EnsureRepoRequest]) (*connect.Response[v1.EnsureRepoResponse], error)
+	// ImportRepo migrates an EXTERNAL git repository into an org (admin).
+	ImportRepo(context.Context, *connect.Request[v1.ImportRepoRequest]) (*connect.Response[v1.ImportRepoResponse], error)
 	// change requests (read-only in this surface: List/Get/diff/comments)
 	ListMRs(context.Context, *connect.Request[v1.ListMRsRequest]) (*connect.Response[v1.ListMRsResponse], error)
 	GetMR(context.Context, *connect.Request[v1.GetMRRequest]) (*connect.Response[v1.GetMRResponse], error)
@@ -490,6 +495,12 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+BranchSessionServiceEnsureRepoProcedure,
 			connect.WithSchema(branchSessionServiceMethods.ByName("EnsureRepo")),
+			connect.WithClientOptions(opts...),
+		),
+		importRepo: connect.NewClient[v1.ImportRepoRequest, v1.ImportRepoResponse](
+			httpClient,
+			baseURL+BranchSessionServiceImportRepoProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ImportRepo")),
 			connect.WithClientOptions(opts...),
 		),
 		listMRs: connect.NewClient[v1.ListMRsRequest, v1.ListMRsResponse](
@@ -846,6 +857,7 @@ type branchSessionServiceClient struct {
 	getCommit            *connect.Client[v1.GetCommitRequest, v1.GetCommitResponse]
 	commitDiff           *connect.Client[v1.CommitDiffRequest, v1.DiffResponse]
 	ensureRepo           *connect.Client[v1.EnsureRepoRequest, v1.EnsureRepoResponse]
+	importRepo           *connect.Client[v1.ImportRepoRequest, v1.ImportRepoResponse]
 	listMRs              *connect.Client[v1.ListMRsRequest, v1.ListMRsResponse]
 	getMR                *connect.Client[v1.GetMRRequest, v1.GetMRResponse]
 	mRDiff               *connect.Client[v1.MRDiffRequest, v1.MRDiffResponse]
@@ -996,6 +1008,11 @@ func (c *branchSessionServiceClient) CommitDiff(ctx context.Context, req *connec
 // EnsureRepo calls workspace.v1.BranchSessionService.EnsureRepo.
 func (c *branchSessionServiceClient) EnsureRepo(ctx context.Context, req *connect.Request[v1.EnsureRepoRequest]) (*connect.Response[v1.EnsureRepoResponse], error) {
 	return c.ensureRepo.CallUnary(ctx, req)
+}
+
+// ImportRepo calls workspace.v1.BranchSessionService.ImportRepo.
+func (c *branchSessionServiceClient) ImportRepo(ctx context.Context, req *connect.Request[v1.ImportRepoRequest]) (*connect.Response[v1.ImportRepoResponse], error) {
+	return c.importRepo.CallUnary(ctx, req)
 }
 
 // ListMRs calls workspace.v1.BranchSessionService.ListMRs.
@@ -1303,6 +1320,8 @@ type BranchSessionServiceHandler interface {
 	GetCommit(context.Context, *connect.Request[v1.GetCommitRequest]) (*connect.Response[v1.GetCommitResponse], error)
 	CommitDiff(context.Context, *connect.Request[v1.CommitDiffRequest]) (*connect.Response[v1.DiffResponse], error)
 	EnsureRepo(context.Context, *connect.Request[v1.EnsureRepoRequest]) (*connect.Response[v1.EnsureRepoResponse], error)
+	// ImportRepo migrates an EXTERNAL git repository into an org (admin).
+	ImportRepo(context.Context, *connect.Request[v1.ImportRepoRequest]) (*connect.Response[v1.ImportRepoResponse], error)
 	// change requests (read-only in this surface: List/Get/diff/comments)
 	ListMRs(context.Context, *connect.Request[v1.ListMRsRequest]) (*connect.Response[v1.ListMRsResponse], error)
 	GetMR(context.Context, *connect.Request[v1.GetMRRequest]) (*connect.Response[v1.GetMRResponse], error)
@@ -1490,6 +1509,12 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		BranchSessionServiceEnsureRepoProcedure,
 		svc.EnsureRepo,
 		connect.WithSchema(branchSessionServiceMethods.ByName("EnsureRepo")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceImportRepoHandler := connect.NewUnaryHandler(
+		BranchSessionServiceImportRepoProcedure,
+		svc.ImportRepo,
+		connect.WithSchema(branchSessionServiceMethods.ByName("ImportRepo")),
 		connect.WithHandlerOptions(opts...),
 	)
 	branchSessionServiceListMRsHandler := connect.NewUnaryHandler(
@@ -1862,6 +1887,8 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceCommitDiffHandler.ServeHTTP(w, r)
 		case BranchSessionServiceEnsureRepoProcedure:
 			branchSessionServiceEnsureRepoHandler.ServeHTTP(w, r)
+		case BranchSessionServiceImportRepoProcedure:
+			branchSessionServiceImportRepoHandler.ServeHTTP(w, r)
 		case BranchSessionServiceListMRsProcedure:
 			branchSessionServiceListMRsHandler.ServeHTTP(w, r)
 		case BranchSessionServiceGetMRProcedure:
@@ -2055,6 +2082,10 @@ func (UnimplementedBranchSessionServiceHandler) CommitDiff(context.Context, *con
 
 func (UnimplementedBranchSessionServiceHandler) EnsureRepo(context.Context, *connect.Request[v1.EnsureRepoRequest]) (*connect.Response[v1.EnsureRepoResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.EnsureRepo is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) ImportRepo(context.Context, *connect.Request[v1.ImportRepoRequest]) (*connect.Response[v1.ImportRepoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ImportRepo is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) ListMRs(context.Context, *connect.Request[v1.ListMRsRequest]) (*connect.Response[v1.ListMRsResponse], error) {

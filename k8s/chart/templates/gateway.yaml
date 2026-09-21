@@ -39,6 +39,9 @@ spec:
               valueFrom:
                 secretKeyRef: { name: workspace-gateway-secrets, key: service-token }
             - { name: GATEWAY_SERVICE_TENANT, value: {{ .Values.gateway.serviceToken.tenant | quote }} }
+            - name: AGENT_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef: { name: workspace-gateway-secrets, key: agent-admin-token }
             - { name: IMAGE_REGISTRY_HOST, value: {{ .Values.infra.registry.host | quote }} }
             - { name: TOOLCHAIN_ORG, value: {{ .Values.infra.registry.toolchainOrg | quote }} }
             - { name: DEFAULT_BASE_IMAGE, value: {{ .Values.gateway.registry.defaultBaseImage | quote }} }
@@ -103,4 +106,5 @@ type: Opaque
 stringData:
   forgejo-token: {{ .Values.gateway.forgejo.token | quote }}
   service-token: {{ .Values.gateway.serviceToken.token | quote }}
+  agent-admin-token: {{ .Values.gateway.agentAdminToken | default .Values.agent.auth.adminToken | quote }}
 {{- end }}

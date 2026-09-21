@@ -85,14 +85,50 @@ func (s *Service) renderRuntime(kvm bool, gpuCount int32) runtimeprofiles.Render
 }
 
 // sandboxAuth resolves the caller's tenant for a sandbox RPC. A request bearing
-// the shared service token resolves to the configured service tenant (the
-// extension's sandboxes are visible only to that tenant); every other request
-// resolves through the agent identity as usual.
+// the shared service token resolves to the configured service tenant (unless it
+// names a real tenant via X-Abc-Tenant); every other request resolves through
+// the agent identity as usual.
 func (s *Service) sandboxAuth(ctx context.Context, hdr map[string][]string) (string, error) {
-	if s.svcToken != "" && s.svcTenant != "" && bearerToken(hdr) == s.svcToken {
-		return s.svcTenant, nil
+	if t, ok := s.serviceTenant(hdr); ok {
+		return t, nil
 	}
 	return s.resolveTenant(ctx, hdr)
+}
+
+// serviceTenant resolves a SERVICE-TOKEN caller's tenant: the `X-Abc-Tenant`
+// header when present and valid (the workspace extension acts on behalf of the
+// real caller), else the configured synthetic service tenant. ok=false when the
+// request does not carry the shared service token.
+func (s *Service) serviceTenant(hdr map[string][]string) (string, bool) {
+	if s.svcToken == "" || bearerToken(hdr) != s.svcToken {
+		return "", false
+	}
+	if t := headerValue(hdr, "X-Abc-Tenant"); validTenantID(t) {
+		return t, true
+	}
+	return s.svcTenant, true
+}
+
+// validTenantID mirrors the agent's tenant charset ^[A-Za-z0-9_-]{1,64}$.
+func validTenantID(t string) bool {
+	if t == "" || len(t) > 64 {
+		return false
+	}
+	for _, r := range t {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func headerValue(hdr map[string][]string, name string) string {
+	for k, vs := range hdr {
+		if strings.EqualFold(k, name) && len(vs) > 0 {
+			return strings.TrimSpace(vs[0])
+		}
+	}
+	return ""
 }
 
 func bearerToken(hdr map[string][]string) string {
@@ -110,8 +146,13 @@ func bearerToken(hdr map[string][]string) string {
 
 // ---- tenant ----
 
-// resolveTenant asks the agent who the caller is (forwarding their token).
+// resolveTenant asks the agent who the caller is (forwarding their token). A
+// service-token caller is resolved from X-Abc-Tenant / the service tenant so the
+// extension can act for the real tenant without an agent identity round-trip.
 func (s *Service) resolveTenant(ctx context.Context, hdr map[string][]string) (string, error) {
+	if t, ok := s.serviceTenant(hdr); ok {
+		return t, nil
+	}
 	req := connect.NewRequest(&agentv1.GetIdentityRequest{})
 	copyHeaders(req, hdr)
 	res, err := s.agent.GetIdentity(ctx, req)
@@ -178,6 +219,25 @@ func (s *Service) sessionExists(ctx context.Context, hdr map[string][]string, se
 	return err == nil && res.Msg.GetSession() != nil
 }
 
+// claimOrg ensures `org` exists and is owned by tenant. A pre-existing org not
+// owned by the tenant is refused (import must not land in someone else's org).
+func (s *Service) claimOrg(ctx context.Context, tenant, org string) error {
+	owned, err := s.members.OwnsOrg(tenant, org)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, err)
+	}
+	if owned {
+		return nil
+	}
+	if err := s.git.EnsureOrg(ctx, org); err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("ensure org: %w", err))
+	}
+	if err := s.members.AddOrg(tenant, org); err != nil {
+		return connect.NewError(connect.CodeInternal, err)
+	}
+	return nil
+}
+
 // claimRepo ensures org/repo exists and is owned by tenant. A pre-existing repo
 // owned by another tenant is refused.
 func (s *Service) claimRepo(ctx context.Context, tenant, org, repo string) error {
@@ -201,6 +261,7 @@ func (s *Service) claimRepo(ctx context.Context, tenant, org, repo string) error
 	if err := s.members.AddRepo(tenant, org, repo); err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}
+	_ = s.members.AddOrg(tenant, org)
 	return nil
 }
 
@@ -753,6 +814,105 @@ func (s *Service) ensureMainSession(ctx context.Context, hdr map[string][]string
 	if err := s.createSession(ctx, hdr, session, roles.PresetFor(roles.Maintainer), ""); err != nil {
 		log.Printf("warn: ensure main session %s: %v", session, err)
 	}
+}
+
+// ImportRepo migrates an EXTERNAL git repository into `org` (which must belong
+// to the caller's tenant). Forgejo clones the FULL repository; when `ref` is
+// given, that ref becomes the default branch and every OTHER branch is deleted
+// (single-branch import). The imported repo's default-branch session is ensured.
+// An existing repo is refused (never overwritten).
+func (s *Service) ImportRepo(ctx context.Context, req *connect.Request[wsv1.ImportRepoRequest]) (*connect.Response[wsv1.ImportRepoResponse], error) {
+	tenant, err := s.resolveTenant(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	m := req.Msg
+	org, url := m.GetOrg(), m.GetUrl()
+	if !roles.ValidComponent(org) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org must be a simple name"))
+	}
+	if url == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("url is required"))
+	}
+	repo := m.GetRepo()
+	if repo == "" {
+		repo = deriveRepoName(url)
+	}
+	if !roles.ValidComponent(repo) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("repo must be a simple name"))
+	}
+	// The org must belong to the tenant (an unknown org is created for it).
+	if err := s.claimOrg(ctx, tenant, org); err != nil {
+		return nil, err
+	}
+	// Refuse to overwrite.
+	if ok, err := s.git.RepoExists(ctx, org, repo); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	} else if ok {
+		return nil, connect.NewError(connect.CodeAlreadyExists, errors.New("repository already exists"))
+	}
+
+	ref := m.GetRef()
+	info, err := s.git.MigrateRepo(ctx, org, repo, url, m.GetAuthUser(), m.GetAuthToken(), m.GetDescription(), m.GetPrivate(), m.GetMirror())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("migrate: %w", err))
+	}
+	branch := info.DefaultBranch
+	if branch == "" {
+		branch = roles.MainBranch
+	}
+	if ref != "" {
+		branches, err := s.git.Branches(ctx, org, repo)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		found := false
+		for _, b := range branches {
+			if b.Name == ref {
+				found = true
+			}
+		}
+		if !found {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("ref %q not found in the imported repository", ref))
+		}
+		if err := s.git.SetDefaultBranch(ctx, org, repo, ref); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		for _, b := range branches {
+			if b.Name != ref {
+				_ = s.git.DeleteBranch(ctx, org, repo, b.Name)
+			}
+		}
+		branch = ref
+	}
+	// Record ownership so the repo becomes visible to the tenant, protect main
+	// only when the default IS main, and ensure the branch session.
+	if err := s.members.AddRepo(tenant, org, repo); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if branch == roles.MainBranch {
+		if err := s.git.ProtectMain(ctx, org, repo); err != nil {
+			log.Printf("warn: protect main %s/%s: %v", org, repo, err)
+		}
+	}
+	if !s.sessionExists(ctx, req.Header(), roles.SessionName(org, repo, branch)) {
+		if err := s.createSession(ctx, req.Header(), roles.SessionName(org, repo, branch), roles.PresetFor(roles.RoleForBranch(branch)), ""); err != nil {
+			log.Printf("warn: ensure imported session %s/%s:%s: %v", org, repo, branch, err)
+		}
+	}
+	return connect.NewResponse(&wsv1.ImportRepoResponse{Repo: &wsv1.RepoInfo{
+		Org: org, Repo: repo, DefaultBranch: branch, Private: info.Private,
+	}}), nil
+}
+
+// deriveRepoName takes the last path segment of a git URL (strips `.git`).
+func deriveRepoName(raw string) string {
+	s := strings.TrimRight(raw, "/")
+	s = strings.TrimSuffix(s, ".git")
+	if i := strings.LastIndexAny(s, "/:"); i >= 0 {
+		s = s[i+1:]
+	}
+	return s
 }
 
 // requireAdmin gates org/repo creation. Every tenant may create org/repo

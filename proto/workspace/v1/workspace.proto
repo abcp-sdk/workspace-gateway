@@ -246,6 +246,26 @@ message EnsureRepoRequest {
 }
 message EnsureRepoResponse { bool created = 1; }
 
+// ImportRepo migrates an EXTERNAL git repository into `org` (the tenant must own
+// it). Forgejo clones the FULL repository; when `ref` is given that ref becomes
+// the default branch and the other branches are deleted (single-branch import).
+// The imported repo's branch session is ensured. Refuses to overwrite an
+// existing repo.
+message ImportRepoRequest {
+  string org = 1;
+  // Explicit repo name; empty = derived from the URL's last path segment.
+  string repo = 2;
+  string url = 3;
+  // Import ONLY this ref (default: all branches + the source default branch).
+  string ref = 4;
+  string auth_user = 5;
+  string auth_token = 6;
+  bool private = 7; // default true
+  bool mirror = 8;
+  string description = 9;
+}
+message ImportRepoResponse { RepoInfo repo = 1; }
+
 // ---- change requests (MRs) — the maintainer's ONLY path to change main ----
 
 message ListMRsRequest {
@@ -555,6 +575,8 @@ service BranchSessionService {
   rpc GetCommit(GetCommitRequest) returns (GetCommitResponse);
   rpc CommitDiff(CommitDiffRequest) returns (DiffResponse);
   rpc EnsureRepo(EnsureRepoRequest) returns (EnsureRepoResponse);
+  // ImportRepo migrates an EXTERNAL git repository into an org (admin).
+  rpc ImportRepo(ImportRepoRequest) returns (ImportRepoResponse);
   // change requests (read-only in this surface: List/Get/diff/comments)
   rpc ListMRs(ListMRsRequest) returns (ListMRsResponse);
   rpc GetMR(GetMRRequest) returns (GetMRResponse);

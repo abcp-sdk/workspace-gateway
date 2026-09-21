@@ -81,7 +81,7 @@ workspaceExtension:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/workspace-extension
-    tag: "20260921123309"
+    tag: "20260921130226"
     pullPolicy: IfNotPresent
   # Tenant seeded with the gateway/forgejo defaults. `"*"` = every tenant.
   seedTenant: "*"
@@ -109,7 +109,7 @@ gateway:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/workspace-gateway
-    tag: "20260921123640"
+    tag: "20260921133629"
     pullPolicy: IfNotPresent
   # Namespace the sandbox/service backend manages, and where its RBAC lands.
   sandbox:
@@ -122,10 +122,16 @@ gateway:
   # (helm template --show-only templates/worker-rbac.yaml | kubectl ... -n worker).
   workerRbac:
     create: true
-  # Shared token the workspace extension presents for sandbox RPCs.
+  # Shared token the workspace extension presents for sandbox RPCs. The
+  # gateway MINTS a tenant token for the named tenant (AdminService) so the
+  # service token never reaches the agent.
   serviceToken:
     tenant: "workspace-extension"
     token: "devservice-token"
+  # Static admin token the gateway presents to the agent's AdminService to mint
+  # a tenant token on behalf of the extension's service token. Defaults to the
+  # agent's own admin token when unset.
+  agentAdminToken: ""
   # Forgejo shared token (repo tools + EnsureRepo/protect). API writes need a
   # real PAT (basic auth is read-only); this is the dev PAT for root.
   forgejo:
@@ -151,7 +157,7 @@ webui:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/workspace-webui
-    tag: "20260921123309"
+    tag: "20260921130226"
     pullPolicy: IfNotPresent
   port: 8080
   service:

@@ -92,7 +92,11 @@ func main() {
 		log.Printf("warn: ensure toolchain org %q: %v", toolchainOrg, err)
 	}
 
-	ac := agentclient.New(agentURL)
+	ac := agentclient.New(agentclient.Config{
+		URL:          agentURL,
+		ServiceToken: os.Getenv("GATEWAY_SERVICE_TOKEN"),
+		AdminToken:   os.Getenv("AGENT_ADMIN_TOKEN"),
+	})
 	svc := workspacesvc.New(workspacesvc.Deps{
 		Agent:    ac.Raw(),
 		Members:  store,

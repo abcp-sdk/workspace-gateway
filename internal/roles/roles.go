@@ -87,7 +87,7 @@ var repoReviewTools = []string{
 }
 
 // Admin tools: create org/repo only.
-var adminTools = []string{"repo-create-org", "repo-create-repo"}
+var adminTools = []string{"repo-create-org", "repo-create-repo", "repo-import"}
 
 // ToolsFor returns a role's preset whitelist. The agent treats an EMPTY
 // whitelist as "all tools", so every role returns a non-empty list.

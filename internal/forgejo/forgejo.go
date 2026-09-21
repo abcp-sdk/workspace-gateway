@@ -175,6 +175,46 @@ func (c *Client) EnsureRepo(ctx context.Context, org, repo string) (bool, error)
 	return created, nil
 }
 
+// MigrateRepo migrates an EXTERNAL git repository into `org` as `repo`. Forgejo
+// clones the FULL repository (all branches + history); `ref` is NOT a migrate
+// option (the caller trims afterwards). Optional basic/token auth supports
+// private sources; `mirror` keeps it synced.
+func (c *Client) MigrateRepo(ctx context.Context, org, repo, cloneAddr, authUser, authToken, description string, private, mirror bool) (RepoInfo, error) {
+	body := map[string]any{
+		"clone_addr": cloneAddr,
+		"repo_name":  repo,
+		"repo_owner": org,
+		"service":    "git",
+		"private":    private,
+		"mirror":     mirror,
+	}
+	if authUser != "" {
+		body["auth_username"] = authUser
+	}
+	if authToken != "" {
+		body["auth_token"] = authToken
+	}
+	if description != "" {
+		body["description"] = description
+	}
+	var out map[string]any
+	if err := c.do(ctx, "POST", "/repos/migrate", nil, body, &out); err != nil {
+		return RepoInfo{}, err
+	}
+	owner, _ := out["owner"].(map[string]any)
+	return RepoInfo{
+		Org:           str(owner["login"]),
+		Repo:          str(out["name"]),
+		DefaultBranch: str(out["default_branch"]),
+		Private:       boolv(out["private"]),
+	}, nil
+}
+
+// SetDefaultBranch points a repo's default branch at `branch`.
+func (c *Client) SetDefaultBranch(ctx context.Context, org, repo, branch string) error {
+	return c.do(ctx, "PATCH", "/repos/"+seg(org)+"/"+seg(repo), nil, map[string]any{"default_branch": branch}, nil)
+}
+
 // ProtectMain makes `main` accept changes ONLY through an MR merge: direct
 // pushes are disabled and the rule applies to admins too (so the shared token
 // cannot bypass it).
