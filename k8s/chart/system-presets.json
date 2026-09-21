@@ -103,6 +103,8 @@
       "repo-delete",
       "repo-commit",
       "repo-branch-create",
+      "repo-branch-sync",
+      "repo-restore",
       "repo-mr-create",
       "repo-mr-list",
       "repo-mr-comment",

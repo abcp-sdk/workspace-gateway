@@ -81,7 +81,7 @@ workspaceExtension:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/workspace-extension
-    tag: "20260921141241"
+    tag: "20260921165623"
     pullPolicy: IfNotPresent
   # Tenant seeded with the gateway/forgejo defaults. `"*"` = every tenant.
   seedTenant: "*"
@@ -109,7 +109,7 @@ gateway:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/workspace-gateway
-    tag: "20260921151521"
+    tag: "20260921170417"
     pullPolicy: IfNotPresent
   # Namespace the sandbox/service backend manages, and where its RBAC lands.
   sandbox:

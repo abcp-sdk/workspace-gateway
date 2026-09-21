@@ -2,6 +2,7 @@ package forgejo
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -116,3 +117,60 @@ func readBody(r *http.Request) string {
 	n, _ := r.Body.Read(b)
 	return string(b[:n])
 }
+
+func TestMergeMRConflictMapsToErrConflict(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"message":"merge failed because of conflict"}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "tok")
+	err := c.MergeMR(context.Background(), "acme", "app", 1)
+	var conflict *ErrConflict
+	if !errorsAs(err, &conflict) {
+		t.Fatalf("expected *ErrConflict, got %T (%v)", err, err)
+	}
+	if !strings.Contains(conflict.Reason, "conflict") {
+		t.Fatalf("reason not surfaced: %q", conflict.Reason)
+	}
+}
+
+func TestMergeMRSendsMergeStyle(t *testing.T) {
+	var body string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body = readBody(r)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "tok")
+	if err := c.MergeMR(context.Background(), "acme", "app", 3); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(body, `"Do":"merge"`) {
+		t.Fatalf("merge must send Do=merge, got %s", body)
+	}
+}
+
+func TestCompareFilesParsesChangedPaths(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/compare/main...feature") {
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"files":[{"filename":"a.txt"},{"filename":"dir/b.go"}]}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "tok")
+	paths, err := c.CompareFiles(context.Background(), "acme", "app", "main", "feature")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 2 || paths[0] != "a.txt" || paths[1] != "dir/b.go" {
+		t.Fatalf("paths = %v", paths)
+	}
+}
+
+// errorsAs is a tiny wrapper so the test stays dependency-light.
+func errorsAs(err error, target any) bool { return errors.As(err, target) }

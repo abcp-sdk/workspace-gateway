@@ -76,6 +76,20 @@ type ErrNotFound struct{ URL string }
 
 func (e *ErrNotFound) Error() string { return "forgejo: not found: " + e.URL }
 
+// ErrConflict marks a 409 (a merge that cannot proceed: conflicts / not
+// mergeable / out of date). The message carries Forgejo's reason.
+type ErrConflict struct {
+	Path   string
+	Reason string
+}
+
+func (e *ErrConflict) Error() string {
+	if e.Reason != "" {
+		return "forgejo: conflict: " + e.Reason
+	}
+	return "forgejo: conflict at " + e.Path
+}
+
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body any, out any) error {
 	return c.doWith(c.hc, ctx, method, path, query, body, out)
 }
@@ -111,6 +125,10 @@ func (c *Client) doWith(hc *http.Client, ctx context.Context, method, path strin
 	defer res.Body.Close()
 	if res.StatusCode == http.StatusNotFound {
 		return &ErrNotFound{URL: u}
+	}
+	if res.StatusCode == http.StatusConflict {
+		b, _ := io.ReadAll(io.LimitReader(res.Body, 512))
+		return &ErrConflict{Path: path, Reason: strings.TrimSpace(string(b))}
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 512))
@@ -410,6 +428,28 @@ type CommitDetail struct {
 	HTMLURL     string
 }
 
+// CompareFiles lists the repo-relative paths that differ between `base` and
+// `head` (a `base...head` compare). Used by the conflict gate to know which
+// files a branch would merge.
+func (c *Client) CompareFiles(ctx context.Context, org, repo, base, head string) ([]string, error) {
+	var out struct {
+		Files []struct {
+			Filename string `json:"filename"`
+		} `json:"files"`
+	}
+	err := c.do(ctx, "GET", "/repos/"+seg(org)+"/"+seg(repo)+"/compare/"+seg(base)+"..."+seg(head), nil, nil, &out)
+	if err != nil {
+		return nil, err
+	}
+	paths := make([]string, 0, len(out.Files))
+	for _, f := range out.Files {
+		if f.Filename != "" {
+			paths = append(paths, f.Filename)
+		}
+	}
+	return paths, nil
+}
+
 // CreateMR opens a pull request.
 func (c *Client) CreateMR(ctx context.Context, org, repo, title, head, base, body string) (int32, string, error) {
 	in := map[string]any{"title": title, "head": head, "base": base}
@@ -447,8 +487,11 @@ func (c *Client) CommentMR(ctx context.Context, org, repo string, index int32, b
 }
 
 // MergeMR merges a pull request (maintainer action; the only path to main).
+// MergeMR merges a pull request (maintainer action; the only path to main).
+// Forgejo requires the merge style (`Do`); "merge" preserves the branch
+// commits and records a merge commit on main.
 func (c *Client) MergeMR(ctx context.Context, org, repo string, index int32) error {
-	return c.do(ctx, "POST", "/repos/"+seg(org)+"/"+seg(repo)+"/pulls/"+fmt.Sprint(index)+"/merge", nil, map[string]any{}, nil)
+	return c.do(ctx, "POST", "/repos/"+seg(org)+"/"+seg(repo)+"/pulls/"+fmt.Sprint(index)+"/merge", nil, map[string]any{"Do": "merge"}, nil)
 }
 
 // GetMR returns one pull request's detail (full MRInfo).

@@ -349,6 +349,25 @@ message MergeMRRequest {
 }
 message MergeMRResponse { bool ok = 1; }
 
+// SyncBranch brings a NON-MAIN branch up to date with its base (`main`) by
+// committing a two-parent merge on the branch. Files changed on BOTH sides
+// since the merge base are merged three-way; genuine conflicts are written as
+// marker blocks (sentinel `ABCP-CONFLICT`, git-style with a base section) that
+// the branch session MUST resolve before CreateMR/MergeMR will succeed.
+message SyncBranchRequest {
+  string org = 1;
+  string repo = 2;
+  string branch = 3;
+}
+message SyncBranchResponse {
+  // clean = no conflict markers were written.
+  bool clean = 1;
+  // conflicts lists the repo-relative paths that carry markers.
+  repeated string conflicts = 2;
+  // commit is the new branch-tip sha (equal to the old one when already current).
+  string commit = 3;
+}
+
 // ---- OCI images ----
 //
 // Sandboxes are launched from ANY base image: the gateway derives a runnable
@@ -585,6 +604,9 @@ service BranchSessionService {
   rpc CreateMR(CreateMRRequest) returns (CreateMRResponse);
   rpc CommentMR(CommentMRRequest) returns (CommentMRResponse);
   rpc MergeMR(MergeMRRequest) returns (MergeMRResponse);
+  // SyncBranch (re)integrates the base into a feature branch, writing conflict
+  // markers for the branch session to resolve (developer action).
+  rpc SyncBranch(SyncBranchRequest) returns (SyncBranchResponse);
   // OCI images
   rpc ListOCIImages(ListOCIImagesRequest) returns (ListOCIImagesResponse);
   rpc BuildSandboxImage(BuildSandboxImageRequest) returns (BuildSandboxImageResponse);

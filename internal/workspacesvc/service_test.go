@@ -2,12 +2,14 @@ package workspacesvc
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"connectrpc.com/connect"
 
 	agentv1 "github.com/abcp-sdk/workspace-gateway/gen/agent/v1"
 	"github.com/abcp-sdk/workspace-gateway/gen/agent/v1/agentv1connect"
+	"github.com/abcp-sdk/workspace-gateway/internal/forgejo"
 )
 
 // stubAgent implements only GetIdentity (the rest panic if called).
@@ -53,5 +55,19 @@ func TestSandboxAuthDisabledWithoutToken(t *testing.T) {
 	// bearerToken is case-insensitive on the header name.
 	if got := bearerToken(map[string][]string{"authorization": {"Bearer x"}}); got != "x" {
 		t.Fatalf("bearerToken = %q, want x (case-insensitive header)", got)
+	}
+}
+
+func TestMRErrorMapping(t *testing.T) {
+	// A Forgejo 409 (merge conflict / not mergeable) must surface as
+	// FailedPrecondition, not an opaque Internal.
+	if got := connect.CodeOf(mrError(&forgejo.ErrConflict{Reason: "merge conflict"})); got != connect.CodeFailedPrecondition {
+		t.Fatalf("conflict code = %v, want FailedPrecondition", got)
+	}
+	if got := connect.CodeOf(mrError(&forgejo.ErrNotFound{URL: "u"})); got != connect.CodeNotFound {
+		t.Fatalf("not-found code = %v, want NotFound", got)
+	}
+	if got := connect.CodeOf(mrError(errors.New("boom"))); got != connect.CodeInternal {
+		t.Fatalf("generic code = %v, want Internal", got)
 	}
 }

@@ -127,6 +127,9 @@ const (
 	// BranchSessionServiceMergeMRProcedure is the fully-qualified name of the BranchSessionService's
 	// MergeMR RPC.
 	BranchSessionServiceMergeMRProcedure = "/workspace.v1.BranchSessionService/MergeMR"
+	// BranchSessionServiceSyncBranchProcedure is the fully-qualified name of the BranchSessionService's
+	// SyncBranch RPC.
+	BranchSessionServiceSyncBranchProcedure = "/workspace.v1.BranchSessionService/SyncBranch"
 	// BranchSessionServiceListOCIImagesProcedure is the fully-qualified name of the
 	// BranchSessionService's ListOCIImages RPC.
 	BranchSessionServiceListOCIImagesProcedure = "/workspace.v1.BranchSessionService/ListOCIImages"
@@ -312,6 +315,9 @@ type BranchSessionServiceClient interface {
 	CreateMR(context.Context, *connect.Request[v1.CreateMRRequest]) (*connect.Response[v1.CreateMRResponse], error)
 	CommentMR(context.Context, *connect.Request[v1.CommentMRRequest]) (*connect.Response[v1.CommentMRResponse], error)
 	MergeMR(context.Context, *connect.Request[v1.MergeMRRequest]) (*connect.Response[v1.MergeMRResponse], error)
+	// SyncBranch (re)integrates the base into a feature branch, writing conflict
+	// markers for the branch session to resolve (developer action).
+	SyncBranch(context.Context, *connect.Request[v1.SyncBranchRequest]) (*connect.Response[v1.SyncBranchResponse], error)
 	// OCI images
 	ListOCIImages(context.Context, *connect.Request[v1.ListOCIImagesRequest]) (*connect.Response[v1.ListOCIImagesResponse], error)
 	BuildSandboxImage(context.Context, *connect.Request[v1.BuildSandboxImageRequest]) (*connect.Response[v1.BuildSandboxImageResponse], error)
@@ -543,6 +549,12 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+BranchSessionServiceMergeMRProcedure,
 			connect.WithSchema(branchSessionServiceMethods.ByName("MergeMR")),
+			connect.WithClientOptions(opts...),
+		),
+		syncBranch: connect.NewClient[v1.SyncBranchRequest, v1.SyncBranchResponse](
+			httpClient,
+			baseURL+BranchSessionServiceSyncBranchProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("SyncBranch")),
 			connect.WithClientOptions(opts...),
 		),
 		listOCIImages: connect.NewClient[v1.ListOCIImagesRequest, v1.ListOCIImagesResponse](
@@ -865,6 +877,7 @@ type branchSessionServiceClient struct {
 	createMR             *connect.Client[v1.CreateMRRequest, v1.CreateMRResponse]
 	commentMR            *connect.Client[v1.CommentMRRequest, v1.CommentMRResponse]
 	mergeMR              *connect.Client[v1.MergeMRRequest, v1.MergeMRResponse]
+	syncBranch           *connect.Client[v1.SyncBranchRequest, v1.SyncBranchResponse]
 	listOCIImages        *connect.Client[v1.ListOCIImagesRequest, v1.ListOCIImagesResponse]
 	buildSandboxImage    *connect.Client[v1.BuildSandboxImageRequest, v1.BuildSandboxImageResponse]
 	listSandboxes        *connect.Client[v1.ListSandboxesRequest, v1.ListSandboxesResponse]
@@ -1048,6 +1061,11 @@ func (c *branchSessionServiceClient) CommentMR(ctx context.Context, req *connect
 // MergeMR calls workspace.v1.BranchSessionService.MergeMR.
 func (c *branchSessionServiceClient) MergeMR(ctx context.Context, req *connect.Request[v1.MergeMRRequest]) (*connect.Response[v1.MergeMRResponse], error) {
 	return c.mergeMR.CallUnary(ctx, req)
+}
+
+// SyncBranch calls workspace.v1.BranchSessionService.SyncBranch.
+func (c *branchSessionServiceClient) SyncBranch(ctx context.Context, req *connect.Request[v1.SyncBranchRequest]) (*connect.Response[v1.SyncBranchResponse], error) {
+	return c.syncBranch.CallUnary(ctx, req)
 }
 
 // ListOCIImages calls workspace.v1.BranchSessionService.ListOCIImages.
@@ -1330,6 +1348,9 @@ type BranchSessionServiceHandler interface {
 	CreateMR(context.Context, *connect.Request[v1.CreateMRRequest]) (*connect.Response[v1.CreateMRResponse], error)
 	CommentMR(context.Context, *connect.Request[v1.CommentMRRequest]) (*connect.Response[v1.CommentMRResponse], error)
 	MergeMR(context.Context, *connect.Request[v1.MergeMRRequest]) (*connect.Response[v1.MergeMRResponse], error)
+	// SyncBranch (re)integrates the base into a feature branch, writing conflict
+	// markers for the branch session to resolve (developer action).
+	SyncBranch(context.Context, *connect.Request[v1.SyncBranchRequest]) (*connect.Response[v1.SyncBranchResponse], error)
 	// OCI images
 	ListOCIImages(context.Context, *connect.Request[v1.ListOCIImagesRequest]) (*connect.Response[v1.ListOCIImagesResponse], error)
 	BuildSandboxImage(context.Context, *connect.Request[v1.BuildSandboxImageRequest]) (*connect.Response[v1.BuildSandboxImageResponse], error)
@@ -1557,6 +1578,12 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		BranchSessionServiceMergeMRProcedure,
 		svc.MergeMR,
 		connect.WithSchema(branchSessionServiceMethods.ByName("MergeMR")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceSyncBranchHandler := connect.NewUnaryHandler(
+		BranchSessionServiceSyncBranchProcedure,
+		svc.SyncBranch,
+		connect.WithSchema(branchSessionServiceMethods.ByName("SyncBranch")),
 		connect.WithHandlerOptions(opts...),
 	)
 	branchSessionServiceListOCIImagesHandler := connect.NewUnaryHandler(
@@ -1903,6 +1930,8 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceCommentMRHandler.ServeHTTP(w, r)
 		case BranchSessionServiceMergeMRProcedure:
 			branchSessionServiceMergeMRHandler.ServeHTTP(w, r)
+		case BranchSessionServiceSyncBranchProcedure:
+			branchSessionServiceSyncBranchHandler.ServeHTTP(w, r)
 		case BranchSessionServiceListOCIImagesProcedure:
 			branchSessionServiceListOCIImagesHandler.ServeHTTP(w, r)
 		case BranchSessionServiceBuildSandboxImageProcedure:
@@ -2114,6 +2143,10 @@ func (UnimplementedBranchSessionServiceHandler) CommentMR(context.Context, *conn
 
 func (UnimplementedBranchSessionServiceHandler) MergeMR(context.Context, *connect.Request[v1.MergeMRRequest]) (*connect.Response[v1.MergeMRResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.MergeMR is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) SyncBranch(context.Context, *connect.Request[v1.SyncBranchRequest]) (*connect.Response[v1.SyncBranchResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.SyncBranch is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) ListOCIImages(context.Context, *connect.Request[v1.ListOCIImagesRequest]) (*connect.Response[v1.ListOCIImagesResponse], error) {

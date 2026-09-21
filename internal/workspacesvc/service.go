@@ -22,6 +22,7 @@ import (
 	"github.com/abcp-sdk/workspace-gateway/gen/workspace/v1/wsv1connect"
 	"github.com/abcp-sdk/workspace-gateway/internal/forgejo"
 	"github.com/abcp-sdk/workspace-gateway/internal/gitimport"
+	"github.com/abcp-sdk/workspace-gateway/internal/gitmerge"
 	"github.com/abcp-sdk/workspace-gateway/internal/imagebuild"
 	"github.com/abcp-sdk/workspace-gateway/internal/members"
 	"github.com/abcp-sdk/workspace-gateway/internal/roles"
@@ -944,6 +945,9 @@ func (s *Service) ListMRs(ctx context.Context, req *connect.Request[wsv1.ListMRs
 }
 
 // CreateMR is a developer action (propose). A maintainer cannot open MRs.
+//
+// GATE: a branch whose changed files still carry unresolved conflict markers
+// (from SyncBranch) is refused — the markers must not reach a reviewer.
 func (s *Service) CreateMR(ctx context.Context, req *connect.Request[wsv1.CreateMRRequest]) (*connect.Response[wsv1.CreateMRResponse], error) {
 	m := req.Msg
 	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
@@ -953,9 +957,16 @@ func (s *Service) CreateMR(ctx context.Context, req *connect.Request[wsv1.Create
 	if base == "" {
 		base = roles.MainBranch
 	}
+	if conflicts, err := s.unresolvedConflicts(ctx, m.GetOrg(), m.GetRepo(), m.GetHead()); err != nil {
+		return nil, err
+	} else if len(conflicts) > 0 {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+			"branch %s has unresolved conflict markers in: %s; resolve them (see the ABCP-CONFLICT blocks) before opening an MR",
+			m.GetHead(), strings.Join(conflicts, ", ")))
+	}
 	index, url, err := s.git.CreateMR(ctx, m.GetOrg(), m.GetRepo(), m.GetTitle(), m.GetHead(), base, m.GetBody())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, mrError(err)
 	}
 	return connect.NewResponse(&wsv1.CreateMRResponse{Index: index, Url: url}), nil
 }
@@ -972,15 +983,109 @@ func (s *Service) CommentMR(ctx context.Context, req *connect.Request[wsv1.Comme
 }
 
 // MergeMR is a MAINTAINER action: the only way main changes.
+//
+// GATE: refuse when the head branch still carries conflict markers. Git judges
+// "mergeable" purely by topology, so a branch that was synced (and is thus a
+// descendant of main) can still hold markers — this check closes that hole.
 func (s *Service) MergeMR(ctx context.Context, req *connect.Request[wsv1.MergeMRRequest]) (*connect.Response[wsv1.MergeMRResponse], error) {
 	m := req.Msg
 	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
+	mr, err := s.git.GetMR(ctx, m.GetOrg(), m.GetRepo(), m.GetIndex())
+	if err != nil {
+		return nil, mrError(err)
+	}
+	if !mr.Mergeable {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+			"change request #%d is not mergeable (the base has diverged); sync the head branch %q with a merge commit and resolve any conflicts", m.GetIndex(), mr.Head))
+	}
+	if conflicts, err := s.unresolvedConflicts(ctx, m.GetOrg(), m.GetRepo(), mr.Head); err != nil {
+		return nil, err
+	} else if len(conflicts) > 0 {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+			"change request #%d still has unresolved conflict markers in: %s", m.GetIndex(), strings.Join(conflicts, ", ")))
+	}
 	if err := s.git.MergeMR(ctx, m.GetOrg(), m.GetRepo(), m.GetIndex()); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, mrError(err)
 	}
 	return connect.NewResponse(&wsv1.MergeMRResponse{Ok: true}), nil
+}
+
+// SyncBranch (re)integrates `main` into a NON-MAIN branch with a two-parent
+// merge commit, leaving marker blocks where the three-way merge cannot decide.
+// It is the developer's way to catch up with main; the markers are resolved on
+// the branch (and the CreateMR/MergeMR gates refuse a marker-carrying branch).
+func (s *Service) SyncBranch(ctx context.Context, req *connect.Request[wsv1.SyncBranchRequest]) (*connect.Response[wsv1.SyncBranchResponse], error) {
+	m := req.Msg
+	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+		return nil, err
+	}
+	branch := m.GetBranch()
+	if branch == "" || !roles.ValidComponent(branch) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("branch must be a simple name"))
+	}
+	if branch == roles.MainBranch {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("refusing to sync the default branch"))
+	}
+	res, err := gitmerge.Sync(ctx, gitmerge.Options{
+		RepoURL: s.git.GitURL(m.GetOrg(), m.GetRepo()),
+		Branch:  branch,
+		Base:    roles.MainBranch,
+		User:    "root",
+		Token:   s.git.Token(),
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("sync: %w", err))
+	}
+	return connect.NewResponse(&wsv1.SyncBranchResponse{
+		Clean:     res.Clean,
+		Conflicts: res.Conflicts,
+		Commit:    res.Commit,
+	}), nil
+}
+
+// unresolvedConflicts returns the changed files on `branch` (vs main) that
+// still carry the conflict sentinel. Binary files are skipped (no markers).
+func (s *Service) unresolvedConflicts(ctx context.Context, org, repo, branch string) ([]string, error) {
+	paths, err := s.git.CompareFiles(ctx, org, repo, roles.MainBranch, branch)
+	if err != nil {
+		return nil, mrError(err)
+	}
+	seen := map[string]struct{}{}
+	var carried []string
+	for _, p := range paths {
+		if p == "" {
+			continue
+		}
+		if _, dup := seen[p]; dup {
+			continue
+		}
+		seen[p] = struct{}{}
+		data, _, err := s.git.RawFile(ctx, org, repo, branch, p)
+		if err != nil {
+			// A path may be deleted on the branch; skip what we cannot read.
+			continue
+		}
+		if gitmerge.HasMarkers(data) {
+			carried = append(carried, p)
+		}
+	}
+	return carried, nil
+}
+
+// mrError maps a Forgejo error to a connect error, surfacing conflicts as
+// FailedPrecondition instead of an opaque Internal.
+func mrError(err error) error {
+	var conflict *forgejo.ErrConflict
+	if errors.As(err, &conflict) {
+		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("merge conflict: %s", conflict.Reason))
+	}
+	var notFound *forgejo.ErrNotFound
+	if errors.As(err, &notFound) {
+		return connect.NewError(connect.CodeNotFound, err)
+	}
+	return connect.NewError(connect.CodeInternal, err)
 }
 
 // ---- sandboxes ----

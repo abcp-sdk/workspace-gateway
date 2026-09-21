@@ -69,10 +69,13 @@ var repoReadTools = []string{
 	"repo-diff", "repo-branches", "repo-tags",
 }
 
-// Repo propose tools: write to a NON-main branch and open/comment MRs.
+// Repo propose tools: write to a NON-main branch and open/comment MRs. Includes
+// syncing the branch with main (`repo-branch-sync`) and restoring a file
+// (`repo-restore`) so a developer can resolve conflicts in place.
 var repoProposeTools = []string{
 	"repo-write", "repo-edit", "repo-delete", "repo-commit",
-	"repo-branch-create", "repo-mr-create", "repo-mr-list", "repo-mr-comment",
+	"repo-branch-create", "repo-branch-sync", "repo-restore",
+	"repo-mr-create", "repo-mr-list", "repo-mr-comment",
 	"repo-mail-send",
 }
 
