@@ -1,0 +1,66 @@
+{{- if .Values.playwright.enabled }}
+# Workspace playwright extension (a SEPARATE deployment from the agent stack's
+# playwright-extension, hence the `workspace-` prefix). Drives the infra
+# Selenium node over CDP; screenshots flow back through the agent file.ingest RPC.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workspace-playwright
+  namespace: {{ include "workspace.namespace" . }}
+  labels:
+    {{- include "workspace.labels" . | nindent 4 }}
+    app: workspace-playwright
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: workspace-playwright
+  template:
+    metadata:
+      labels:
+        {{- include "workspace.labels" . | nindent 8 }}
+        app: workspace-playwright
+    spec:
+      containers:
+        - name: playwright-extension
+          image: {{ .Values.playwright.image.repository }}:{{ .Values.playwright.image.tag }}
+          imagePullPolicy: {{ .Values.playwright.image.pullPolicy }}
+          env:
+            - name: NATS_URL
+              value: {{ include "workspace.natsUrl" . | quote }}
+            - name: PLAYWRIGHT_SELENIUM_URL
+              value: {{ .Values.infra.seleniumUrl | quote }}
+            - name: PLAYWRIGHT_BROWSER
+              value: chrome
+            - name: PLAYWRIGHT_VIEWPORT
+              value: {{ .Values.playwright.viewport | quote }}
+            - name: PLAYWRIGHT_IDLE_TIMEOUT_MS
+              value: {{ .Values.playwright.idleTimeoutMs | quote }}
+            - name: PLAYWRIGHT_MAX_CONTEXTS
+              value: {{ .Values.playwright.maxContexts | quote }}
+          ports:
+            - { containerPort: 8080, protocol: TCP }
+          resources:
+            {{- toYaml .Values.playwright.resources | nindent 12 }}
+          livenessProbe:
+            httpGet: { path: /api/v1/health, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet: { path: /api/v1/health, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: workspace-playwright
+  namespace: {{ include "workspace.namespace" . }}
+  labels:
+    {{- include "workspace.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: { app: workspace-playwright }
+  ports:
+    - { name: http, port: 80, targetPort: 8080 }
+{{- end }}

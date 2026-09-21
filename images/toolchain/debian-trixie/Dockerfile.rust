@@ -1,0 +1,10 @@
+# Toolchain image: Rust (rustup-free dist install).
+#
+# Generic: the tarball is pre-downloaded (fetch-artifacts.sh) and COPYed.
+ARG BASE_IMAGE=toolchain-base:debian-trixie
+FROM ${BASE_IMAGE}
+COPY cache/rust-1.98.1-x86_64-unknown-linux-gnu.tar.gz /tmp/rust.tar.gz
+RUN mkdir -p /tmp/rustdist && tar -xzf /tmp/rust.tar.gz -C /tmp/rustdist --strip-components=1 && rm /tmp/rust.tar.gz \
+ && /tmp/rustdist/install.sh --prefix=/opt/rust --without=rust-docs --disable-ldconfig && rm -rf /tmp/rustdist
+ENV PATH=/opt/rust/bin:$PATH \
+    CARGO_HOME=/root/.cargo

@@ -1,0 +1,619 @@
+syntax = "proto3";
+
+// workspace.v1: the workspace gateway surface for the webui.
+//
+// The gateway sits between the webui and the agent. It owns the workspace
+// model: a tenant sees only the org/repo it maintains, sessions are named
+// `org:repo:branch`, and a session's preset (tool whitelist) is decided AT
+// CREATION by the gateway and is then IMMUTABLE.
+//
+// The webui speaks ONLY this service — never agent.v1 directly. The forwarded
+// RPCs below are the minimal chat/model/config/provider/file surface; the
+// policy-bearing RPCs (CreateSession, Rename, UpsertPreset, DeletePreset) are
+// deliberately absent. UpdateSettings is redefined here WITHOUT
+// preset/max_turns/system_prompt/group: a client cannot touch the policy.
+package workspace.v1;
+
+import "agent/v1/agent.proto";
+
+option go_package = "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1;wsv1";
+
+// ---- workspaces ----
+
+message Workspace {
+  string session = 1; // session name = org:repo:branch
+  string org = 2;
+  string repo = 3;
+  string branch = 4;
+  string role = 5;   // maintainer (branch=main) | developer
+  string preset = 6; // the immutable preset bound at creation
+  string sandbox = 7; // sandbox logical name (== session)
+  string sandbox_url = 8;
+  string phase = 9;  // sandbox phase (Running/Pending/...)
+}
+
+message CreateWorkspaceRequest {
+  string org = 1;
+  string repo = 2;
+  string branch = 3;
+  // Optional; empty = the repo default branch (main).
+  string model = 4;
+  // Optional sandbox image override; empty = the gateway default.
+  string image = 5;
+}
+message CreateWorkspaceResponse { Workspace workspace = 1; }
+
+message ListWorkspacesRequest {}
+message ListWorkspacesResponse { repeated Workspace workspaces = 1; }
+
+message GetWorkspaceRequest { string session = 1; }
+message GetWorkspaceResponse { Workspace workspace = 1; }
+
+message DeleteWorkspaceRequest { string session = 1; }
+message DeleteWorkspaceResponse { bool ok = 1; }
+
+// ForkWorkspace creates a NEW branch workspace from a parent session: the
+// gateway derives org/repo from the parent's name, requires `branch` to be a
+// legal, non-`main` name, and creates `org:repo:<branch>` as a developer
+// session. Branch materialization is driven by the agent lifecycle event
+// (the workspace-extension subscribes to `forked`).
+message ForkWorkspaceRequest {
+  string session = 1; // parent session (org:repo:branch)
+  string branch = 2;  // new branch name (legal, != main)
+  // Optional: fork at this message instead of the parent's tip.
+  string message_id = 3;
+}
+message ForkWorkspaceResponse { Workspace workspace = 1; }
+
+// ---- standalone (free) sessions: planner / explorer ----
+
+message CreateFreeSessionRequest {
+  string name = 1;
+  string role = 2; // planner | explorer
+  string model = 3;
+}
+message CreateFreeSessionResponse { string session = 1; string preset = 2; }
+
+// ---- git (read-only browse + ensure) ----
+
+message ListReposRequest {}
+message RepoInfo {
+  string org = 1;
+  string repo = 2;
+  string default_branch = 3;
+  bool private = 4;
+}
+message ListReposResponse { repeated RepoInfo repos = 1; }
+
+message TreeRequest {
+  string org = 1;
+  string repo = 2;
+  string ref = 3;
+  string path = 4;
+}
+message TreeEntry {
+  string path = 1;
+  string type = 2; // file | dir
+  int64 size = 3;
+}
+message TreeResponse { repeated TreeEntry entries = 1; }
+
+message ReadBlobRequest {
+  string org = 1;
+  string repo = 2;
+  string ref = 3;
+  string path = 4;
+}
+message ReadBlobResponse {
+  string content = 1; // UTF-8 text
+  string sha = 2;
+}
+
+message LogRequest {
+  string org = 1;
+  string repo = 2;
+  string ref = 3;
+  string path = 4;
+  int32 limit = 5;
+}
+message CommitInfo {
+  string sha = 1;
+  string message = 2;
+  string author = 3;
+  string date = 4;
+}
+message LogResponse { repeated CommitInfo commits = 1; }
+
+message BranchesRequest {
+  string org = 1;
+  string repo = 2;
+}
+message BranchInfo {
+  string name = 1;
+  string sha = 2;
+}
+message BranchesResponse { repeated BranchInfo branches = 1; }
+
+// ReadRaw returns the raw bytes of one file at a ref. Unlike ReadBlob (UTF-8
+// text only, good for editors), ReadRaw carries binary content so the webui can
+// preview images / PDF / office files with the SAME viewers the chat uses.
+message ReadRawRequest {
+  string org = 1;
+  string repo = 2;
+  string ref = 3;
+  string path = 4;
+}
+message ReadRawResponse {
+  bytes data = 1;
+  string sha = 2;
+  // Server-guessed MIME (from the path) so the client can pick a viewer; may
+  // be empty when unknown.
+  string mime = 3;
+  // Server-classified text: true when the content is valid UTF-8 with no NUL
+  // and within the highlighter size limit. The webui shows text as source
+  // (never rendered) and anything else as a non-text download.
+  bool is_text = 4;
+}
+
+message TagsRequest {
+  string org = 1;
+  string repo = 2;
+}
+message TagInfo {
+  string name = 1;
+  string sha = 2;
+}
+message TagsResponse { repeated TagInfo tags = 1; }
+
+// ---- releases (read-only) ----
+
+message ReleasesRequest {
+  string org = 1;
+  string repo = 2;
+}
+message ReleaseAsset {
+  int64 id = 1;
+  string name = 2;
+  int64 size = 3;
+  int64 download_count = 4;
+  // The release this asset belongs to (Forgejo nests assets under a release).
+  int64 release_id = 5;
+}
+message ReleaseInfo {
+  int64 id = 1;
+  string tag_name = 2;
+  string name = 3;
+  string body = 4;
+  bool draft = 5;
+  bool prerelease = 6;
+  string author = 7;
+  string created_at = 8;
+  string published_at = 9;
+  string html_url = 10;
+  repeated ReleaseAsset assets = 11;
+}
+message ReleasesResponse { repeated ReleaseInfo releases = 1; }
+
+// One release asset's bytes, proxied from Forgejo (the browser may not reach
+// the git host directly).
+message ReleaseAssetRequest {
+  string org = 1;
+  string repo = 2;
+  int64 release_id = 3;
+  int64 asset_id = 4;
+}
+message ReleaseAssetResponse {
+  bytes data = 1;
+  string name = 2;
+  string mime = 3;
+}
+
+// GetCommit returns one commit's metadata + message.
+message GetCommitRequest {
+  string org = 1;
+  string repo = 2;
+  string sha = 3;
+}
+message CommitDetail {
+  string sha = 1;
+  string message = 2;
+  string author = 3;
+  string author_email = 4;
+  string date = 5;
+  // Parent SHAs (first parent is sha at index 0).
+  repeated string parents = 6;
+  string html_url = 7;
+}
+message GetCommitResponse { CommitDetail commit = 1; }
+
+// CommitDiff returns the unified diff of one commit (Forgejo `.diff`).
+message CommitDiffRequest {
+  string org = 1;
+  string repo = 2;
+  string sha = 3;
+}
+message DiffResponse { string diff = 1; }
+
+// EnsureRepo creates the org + repo + main branch if absent, protects `main`
+// (no direct pushes; changes only via MR), and records the (tenant, org, repo)
+// ownership so the repo becomes visible to that tenant.
+message EnsureRepoRequest {
+  string org = 1;
+  string repo = 2;
+}
+message EnsureRepoResponse { bool created = 1; }
+
+// ---- change requests (MRs) — the maintainer's ONLY path to change main ----
+
+message ListMRsRequest {
+  string org = 1;
+  string repo = 2;
+  string state = 3; // open | closed | all
+}
+message MRInfo {
+  int32 index = 1;
+  string title = 2;
+  string state = 3;
+  string head = 4;
+  string base = 5;
+  string body = 6;
+  string author = 7;   // author login
+  string created_at = 8;
+  string updated_at = 9;
+  bool merged = 10;
+  bool mergeable = 11;
+  int32 additions = 12;
+  int32 deletions = 13;
+  int32 changed_files = 14;
+  string html_url = 15;
+}
+message ListMRsResponse { repeated MRInfo mrs = 1; }
+
+// GetMR returns one change request's full detail.
+message GetMRRequest {
+  string org = 1;
+  string repo = 2;
+  int32 index = 3;
+}
+message GetMRResponse { MRInfo mr = 1; }
+
+// MRDiff returns the unified diff for a change request (Forgejo `.diff`).
+message MRDiffRequest {
+  string org = 1;
+  string repo = 2;
+  int32 index = 3;
+}
+message MRDiffResponse { string diff = 1; }
+
+// ListMRComments returns the (read-only) conversation on a change request.
+message ListMRCommentsRequest {
+  string org = 1;
+  string repo = 2;
+  int32 index = 3;
+}
+message MRCommentInfo {
+  int64 id = 1;
+  string author = 2;
+  string body = 3;
+  string created_at = 4;
+  string updated_at = 5;
+}
+message ListMRCommentsResponse { repeated MRCommentInfo comments = 1; }
+
+message CreateMRRequest {
+  string org = 1;
+  string repo = 2;
+  string title = 3;
+  string head = 4; // source branch
+  string base = 5; // target branch (main)
+  string body = 6;
+}
+message CreateMRResponse { int32 index = 1; string url = 2; }
+
+message CommentMRRequest {
+  string org = 1;
+  string repo = 2;
+  int32 index = 3;
+  string body = 4;
+}
+message CommentMRResponse { bool ok = 1; }
+
+// MergeMR is a MAINTAINER action (role=maintainer). It is how main changes.
+message MergeMRRequest {
+  string org = 1;
+  string repo = 2;
+  int32 index = 3;
+}
+message MergeMRResponse { bool ok = 1; }
+
+// ---- OCI images ----
+//
+// Sandboxes are launched from ANY base image: the gateway derives a runnable
+// sandbox by injecting the easyworker binary into the base at launch time
+// (FROM <base> + COPY worker + worker entrypoint). ListOCIImages browses the
+// registry so a caller can discover what is available.
+
+// OCIImage is one image tag in the registry.
+message OCIImage {
+  string owner = 1; // user or org namespace
+  string name = 2;  // image name (may contain '/')
+  string tag = 3;
+  string ref = 4;   // full ref: <registry>/<owner>/<name>:<tag>
+}
+// ListOCIImages lists container images. `owner` selects the namespace
+// (default: the deployment's toolchain org). `name` narrows to ONE image,
+// listing its tags.
+message ListOCIImagesRequest {
+  string owner = 1;
+  string name = 2;
+}
+message ListOCIImagesResponse { repeated OCIImage images = 1; }
+
+// BuildSandboxImage builds an image from a repository's Dockerfile (context =
+// a repo subdirectory) and pushes it to the deployment registry. The produced
+// image does NOT have easyworker injected: the Dockerfile must FROM a
+// worker-capable base for the result to be usable as a sandbox.
+message BuildSandboxImageRequest {
+  string org = 1;
+  string repo = 2;
+  string ref = 3;
+  // Repo-relative Dockerfile path (default "Dockerfile").
+  string dockerfile = 4;
+  // Repo-relative build context subdirectory (default "" = repo root).
+  string context = 5;
+  // Image name (single path segment, pushed under the deployment registry).
+  string image = 6;
+  string tag = 7;
+  map<string, string> build_args = 8;
+}
+message BuildSandboxImageResponse {
+  string image_ref = 1;
+  string log = 2;
+}
+
+// ---- sandboxes (the gateway owns the k8s lifecycle in-process) ----
+
+message ListSandboxesRequest {}
+message SandboxInfo {
+  string name = 1;
+  string image = 2;
+  string phase = 3;
+  bool ready = 4;
+  string url = 5;
+  string creator = 6;
+  int64 created_at = 7;
+}
+message ListSandboxesResponse { repeated SandboxInfo sandboxes = 1; }
+
+message CreateSandboxRequest {
+  string name = 1;
+  // Base image to launch as a sandbox. ANY image ref is accepted: the gateway
+  // derives a runnable sandbox by injecting the easyworker binary into it at
+  // launch time. Empty = the deployment default base image.
+  string image = 2;
+  string cpu = 3;
+  string memory = 4;
+  // Extra environment variables for the worker container (WORKER_TOKEN and
+  // WORKER_PORT are set by the gateway).
+  map<string, string> env = 5;
+  // Request KVM (/dev/kvm via the device plugin) — non-privileged.
+  bool kvm = 6;
+  // Request this many NVIDIA GPUs (0 = none; needs the GPU device plugin).
+  int32 gpu_count = 7;
+}
+message CreateSandboxResponse { SandboxInfo sandbox = 1; }
+
+message DeleteSandboxRequest { string name = 1; }
+message DeleteSandboxResponse { bool ok = 1; }
+
+message GetSandboxRequest { string name = 1; }
+message GetSandboxResponse { SandboxInfo sandbox = 1; }
+
+// ResolveSandbox returns the connect address + bearer token for a sandbox the
+// caller owns, so an execution tool can talk to the worker directly.
+message ResolveSandboxRequest { string name = 1; }
+message ResolveSandboxResponse {
+  string name = 1;
+  string url = 2;
+  string token = 3;
+}
+
+// ---- sandbox jobs (read-only observability) ----
+//
+// The webui can watch what a sandbox is doing: the worker keeps a bounded job
+// history (≤500 entries, 24h). JobOutput is a poll of a job's buffered lines;
+// WatchSandboxJob is a server-stream that replays history then streams live
+// output (a passthrough of the worker's WatchJob).
+
+message ListSandboxJobsRequest { string name = 1; }
+message SandboxJob {
+  string id = 1;
+  string command = 2;
+  string state = 3;      // running | done | killed | failed
+  int32 exit_code = 4;
+  int64 started_at = 5;  // unix millis
+  int64 finished_at = 6; // unix millis, 0 while running
+}
+message ListSandboxJobsResponse { repeated SandboxJob jobs = 1; }
+
+message GetSandboxJobOutputRequest {
+  string name = 1;
+  string job_id = 2;
+  // Line window: negative `start` counts from the end (-200 = last 200 lines).
+  int32 start = 3;
+  int32 end = 4;            // exclusive; 0 = through the end
+  string stream = 5;        // all | stdout | stderr
+}
+message GetSandboxJobOutputResponse {
+  repeated string lines = 1;
+  int32 total_lines = 2;
+  int32 start_line = 3;
+  int32 end_line = 4;
+  bool done = 5;
+}
+
+message WatchSandboxJobRequest {
+  string name = 1;
+  string job_id = 2;
+}
+message WatchSandboxJobResponse {
+  // Incremental output chunk (stdout+stderr as the worker emits it).
+  string output = 1;
+  // Terminal event (always the last message): the job finished.
+  bool done = 2;
+  int32 exit_code = 3;
+  string stdout = 4; // tail
+  string stderr = 5; // tail
+}
+
+// ---- services (long-lived Deployments) ----
+//
+// A service runs a user image as a long-lived Kubernetes Deployment + Service
+// (no worker injection, no sidecar). It is meant for things a sandbox talks to
+// (an app, a database proxy, ...), not for execution.
+
+message ServiceInfo {
+  string name = 1;
+  string image = 2;
+  string phase = 3;
+  bool ready = 4;
+  int32 replicas = 5;
+  string url = 6; // http://<name>.<ns>.svc.cluster.local:<service_port>
+}
+
+message DeployServiceRequest {
+  // Service name. Empty = derived from the session (org-repo-branch slug).
+  string name = 1;
+  // Container image to run as-is.
+  string image = 2;
+  // Container port the app listens on (default 8080).
+  int32 container_port = 3;
+  // Service port exposed in-cluster (default 80).
+  int32 service_port = 4;
+  // Replicas (default 1).
+  int32 replicas = 5;
+  map<string, string> env = 6;
+  string cpu = 7;
+  string memory = 8;
+  // Optional command override (argv).
+  repeated string command = 9;
+  // Request KVM (/dev/kvm via the device plugin) — non-privileged.
+  bool kvm = 10;
+  // Request this many NVIDIA GPUs (0 = none; needs the GPU device plugin).
+  int32 gpu_count = 11;
+}
+message DeployServiceResponse { ServiceInfo service = 1; }
+
+message ListServicesRequest {}
+message ListServicesResponse { repeated ServiceInfo services = 1; }
+
+message DeleteServiceRequest { string name = 1; }
+message DeleteServiceResponse { bool ok = 1; }
+
+// ---- settings (NARROWED) ----
+
+// UpdateSettings lets a user change only what is safe to change on an existing
+// session: the model, its reasoning variant, and the agent locale. The
+// policy-bearing fields (preset, max_turns, system_prompt, group) are NOT part
+// of this surface: the gateway fills them from the immutable preset.
+message UpdateSettingsRequest {
+  string id = 1;
+  string model = 2;
+  string variant = 3;
+  string locale = 4;
+}
+message UpdateSettingsResponse { agent.v1.Session session = 1; }
+
+service WorkspaceService {
+  // workspaces (repo-bound sessions)
+  rpc CreateWorkspace(CreateWorkspaceRequest) returns (CreateWorkspaceResponse);
+  rpc ForkWorkspace(ForkWorkspaceRequest) returns (ForkWorkspaceResponse);
+  rpc ListWorkspaces(ListWorkspacesRequest) returns (ListWorkspacesResponse);
+  rpc GetWorkspace(GetWorkspaceRequest) returns (GetWorkspaceResponse);
+  rpc DeleteWorkspace(DeleteWorkspaceRequest) returns (DeleteWorkspaceResponse);
+  // standalone sessions
+  rpc CreateFreeSession(CreateFreeSessionRequest) returns (CreateFreeSessionResponse);
+  // git browse (read-only) + ensure
+  rpc ListRepos(ListReposRequest) returns (ListReposResponse);
+  rpc Tree(TreeRequest) returns (TreeResponse);
+  rpc ReadBlob(ReadBlobRequest) returns (ReadBlobResponse);
+  // ReadRaw carries binary bytes so the webui can preview images / PDF / office.
+  rpc ReadRaw(ReadRawRequest) returns (ReadRawResponse);
+  rpc Log(LogRequest) returns (LogResponse);
+  rpc Branches(BranchesRequest) returns (BranchesResponse);
+  rpc Tags(TagsRequest) returns (TagsResponse);
+  // releases (read-only; assets are proxied by the gateway)
+  rpc ListReleases(ReleasesRequest) returns (ReleasesResponse);
+  rpc GetReleaseAsset(ReleaseAssetRequest) returns (ReleaseAssetResponse);
+  // commit + diff (read-only)
+  rpc GetCommit(GetCommitRequest) returns (GetCommitResponse);
+  rpc CommitDiff(CommitDiffRequest) returns (DiffResponse);
+  rpc EnsureRepo(EnsureRepoRequest) returns (EnsureRepoResponse);
+  // change requests (read-only in this surface: List/Get/diff/comments)
+  rpc ListMRs(ListMRsRequest) returns (ListMRsResponse);
+  rpc GetMR(GetMRRequest) returns (GetMRResponse);
+  rpc MRDiff(MRDiffRequest) returns (MRDiffResponse);
+  rpc ListMRComments(ListMRCommentsRequest) returns (ListMRCommentsResponse);
+  rpc CreateMR(CreateMRRequest) returns (CreateMRResponse);
+  rpc CommentMR(CommentMRRequest) returns (CommentMRResponse);
+  rpc MergeMR(MergeMRRequest) returns (MergeMRResponse);
+  // OCI images
+  rpc ListOCIImages(ListOCIImagesRequest) returns (ListOCIImagesResponse);
+  rpc BuildSandboxImage(BuildSandboxImageRequest) returns (BuildSandboxImageResponse);
+  // sandboxes
+  rpc ListSandboxes(ListSandboxesRequest) returns (ListSandboxesResponse);
+  rpc CreateSandbox(CreateSandboxRequest) returns (CreateSandboxResponse);
+  rpc GetSandbox(GetSandboxRequest) returns (GetSandboxResponse);
+  rpc DeleteSandbox(DeleteSandboxRequest) returns (DeleteSandboxResponse);
+  rpc ResolveSandbox(ResolveSandboxRequest) returns (ResolveSandboxResponse);
+  // sandbox jobs (read-only observability)
+  rpc ListSandboxJobs(ListSandboxJobsRequest) returns (ListSandboxJobsResponse);
+  rpc GetSandboxJobOutput(GetSandboxJobOutputRequest) returns (GetSandboxJobOutputResponse);
+  rpc WatchSandboxJob(WatchSandboxJobRequest) returns (stream WatchSandboxJobResponse);
+  // services (long-lived Deployments)
+  rpc DeployService(DeployServiceRequest) returns (DeployServiceResponse);
+  rpc ListServices(ListServicesRequest) returns (ListServicesResponse);
+  rpc DeleteService(DeleteServiceRequest) returns (DeleteServiceResponse);
+
+  // ---- forwarded agent surface (minimal; no policy RPCs) ----
+  rpc Health(agent.v1.HealthRequest) returns (agent.v1.HealthResponse);
+  rpc GetIdentity(agent.v1.GetIdentityRequest) returns (agent.v1.GetIdentityResponse);
+  rpc ListSessions(agent.v1.ListSessionsRequest) returns (agent.v1.ListSessionsResponse);
+  rpc GetSession(agent.v1.GetSessionRequest) returns (agent.v1.GetSessionResponse);
+  rpc DeleteSession(agent.v1.DeleteSessionRequest) returns (agent.v1.DeleteSessionResponse);
+  rpc ListMessages(agent.v1.ListMessagesRequest) returns (agent.v1.ListMessagesResponse);
+  rpc Prompt(agent.v1.PromptRequest) returns (stream agent.v1.PromptResponse);
+  rpc WatchSession(agent.v1.WatchSessionRequest) returns (stream agent.v1.WatchSessionResponse);
+  rpc WatchSessions(agent.v1.WatchSessionsRequest) returns (stream agent.v1.WatchSessionsResponse);
+  rpc SetModel(agent.v1.SetModelRequest) returns (agent.v1.SetModelResponse);
+  rpc Undo(agent.v1.UndoRequest) returns (agent.v1.UndoResponse);
+  rpc State(agent.v1.StateRequest) returns (agent.v1.StateResponse);
+  rpc Mailbox(agent.v1.MailboxRequest) returns (agent.v1.MailboxResponse);
+  rpc Interrupt(agent.v1.InterruptRequest) returns (agent.v1.InterruptResponse);
+  rpc Compact(agent.v1.CompactRequest) returns (agent.v1.CompactResponse);
+  // settings (narrowed)
+  rpc UpdateSettings(UpdateSettingsRequest) returns (UpdateSettingsResponse);
+  // models + providers (per-tenant config)
+  rpc ListProviders(agent.v1.ListProvidersRequest) returns (agent.v1.ListProvidersResponse);
+  rpc ListProvidersCatalog(agent.v1.ListProvidersCatalogRequest) returns (agent.v1.ListProvidersCatalogResponse);
+  rpc RegisterProvider(agent.v1.RegisterProviderRequest) returns (agent.v1.RegisterProviderResponse);
+  rpc DeleteProvider(agent.v1.DeleteProviderRequest) returns (agent.v1.DeleteProviderResponse);
+  rpc TestProvider(agent.v1.TestProviderRequest) returns (agent.v1.TestProviderResponse);
+  rpc ListModels(agent.v1.ListModelsRequest) returns (agent.v1.ListModelsResponse);
+  // presets (READ-ONLY: no upsert/delete)
+  rpc ListPresets(agent.v1.ListPresetsRequest) returns (agent.v1.ListPresetsResponse);
+  rpc PreviewPreset(agent.v1.PreviewPresetRequest) returns (agent.v1.PreviewPresetResponse);
+  // config + tools (per-tenant config)
+  rpc GetConfig(agent.v1.GetConfigRequest) returns (agent.v1.GetConfigResponse);
+  rpc SetConfig(agent.v1.SetConfigRequest) returns (agent.v1.SetConfigResponse);
+  rpc ListTools(agent.v1.ListToolsRequest) returns (agent.v1.ListToolsResponse);
+  rpc GetToolConfig(agent.v1.GetToolConfigRequest) returns (agent.v1.GetToolConfigResponse);
+  rpc SetToolConfig(agent.v1.SetToolConfigRequest) returns (agent.v1.SetToolConfigResponse);
+  rpc SetExtensionConfig(agent.v1.SetExtensionConfigRequest) returns (agent.v1.SetExtensionConfigResponse);
+  // files
+  rpc UploadFile(agent.v1.UploadFileRequest) returns (agent.v1.UploadFileResponse);
+  rpc IngestFile(agent.v1.IngestFileRequest) returns (agent.v1.IngestFileResponse);
+  rpc GetFile(agent.v1.GetFileRequest) returns (agent.v1.GetFileResponse);
+  rpc GetFileMeta(agent.v1.GetFileMetaRequest) returns (agent.v1.GetFileMetaResponse);
+  rpc GetFileStream(agent.v1.GetFileRequest) returns (stream agent.v1.FileChunk);
+}

@@ -1,0 +1,13 @@
+# Go build output
+/workspace-gateway
+*.test
+*.out
+
+# Local build caches / scratch logs
+*.log
+
+# Large toolchain build cache (multi-GB downloads; rebuilt by images/*.sh)
+images/cache/
+
+# Vendored editor / OS noise
+.DS_Store

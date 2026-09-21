@@ -1,0 +1,10 @@
+# Toolchain image: Go.
+#
+# Generic: the tarball is pre-downloaded (fetch-artifacts.sh) and COPYed.
+ARG BASE_IMAGE=toolchain-base:debian-trixie
+FROM ${BASE_IMAGE}
+COPY cache/go1.27.1.linux-amd64.tar.gz /tmp/go.tar.gz
+RUN tar -xzf /tmp/go.tar.gz -C /opt && rm /tmp/go.tar.gz
+ENV PATH=/opt/go/bin:$PATH \
+    GOPATH=/root/go \
+    GOTOOLCHAIN=local

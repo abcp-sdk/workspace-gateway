@@ -1,0 +1,106 @@
+{{- if .Values.gateway.enabled }}
+# Workspace gateway: the ONLY trusted session-creation entry point (role +
+# immutable preset) and the sandbox/service lifecycle surface (workspace.v1).
+# Manages objects in the `worker` namespace IN-PROCESS (worker-manager folded
+# in); talks to the workspace agent (h2c), Forgejo and buildkitd over DNS.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workspace-gateway
+  namespace: {{ include "workspace.namespace" . }}
+  labels:
+    {{- include "workspace.labels" . | nindent 4 }}
+    app: workspace-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: workspace-gateway }
+  template:
+    metadata:
+      labels:
+        {{- include "workspace.labels" . | nindent 8 }}
+        app: workspace-gateway
+    spec:
+      serviceAccountName: {{ include "workspace.saName" . }}
+      containers:
+        - name: workspace-gateway
+          image: {{ .Values.gateway.image.repository }}:{{ .Values.gateway.image.tag }}
+          imagePullPolicy: {{ .Values.gateway.image.pullPolicy }}
+          env:
+            - { name: PORT, value: "8080" }
+            - { name: GATEWAY_DB, value: /data/workspace-gateway.db }
+            - { name: AGENT_URL, value: {{ include "workspace.agentUrl" . | quote }} }
+            - { name: SANDBOX_NAMESPACE, value: {{ .Values.gateway.sandbox.namespace | quote }} }
+            - { name: FORGEJO_URL, value: {{ .Values.infra.forgejo.url | quote }} }
+            - name: FORGEJO_TOKEN
+              valueFrom:
+                secretKeyRef: { name: workspace-gateway-secrets, key: forgejo-token }
+            - name: GATEWAY_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef: { name: workspace-gateway-secrets, key: service-token }
+            - { name: GATEWAY_SERVICE_TENANT, value: {{ .Values.gateway.serviceToken.tenant | quote }} }
+            - { name: IMAGE_REGISTRY_HOST, value: {{ .Values.infra.registry.host | quote }} }
+            - { name: TOOLCHAIN_ORG, value: {{ .Values.infra.registry.toolchainOrg | quote }} }
+            - { name: DEFAULT_BASE_IMAGE, value: {{ .Values.gateway.registry.defaultBaseImage | quote }} }
+            - { name: DERIVE_REPO, value: {{ .Values.gateway.registry.deriveRepo | quote }} }
+            - { name: WORKER_BIN, value: {{ .Values.gateway.registry.workerBin | quote }} }
+            - { name: WORKSPACE_RUNTIME, value: {{ .Values.gateway.runtime | quote }} }
+            - { name: BUILDKIT_ADDR, value: {{ .Values.infra.buildkit.addr | quote }} }
+            - { name: DOCKER_CONFIG, value: /home/user/.docker }
+            - { name: SANDBOX_IDLE_TTL, value: {{ .Values.gateway.sandbox.idleTTL | quote }} }
+            - { name: SANDBOX_REAP_INTERVAL, value: {{ .Values.gateway.sandbox.reapInterval | quote }} }
+            # MUST bypass the proxy for in-cluster + registry traffic.
+            - { name: NO_PROXY, value: {{ include "workspace.noProxy" . | quote }} }
+            - { name: no_proxy, value: {{ include "workspace.noProxy" . | quote }} }
+          ports:
+            - { containerPort: 8080, protocol: TCP }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          volumeMounts:
+            - { mountPath: /data, name: data }
+            - { mountPath: /home/user/.docker, name: docker-config, readOnly: true }
+          resources:
+            {{- toYaml .Values.gateway.resources | nindent 12 }}
+      volumes:
+        - name: data
+          {{- if .Values.gateway.persistence.enabled }}
+          hostPath:
+            path: {{ .Values.gateway.persistence.hostPath }}
+            type: {{ .Values.gateway.persistence.type }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        # Registry push credentials for image builds (infra buildkitd's config).
+        - name: docker-config
+          secret: { secretName: buildkitd-docker-config }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: workspace-gateway
+  namespace: {{ include "workspace.namespace" . }}
+  labels:
+    {{- include "workspace.labels" . | nindent 4 }}
+spec:
+  selector: { app: workspace-gateway }
+  ports:
+    - { name: http, port: 80, targetPort: 8080 }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: workspace-gateway-secrets
+  namespace: {{ include "workspace.namespace" . }}
+  labels:
+    {{- include "workspace.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  forgejo-token: {{ .Values.gateway.forgejo.token | quote }}
+  service-token: {{ .Values.gateway.serviceToken.token | quote }}
+{{- end }}

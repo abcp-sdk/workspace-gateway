@@ -1,0 +1,40 @@
+{{- if and .Values.gateway.enabled .Values.gateway.workerRbac.create }}
+# Sandbox/service RBAC for the gateway, in the `worker` namespace. Rendered as
+# a separate manifest because the `worker` namespace is managed with a DIFFERENT
+# credential than the workspace namespace (namespace-scoped RBAC); apply it with
+# that context, e.g. `helm template ... --show-only templates/worker-rbac.yaml`.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: workspace-gateway-sandboxes
+  namespace: {{ .Values.gateway.sandbox.namespace }}
+  labels:
+    {{- include "workspace.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "secrets"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  # Long-lived services (Deployment + Service).
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["create", "get", "list", "watch", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: workspace-gateway-sandboxes
+  namespace: {{ .Values.gateway.sandbox.namespace }}
+  labels:
+    {{- include "workspace.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "workspace.saName" . }}
+    namespace: {{ include "workspace.namespace" . }}
+roleRef:
+  kind: Role
+  name: workspace-gateway-sandboxes
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

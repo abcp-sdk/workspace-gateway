@@ -1,0 +1,632 @@
+syntax = "proto3";
+
+// Agent API: the shared abc session backend (formerly the Hono/zod-openapi
+// surface under /api/v1). The single source of truth for the agent contract.
+// Server: abcp-agent (TypeScript). Clients: abcp gateway, extension servers,
+// client apps (web / desktop / mobile).
+package agent.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/abcp-sdk/workspace-gateway/gen/agent/v1;agentv1";
+
+// Session is a row in the agent session table.
+message Session {
+  string name = 1;
+  // Canonical model reference "provider_id/model_id". A bare model id is
+  // never resolved by flat lookup: the provider must be named explicitly.
+  string model = 2;
+  string preset = 3;
+  string tip_id = 4;
+  int32 max_turns = 5;
+  string system_prompt = 6;
+  int32 input_tokens = 7;
+  int32 output_tokens = 8;
+  int32 total_tokens = 9;
+  int32 last_input_tokens = 10;
+  int32 last_output_tokens = 11;
+  string created_at = 12;
+  string updated_at = 13;
+  string last_used_at = 14;
+  string locale = 15;
+  // UI aggregates.
+  string org = 16;
+  string repo = 17;
+  string branch = 18;
+  int32 unread_count = 19;
+  string last_message_at = 20;
+  string last_message_preview = 21;
+  // Selected reasoning variant id (e.g. "low"/"medium"/"high"/"max"/"fast").
+  // Empty means "no variant" (provider defaults; no providerOptions sent).
+  string variant = 22;
+  // Monotonic per-session message counter, bumped for every appended message
+  // (user/assistant/event/compaction). Clients derive the unread count as the
+  // number of messages with seq greater than their locally-persisted read
+  // watermark (read state is client-local; the agent never stores it).
+  int32 message_seq = 23;
+  // Generic grouping key for a session (free-form, tenant-scoped). Empty =
+  // ungrouped. A subsession records its parent's session name here, but the
+  // field is deliberately generic: any client may group sessions arbitrarily
+  // (project, workspace, task…). Not validated against an enum.
+  string group = 24;
+}
+
+// Message row (bare).
+message Message {
+  string id = 1;
+  string role = 2;
+  string prev_id = 3;
+  string created_at = 4;
+  repeated Part parts = 5;
+}
+
+// A tool/text part body. `data` is the JSON/plain payload.
+message Part {
+  string id = 1;
+  string message_id = 2;
+  string type = 3;
+  int32 seq = 4;
+  string data = 5;
+}
+
+// Mailbox entry.
+message MailboxEntry {
+  string id = 1;
+  string session_name = 2;
+  string msg_type = 3;
+  string payload = 4;
+  string effective_at = 5;
+  string status = 6;
+  string created_at = 7;
+  string consumed_at = 8;
+  int64 seq = 9;
+}
+
+
+// Preset row.
+message Preset {
+  string id = 1;
+  string system_prompt = 2;
+  string system_prompt_i18n = 3;
+  repeated string tools = 4;
+  int32 max_turns = 5;
+  bool is_system = 6;
+}
+
+// Provider row. A provider serves EXACTLY ONE modality (`capability`): its
+// models all share that capability. A host that serves several modalities is
+// registered once per modality (semantic grouping), so a modality's model
+// picker is simply "the models of that modality's providers".
+message Provider {
+  string provider_id = 1;
+  string api_type = 2;
+  string base_url = 3;
+  string api_key = 4;
+  map<string, string> headers = 5;
+  repeated ProviderModel models = 6;
+  string updated_at = 7;
+  // The single modality this provider serves (text | image | video | speech |
+  // transcription | embedding | rerank | realtime).
+  string capability = 8;
+}
+
+// Provider model entry. All of a provider's models share the provider's
+// `capability`; `model_type` mirrors it so a client can read the modality
+// directly from the model.
+//
+//   - text      -> context_limit (> 0) REQUIRED (drives compaction budgets)
+//   - non-text  -> context_limit MUST be 0 (not a chat model)
+//
+// A provider protocol may serve any modality its wire format supports
+// (validated server-side against the capability matrix — see
+// ListProvidersCatalog). There is no gateway special-casing.
+message ProviderModel {
+  string id = 1;
+  string name = 2;
+  int64 context_limit = 3;
+  // The model's modality, identical to its provider's `capability`.
+  string model_type = 4;
+}
+
+// Tool discovery entry.
+message ToolInfo {
+  string name = 1;
+  string description = 2;
+  string category = 3;
+  google.protobuf.Struct parameters = 4;
+  repeated ToolConfigField config_fields = 5;
+  repeated string required_config = 6;
+}
+
+// Declared config knob for a tool/extension.
+message ToolConfigField {
+  string name = 1;
+  string type = 2;
+  repeated string enum_values = 3;
+  google.protobuf.Value default = 6;
+  string description = 7;
+  string scope = 8;
+  // Semantic kind: "value" (default, an ordinary knob) or "model" (the value
+  // is a `provider_id/model_id` reference; the client renders a picker scoped
+  // to `capability` against the provider registry instead of a text field).
+  string kind = 9;
+  // Required when `kind == "model"`: the modality the reference must match
+  // (text | image | video | speech | transcription | embedding | rerank |
+  // realtime).
+  string capability = 10;
+}
+
+// A tool's configured value.
+message ToolConfig {
+  map<string, google.protobuf.Value> values = 1;
+}
+
+// SSE-ish stream event emitted by Prompt streaming.
+message PromptResponse {
+  string event = 1; // status | text-delta | tool-call | tool-result | error | turn-complete
+  map<string, string> params = 2;
+  string eid = 3;
+}
+
+// WatchSession streams live session events (the Connect replacement for the
+// SSE /stream endpoint): turn deltas, tool calls, errors and completions.
+// `since` is a message id ANCHOR for incremental replay: when set, a replay
+// starts AFTER that message (so a client that was offline still catches the
+// turns that completed meanwhile). Empty = live-from-now (or the active run).
+message WatchSessionRequest {
+  string id = 1;
+  string since = 2;
+}
+message WatchSessionResponse {
+  string event = 1;
+  google.protobuf.Struct params = 2;
+  string eid = 3;
+}
+
+// WatchSessions streams the session list in real time: an initial full
+// snapshot, then per-session upserts (message-fact changes, settings changes)
+// and removals (deletes). Replaces list polling.
+message WatchSessionsRequest {}
+message WatchSessionsResponse {
+  // New/updated session snapshots (message facts + settings).
+  repeated Session upserts = 1;
+  // Session names that were removed.
+  repeated string removed = 2;
+  // True for the initial full snapshot: the client replaces its whole list
+  // with `upserts` (dropping anything not present) instead of merging.
+  bool snapshot = 3;
+}
+
+// A file reference (attachment). `mime` is NOT carried: the agent DERIVES the
+// content type from the bytes at ingest time (magic-byte sniff + media probe)
+// and resolves it from the stored record, so a caller can neither mislabel a
+// file nor need a content-type library of its own.
+message FileRef {
+  string code = 1;
+  string name = 2;
+  int32 size = 3;
+}
+
+message ListSessionsRequest {}
+message ListSessionsResponse { repeated Session sessions = 1; }
+
+message CreateSessionRequest {
+  string name = 1;
+  // Canonical model reference "provider_id/model_id".
+  string model = 2;
+  string preset = 3;
+  string org = 4;
+  string repo = 5;
+  string branch = 6;
+  // Optional reasoning variant id (see ModelInfo.variants).
+  string variant = 7;
+  // Optional generic grouping key (empty = ungrouped). A subsession sets this
+  // to its parent session name.
+  string group = 8;
+}
+message CreateSessionResponse {
+  bool ok = 1;
+  string session_name = 2;
+}
+
+message GetSessionRequest { string id = 1; }
+message GetSessionResponse { Session session = 1; }
+
+message DeleteSessionRequest { string id = 1; }
+message DeleteSessionResponse { bool ok = 1; }
+
+// ListMessages reads a session's message chain. Two modes:
+//   * ANCHORED / incremental: `after` is a message id ANCHOR (a pin) the
+//     client already has. The response is the chain segment AFTER it, i.e. the
+//     walk from the current tip back to (excluding) that anchor — the messages
+//     appended since the client last synced. If the anchor is NOT on the
+//     current chain (it was withdrawn via undo, or the chain was forked), the
+//     response sets `resync=true` and the client must drop its cache and
+//     re-fetch. `tip_id` always echoes the current tip so the client can store
+//     it as the next anchor.
+//   * BACKWARD paging (existing): with `before` set (and `after` empty) the
+//     chain is read oldest→newest for `limit` messages BEFORE that cursor;
+//     with neither set, the newest `limit` messages.
+message ListMessagesRequest {
+  string id = 1;
+  int32 limit = 2;
+  // Backward-paging cursor (exclusive): return messages before this id.
+  string before = 3;
+  // Incremental anchor (exclusive): return messages after this id. When the
+  // anchor is absent from the current chain, the server signals `resync`.
+  string after = 4;
+}
+message ListMessagesResponse {
+  bool ok = 1;
+  repeated Message messages = 2;
+  // The anchor was not on the current chain (withdrawn/forked): the client
+  // must discard its local copy of this session and re-fetch from scratch.
+  bool resync = 3;
+  // Current chain tip id (store as the next `after` anchor).
+  string tip_id = 4;
+}
+
+message PromptRequest {
+  string id = 1;
+  string prompt = 2;
+  repeated FileRef attachments = 3;
+}
+
+message ForkRequest {
+  string id = 1;
+  string name = 2;
+  string message_id = 3;
+  string preset = 4;
+}
+message ForkResponse { Session session = 1; }
+
+message RenameRequest { string id = 1; string name = 2; }
+message RenameResponse { Session session = 1; }
+
+message SetModelRequest { string id = 1; string model = 2; string variant = 3; }
+message SetModelResponse { Session session = 1; }
+
+message UndoRequest { string id = 1; string message_id = 2; }
+message UndoResponse { Session session = 1; }
+
+message StateRequest { string id = 1; }
+message StateResponse { google.protobuf.Struct state = 1; }
+
+// Mailbox listing is NEWEST-FIRST and paged BACKWARD (older) for infinite
+// scroll: the client holds the newest page and passes the oldest entry it has
+// as `before` to fetch the next-older page.
+message MailboxRequest {
+  string id = 1;
+  // Max entries to return (0 => server default).
+  int32 limit = 2;
+  // Backward cursor (exclusive): return entries OLDER than this entry id.
+  // Empty => the newest page.
+  string before = 3;
+}
+message MailboxResponse {
+  bool ok = 1;
+  repeated MailboxEntry mailbox = 2;
+  // True when more (older) entries exist beyond this page.
+  bool has_more = 3;
+}
+
+message UpdateSettingsRequest {
+  string id = 1;
+  string model = 2;
+  string preset = 3;
+  string locale = 4;
+  // Selected reasoning variant id (empty clears it).
+  string variant = 5;
+}
+message UpdateSettingsResponse { Session session = 1; }
+
+message InterruptRequest { string id = 1; }
+message InterruptResponse { bool ok = 1; bool interrupted = 2; }
+
+message CompactRequest { string id = 1; }
+message CompactResponse { bool ok = 1; }
+
+message ListProvidersRequest {}
+message ListProvidersResponse { repeated Provider providers = 1; }
+
+message ListProvidersCatalogRequest {}
+// The registration catalog: every provider api type the server accepts and
+// the model capabilities each can serve. Single source of truth for client
+// registration forms — clients fetch this instead of hardcoding the matrix
+// (with a bundled fallback copy for offline use).
+message ListProvidersCatalogResponse {
+  // api type id (e.g. "openai-compatible") -> its catalog entry.
+  map<string, ApiTypeCatalog> api_types = 1;
+}
+// Catalog entry for one provider api type.
+message ApiTypeCatalog {
+  // Capability tags a model of this api type may declare in `model_type`
+  // (text | image | video | speech | transcription | embedding | rerank).
+  repeated string capabilities = 1;
+}
+
+message RegisterProviderRequest { Provider provider = 1; }
+message RegisterProviderResponse { bool ok = 1; }
+
+message DeleteProviderRequest { string provider_id = 1; }
+message DeleteProviderResponse { bool ok = 1; }
+
+message TestProviderRequest {
+  string provider_id = 1;
+  string api_type = 2;
+  string base_url = 3;
+  string api_key = 4;
+  string model = 5;
+  // Optional reasoning variant id to exercise in the test generation.
+  string variant = 6;
+  // What the model under test generates: "text" (default). Only text models
+  // are testable today; image/video/speech are rejected with a clear message.
+  string capability = 7;
+}
+message TestProviderResponse {
+  bool ok = 1;
+  string result = 2;
+}
+
+// ListModels returns the models of ONE provider. provider_id is required: the
+// server rejects an empty value (InvalidArgument) so a global flat model list
+// — which would surface duplicate ids across providers — is never produced.
+message ListModelsRequest { string provider_id = 1; }
+message ListModelsResponse { repeated ModelInfo models = 1; }
+message ModelInfo {
+  string id = 1;
+  string name = 2;
+  // Reasoning variants offered by this model (from the models.dev catalog).
+  // Empty when the model has no reasoning options or is not in the catalog.
+  repeated ModelVariant variants = 3;
+  // Context window (tokens) configured for this provider model.
+  int64 context_limit = 4;
+}
+
+// A selectable reasoning variant for a model (e.g. low/medium/high/max, or a
+// fast mode). `id` is passed back on CreateSession/SetModel/UpdateSettings.
+message ModelVariant {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+}
+
+// ListPresets lists presets. When locale is set (e.g. "zh"), each preset's
+// system_prompt is resolved from its i18n map for that locale, falling back
+// to the default prompt.
+message ListPresetsRequest { string locale = 1; }
+message ListPresetsResponse { repeated Preset presets = 1; }
+
+message UpsertPresetRequest { Preset preset = 1; }
+message UpsertPresetResponse { bool ok = 1; }
+
+message DeletePresetRequest { string id = 1; }
+message DeletePresetResponse { bool ok = 1; }
+
+message PreviewPresetRequest { string id = 1; }
+message PreviewPresetResponse { string template = 1; string rendered = 2; }
+
+message GetConfigRequest { string key = 1; }
+message GetConfigResponse { string key = 1; string value = 2; }
+
+message SetConfigRequest { string key = 1; string value = 2; }
+message SetConfigResponse { bool ok = 1; }
+
+message ListToolsRequest { string locale = 1; }
+message ListToolsResponse { repeated ToolInfo tools = 1; }
+
+message GetToolConfigRequest {}
+message GetToolConfigResponse { ToolConfig config = 1; }
+
+message SetToolConfigRequest { google.protobuf.Struct config = 1; }
+message SetToolConfigResponse { bool ok = 1; }
+
+message SetExtensionConfigRequest { string ext_id = 1; string name = 2; google.protobuf.Value value = 3; }
+message SetExtensionConfigResponse { bool ok = 1; }
+
+message UploadFileRequest { FileRef file = 1; string data = 2; }
+// `mime` is the SERVER-DERIVED content type of the stored file (see
+// IngestFileResponse); the caller never supplies one.
+message UploadFileResponse { bool ok = 1; string code = 2; string mime = 3; }
+
+message IngestFileRequest {
+  string code = 1; // optional; empty => server mints one
+  bytes data = 2;
+  string name = 3;
+}
+// `mime` is the content type the agent DERIVED from the bytes (magic-byte
+// sniff, with an ffprobe refinement for media). It is authoritative: clients
+// render from it rather than asserting their own guess.
+message IngestFileResponse { bool ok = 1; string code = 2; string mime = 3; }
+
+message GetFileRequest { string code = 1; }
+message GetFileResponse { bytes data = 1; string name = 2; string mime = 3; }
+
+message GetFileMetaRequest { string code = 1; }
+// File metadata: identity + server-derived media facts. The optional media
+// fields are populated (asynchronously, best-effort) by the agent's media
+// probe when the mime is a supported image/video/audio type; they are absent
+// (field presence unset) for files that are not media or were probed before
+// the feature existed. `thumb_code` is itself a canonical file code (the
+// thumbnail is a content-addressed file), so a client fetches it through the
+// normal GetFile/GetFileStream path.
+message GetFileMetaResponse {
+  string name = 1;
+  string mime = 2;
+  int32 size = 3;
+  optional int32 width = 4;
+  optional int32 height = 5;
+  optional int64 duration_ms = 6;
+  optional string thumb_code = 7;
+  optional string thumbhash = 8;
+}
+
+// GetFileStream streams a file's bytes in order (chunk by chunk). It is the
+// streaming counterpart of GetFile: small files still round-trip fine, while
+// large media is delivered progressively so a client can start rendering
+// before the whole object has arrived. Without a `Range` API this is a
+// forward-only stream (no seek); `offset` is the byte offset of `data` in the
+// file and `total` its full length, so a client can compute progress.
+message FileChunk {
+  bytes data = 1;
+  uint64 offset = 2;
+  uint64 total = 3;
+  bool last = 4;
+}
+
+
+
+message GetAgentConfigRequest {}
+message GetAgentConfigResponse { google.protobuf.Struct config = 1; }
+
+message HealthRequest {}
+message HealthResponse { bool ok = 1; string name = 2; }
+
+// GetIdentity returns the caller's resolved identity (from its bearer token).
+// The webui uses it to show a human username instead of the (fixed, same-
+// origin) URL. A tenant token can only ever resolve its own identity; an admin
+// token resolves role=admin with empty tenant fields.
+message GetIdentityRequest {}
+message GetIdentityResponse {
+  string tenant = 1;
+  // Human-readable tenant name (defaults to the id when unset).
+  string tenant_name = 2;
+  // "tenant" | "admin".
+  string role = 3;
+}
+
+// AgentService is the session-backend API.
+service AgentService {
+  rpc Health(HealthRequest) returns (HealthResponse);
+  rpc GetIdentity(GetIdentityRequest) returns (GetIdentityResponse);
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+  rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
+  rpc DeleteSession(DeleteSessionRequest) returns (DeleteSessionResponse);
+  rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse);
+  rpc Prompt(PromptRequest) returns (stream PromptResponse);
+  rpc WatchSession(WatchSessionRequest) returns (stream WatchSessionResponse);
+  rpc WatchSessions(WatchSessionsRequest) returns (stream WatchSessionsResponse);
+  rpc Fork(ForkRequest) returns (ForkResponse);
+  rpc Rename(RenameRequest) returns (RenameResponse);
+  rpc SetModel(SetModelRequest) returns (SetModelResponse);
+  rpc Undo(UndoRequest) returns (UndoResponse);
+  rpc State(StateRequest) returns (StateResponse);
+  rpc Mailbox(MailboxRequest) returns (MailboxResponse);
+  rpc UpdateSettings(UpdateSettingsRequest) returns (UpdateSettingsResponse);
+  rpc Interrupt(InterruptRequest) returns (InterruptResponse);
+  rpc Compact(CompactRequest) returns (CompactResponse);
+  rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
+  rpc ListProvidersCatalog(ListProvidersCatalogRequest) returns (ListProvidersCatalogResponse);
+  rpc RegisterProvider(RegisterProviderRequest) returns (RegisterProviderResponse);
+  rpc DeleteProvider(DeleteProviderRequest) returns (DeleteProviderResponse);
+  rpc TestProvider(TestProviderRequest) returns (TestProviderResponse);
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+  rpc ListPresets(ListPresetsRequest) returns (ListPresetsResponse);
+  rpc UpsertPreset(UpsertPresetRequest) returns (UpsertPresetResponse);
+  rpc DeletePreset(DeletePresetRequest) returns (DeletePresetResponse);
+  rpc PreviewPreset(PreviewPresetRequest) returns (PreviewPresetResponse);
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+  rpc SetConfig(SetConfigRequest) returns (SetConfigResponse);
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+  rpc GetToolConfig(GetToolConfigRequest) returns (GetToolConfigResponse);
+  rpc SetToolConfig(SetToolConfigRequest) returns (SetToolConfigResponse);
+  rpc SetExtensionConfig(SetExtensionConfigRequest) returns (SetExtensionConfigResponse);
+  rpc UploadFile(UploadFileRequest) returns (UploadFileResponse);
+  rpc IngestFile(IngestFileRequest) returns (IngestFileResponse);
+  rpc GetFile(GetFileRequest) returns (GetFileResponse);
+  rpc GetFileMeta(GetFileMetaRequest) returns (GetFileMetaResponse);
+  rpc GetFileStream(GetFileRequest) returns (stream FileChunk);
+  rpc GetAgentConfig(GetAgentConfigRequest) returns (GetAgentConfigResponse);
+}
+
+// ---------------------------------------------------------------------------
+// Admin API: tenant + tenant-token lifecycle. Served by the agent behind a
+// static admin bearer token (AGENT_ADMIN_TOKEN). Kept SEPARATE from
+// AgentService so a tenant token can never reach it.
+// ---------------------------------------------------------------------------
+
+// Tenant is one isolation domain. `id` is the plaintext isolation key used on
+// the wire (abc.<id>.<...>) and in the database.
+message Tenant {
+  string id = 1;
+  string name = 2;
+  // A disabled tenant's tokens stop authenticating (fail-closed); its data is
+  // retained. Re-enable by clearing this flag.
+  bool disabled = 3;
+  string created_at = 4;
+  string updated_at = 5;
+}
+
+// TenantToken is a bearer credential minted for one tenant. The plaintext is
+// returned ONLY at issue/rotate time; the server stores just its sha256.
+message TenantToken {
+  string token_id = 1;
+  string tenant_id = 2;
+  string label = 3;
+  string created_at = 4;
+  string last_used_at = 5;
+  bool revoked = 6;
+}
+
+message ListTenantsRequest {}
+message ListTenantsResponse { repeated Tenant tenants = 1; }
+
+message CreateTenantRequest {
+  // Plaintext tenant id: ^[A-Za-z0-9_-]{1,64}$.
+  string id = 1;
+  string name = 2;
+}
+message CreateTenantResponse {
+  Tenant tenant = 1;
+  // The bootstrap token minted for the new tenant (plaintext, shown once).
+  string token = 2;
+}
+
+message UpdateTenantRequest {
+  string id = 1;
+  optional string name = 2;
+  optional bool disabled = 3;
+}
+message UpdateTenantResponse { Tenant tenant = 1; }
+
+message DeleteTenantRequest {
+  string id = 1;
+}
+message DeleteTenantResponse { bool ok = 1; }
+
+message IssueTenantTokenRequest {
+  string tenant_id = 1;
+  string label = 2;
+}
+message IssueTenantTokenResponse {
+  TenantToken token = 1;
+  // The plaintext token (shown once; never retrievable again).
+  string plaintext = 2;
+}
+
+message ListTenantTokensRequest { string tenant_id = 1; }
+message ListTenantTokensResponse { repeated TenantToken tokens = 1; }
+
+message RevokeTenantTokenRequest { string token_id = 1; }
+message RevokeTenantTokenResponse { bool ok = 1; }
+
+message RotateTenantTokenRequest { string token_id = 1; }
+message RotateTenantTokenResponse {
+  TenantToken token = 1;
+  // The new plaintext token (shown once).
+  string plaintext = 2;
+}
+
+// AdminService manages tenants and their tokens. All RPCs require the static
+// admin bearer token and are never reachable with a tenant token.
+service AdminService {
+  rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse);
+  rpc CreateTenant(CreateTenantRequest) returns (CreateTenantResponse);
+  rpc UpdateTenant(UpdateTenantRequest) returns (UpdateTenantResponse);
+  rpc DeleteTenant(DeleteTenantRequest) returns (DeleteTenantResponse);
+  rpc IssueTenantToken(IssueTenantTokenRequest) returns (IssueTenantTokenResponse);
+  rpc ListTenantTokens(ListTenantTokensRequest) returns (ListTenantTokensResponse);
+  rpc RevokeTenantToken(RevokeTenantTokenRequest) returns (RevokeTenantTokenResponse);
+  rpc RotateTenantToken(RotateTenantTokenRequest) returns (RotateTenantTokenResponse);
+}

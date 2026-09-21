@@ -1,0 +1,104 @@
+{{- if .Values.agent.enabled }}
+# Dedicated workspace agent (h2c): loads the workspace role presets, bootstraps
+# the workspace tenant, and seeds the extensions' config into its cfg KV.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.agent.service.name }}
+  namespace: {{ include "workspace.namespace" . }}
+  labels:
+    {{- include "workspace.labels" . | nindent 4 }}
+    app: {{ .Values.agent.service.name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.agent.service.name }}
+  template:
+    metadata:
+      labels:
+        {{- include "workspace.labels" . | nindent 8 }}
+        app: {{ .Values.agent.service.name }}
+    spec:
+      serviceAccountName: {{ include "workspace.saName" . }}
+      containers:
+        - name: agent
+          image: {{ .Values.agent.image.repository }}:{{ .Values.agent.image.tag }}
+          imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
+          env:
+            - name: NATS_URL
+              value: {{ include "workspace.natsUrl" . | quote }}
+            - name: DB_BACKEND
+              value: sqlite
+            - name: DATABASE_URL
+              value: sqlite:///data/agent.db
+            - name: PORT
+              value: {{ .Values.agent.port | quote }}
+            - name: HTTP_PROTOCOL
+              value: h2c
+            - name: AGENT_CORS_ORIGIN
+              value: {{ .Values.agent.corsOrigin | quote }}
+            - name: AGENT_AUTH_MODE
+              value: "required"
+            - name: AGENT_ADMIN_TOKEN
+              value: {{ .Values.agent.auth.adminToken | quote }}
+            - name: AGENT_BOOTSTRAP_TENANT
+              value: {{ .Values.agent.auth.bootstrapTenant | quote }}
+            - name: AGENT_BOOTSTRAP_TOKEN
+              value: {{ .Values.agent.auth.bootstrapToken | quote }}
+            # Workspace role presets (immutable, deployment-seeded).
+            - name: SYSTEM_PRESETS_FILE
+              value: /etc/workspace-presets/system-presets.json
+            {{- if .Values.agent.disabledTools }}
+            - name: DISABLED_TOOLS
+              value: {{ .Values.agent.disabledTools | quote }}
+            {{- end }}
+            # Seed extension config into the cfg KV (create-if-absent; a UI-set
+            # value always wins). `tenant: "*"` fans out to every known tenant.
+            # The gateway/forgejo endpoints come from this chart; sandboxes are
+            # launched from ANY image (list-oci-images browses the registry).
+            - name: AGENT_EXT_CONFIG_SEED
+              value: {{ list
+                (dict "tenant" .Values.workspaceExtension.seedTenant "extId" "workspace" "name" "gateway-url" "value" (printf "http://workspace-gateway.%s.svc.cluster.local:80" (include "workspace.namespace" .)))
+                (dict "tenant" .Values.workspaceExtension.seedTenant "extId" "workspace" "name" "gateway-token" "value" .Values.gateway.serviceToken.token)
+                (dict "tenant" .Values.workspaceExtension.seedTenant "extId" "workspace" "name" "forgejo-url" "value" .Values.infra.forgejo.url)
+                (dict "tenant" .Values.workspaceExtension.seedTenant "extId" "workspace" "name" "forgejo-token" "value" .Values.gateway.forgejo.token)
+                (dict "tenant" .Values.playwright.seedTenant "extId" "playwright" "name" "selenium-url" "value" .Values.infra.seleniumUrl)
+                | toJson | quote }}
+            {{- include "workspace.objectStoreEnv" . | nindent 12 }}
+          ports:
+            - { containerPort: {{ .Values.agent.port }}, protocol: TCP }
+          resources:
+            {{- toYaml .Values.agent.resources | nindent 12 }}
+          volumeMounts:
+            - { mountPath: /etc/workspace-presets, name: presets, readOnly: true }
+            {{- if .Values.agent.persistence.enabled }}
+            - { mountPath: /data, name: data, subPath: {{ .Values.agent.persistence.subPath }} }
+            {{- end }}
+      volumes:
+        - name: presets
+          configMap: { name: workspace-presets }
+        {{- if .Values.agent.persistence.enabled }}
+        - name: data
+          hostPath:
+            path: {{ .Values.agent.persistence.hostPath }}
+            type: {{ .Values.agent.persistence.type }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.agent.service.name }}
+  namespace: {{ include "workspace.namespace" . }}
+  labels:
+    {{- include "workspace.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.agent.service.type }}
+  selector:
+    app: {{ .Values.agent.service.name }}
+  ports:
+    - name: h2c
+      port: 80
+      targetPort: {{ .Values.agent.port }}
+      appProtocol: kubernetes.io/h2c
+{{- end }}

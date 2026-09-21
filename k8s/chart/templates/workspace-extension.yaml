@@ -1,0 +1,48 @@
+{{- if .Values.workspaceExtension.enabled }}
+# Workspace extension: sandbox-*/repo-* tools. Speaks only the abc protocol over
+# NATS (no inbound HTTP). Its gateway/forgejo config is seeded into the agent's
+# cfg KV by agent.yaml, so it needs no tool config here.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workspace-extension
+  namespace: {{ include "workspace.namespace" . }}
+  labels:
+    {{- include "workspace.labels" . | nindent 4 }}
+    app: workspace-extension
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: workspace-extension }
+  template:
+    metadata:
+      labels:
+        {{- include "workspace.labels" . | nindent 8 }}
+        app: workspace-extension
+    spec:
+      containers:
+        - name: workspace-extension
+          image: {{ .Values.workspaceExtension.image.repository }}:{{ .Values.workspaceExtension.image.tag }}
+          imagePullPolicy: {{ .Values.workspaceExtension.image.pullPolicy }}
+          env:
+            - name: NATS_URL
+              value: {{ include "workspace.natsUrl" . | quote }}
+            - name: PORT
+              value: "8080"
+            - name: NO_PROXY
+              value: {{ include "workspace.noProxy" . | quote }}
+            - name: no_proxy
+              value: {{ include "workspace.noProxy" . | quote }}
+          ports:
+            - { containerPort: 8080, protocol: TCP }
+          resources:
+            {{- toYaml .Values.workspaceExtension.resources | nindent 12 }}
+          livenessProbe:
+            httpGet: { path: /api/v1/health, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet: { path: /api/v1/health, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+{{- end }}

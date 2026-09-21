@@ -1,0 +1,175 @@
+# Values for the WORKSPACE stack chart.
+#
+# This chart deploys a SELF-CONTAINED workspace stack, separate from the
+# standalone agent chart:
+#   - `workspace-agent` Pod: a dedicated agent (h2c) whose role presets
+#     (admin/maintainer/developer/planner/explorer) come from SYSTEM_PRESETS_FILE
+#     and whose tenants are bootstrapped for the workspace model.
+#   - `workspace-extension` Pod: sandbox-*/repo-* tools (NATS only).
+#   - `playwright-extension` Pod: browser tool server (drives infra Selenium).
+#   - `workspace-gateway` Pod: the trusted session-creation + sandbox/service
+#     lifecycle surface (workspace.v1), managing objects in the `worker` ns.
+#   - `workspace-webui` Pod: Caddy aggregator (static webui + same-origin RPC).
+#
+# SHARED INFRA is consumed over Service DNS from the separate `infra` release
+# (its own namespace, default `agent`): NATS (account `workspace`), Garage S3,
+# Forgejo(git), buildkitd, Selenium. Nothing infra-ish is deployed here.
+
+namespaceOverride: ""
+
+# ---- shared infra endpoints (the `infra` release) ----
+infra:
+  # Namespace the infra release lives in (Forgejo/NATS/S3/buildkit/Selenium).
+  namespace: agent
+  nats:
+    # Dedicated JetStream account: MUST differ from the standalone agent's
+    # account, or the two agents collide on abc.discover / abc-presence /
+    # ABC_MAILBOX. Added to infra-chart's nats.conf as account `workspace`.
+    host: "nats.agent.svc.cluster.local"
+    port: 4222
+    user: "workspace"
+    password: "devpassword"
+  s3:
+    bucket: "workspace"
+    region: "garage"
+    endpoint: "http://s3.agent.svc.cluster.local"
+    accessKey: "GK66c166f3602ec6b5e762b21c"
+    secretKey: "685de4030127ea45b789396a1113e3b54f329e8e028ed4f47d0fbcd02da58c22"
+    pathStyle: true
+    prefix: "workspace"
+  forgejo:
+    url: "http://git.agent.svc.cluster.local"
+  buildkit:
+    addr: "tcp://buildkitd.agent.svc.cluster.local:1234"
+  seleniumUrl: "http://selenium.agent.svc.cluster.local:4444"
+  # Registry host + toolchain org surfaced by list-oci-images.
+  registry:
+    host: "git.agent.fenjin.org"
+    toolchainOrg: "agent-toolchain"
+
+# ---- dedicated workspace agent (h2c) ----
+agent:
+  enabled: true
+  image:
+    repository: git.agent.fenjin.org/abcp/agent
+    tag: "20260921063947"
+    pullPolicy: IfNotPresent
+  port: 8080
+  service:
+    name: workspace-agent
+    type: ClusterIP
+  corsOrigin: "*"
+  # Tools the agent hard-disables for every workspace session (subsession/mail
+  # are replaced by role tooling in this deployment).
+  disabledTools: "bundled.subsession-create,bundled.mail-send"
+  auth:
+    adminToken: "dev-admin-token"
+    bootstrapTenant: "workspace"
+    bootstrapToken: "devworkspacetoken"
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: "1", memory: 1Gi }
+  persistence:
+    enabled: true
+    # hostPath root for /data (single-node dev cluster, node-side path).
+    hostPath: /home/develop/Agent/Volumes/WorkspaceAgent
+    subPath: agent-data
+    type: DirectoryOrCreate
+
+# ---- workspace extension (sandbox-*/repo-* tools; NATS only) ----
+workspaceExtension:
+  enabled: true
+  image:
+    repository: git.agent.fenjin.org/abcp/workspace-extension
+    tag: "20260921074728"
+    pullPolicy: IfNotPresent
+  # Tenant seeded with the gateway/forgejo defaults. `"*"` = every tenant.
+  seedTenant: "*"
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+# ---- playwright browser-automation extension (separate server) ----
+playwright:
+  enabled: true
+  image:
+    repository: git.agent.fenjin.org/abcp/playwright-extension
+    tag: "20260920113616"
+    pullPolicy: IfNotPresent
+  seedTenant: "*"
+  viewport: "1280x720"
+  idleTimeoutMs: 600000
+  maxContexts: 8
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+# ---- workspace gateway (workspace.v1; owns sandboxes/services in `worker`) ----
+gateway:
+  enabled: true
+  image:
+    repository: git.agent.fenjin.org/abcp/workspace-gateway
+    tag: "20260921084546"
+    pullPolicy: IfNotPresent
+  # Namespace the sandbox/service backend manages, and where its RBAC lands.
+  sandbox:
+    namespace: worker
+    idleTTL: "24h"
+    reapInterval: "10m"
+  # RBAC for the worker namespace (Role/RoleBinding). When the workspace and
+  # worker namespaces are managed by DIFFERENT credentials (namespace-scoped
+  # RBAC), set workerRbac.create=true and apply worker-rbac.yaml separately
+  # (helm template --show-only templates/worker-rbac.yaml | kubectl ... -n worker).
+  workerRbac:
+    create: true
+  # Shared token the workspace extension presents for sandbox RPCs.
+  serviceToken:
+    tenant: "workspace-extension"
+    token: "devservice-token"
+  # Forgejo shared token (repo tools + EnsureRepo/protect). API writes need a
+  # real PAT (basic auth is read-only); this is the dev PAT for root.
+  forgejo:
+    token: "8a582a2d295a7d19f089b449bc29e5e4e34b3039"
+  registry:
+    defaultBaseImage: "git.agent.fenjin.org/agent-toolchain/toolchain-base:debian-trixie"
+    deriveRepo: "root/sandbox"
+    workerBin: "/usr/local/lib/easyworker/easyworker"
+  # Optional JSON overriding KVM/GPU device names + KVM security context.
+  runtime: ""
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+  # Gateway sqlite (ownership table); hostPath persists it across restarts.
+  persistence:
+    enabled: true
+    hostPath: /home/develop/Agent/Volumes/WorkspaceAgent
+    subPath: gateway-data
+    type: DirectoryOrCreate
+
+# ---- workspace webui (Caddy aggregator) ----
+webui:
+  enabled: true
+  image:
+    repository: git.agent.fenjin.org/abcp/workspace-webui
+    tag: "20260921095743"
+    pullPolicy: IfNotPresent
+  port: 8080
+  service:
+    name: workspace-webui
+    type: ClusterIP
+  # Alias Service (same webui pods). The cluster ingress convention routes
+  # `<service>.<namespace>.agent.10.199.64.20.nip.io` to the Service of that
+  # name, so this alias gives the friendly public address
+  #   https://workspace.agent.10.199.64.20.nip.io
+  # while the canonical in-cluster name stays `workspace-webui`.
+  aliasService:
+    enabled: true
+    name: workspace
+  resources:
+    requests: { cpu: 20m, memory: 32Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+
+# ---- RBAC ----
+serviceAccount:
+  create: true
+  name: "workspace-gateway"

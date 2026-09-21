@@ -1,0 +1,48 @@
+# RBAC for the workspace-gateway sandbox backend (folded-in worker-manager).
+#
+# The gateway RUNS in the agent namespace but manages easyworker sandboxes in
+# the `worker` namespace, so:
+#   - its ServiceAccount lives in the agent namespace (AGENT_NS below);
+#   - a Role in `worker` grants pod/service/secret CRUD;
+#   - a RoleBinding in `worker` binds that (cross-namespace) ServiceAccount.
+#
+#   kubectl create namespace worker
+#   kubectl -n <agent-ns> apply -f k8s/rbac.yaml   # or set AGENT_NS below
+#
+# The Role is namespace-scoped to `worker` (no cluster-wide access).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: workspace-gateway
+  namespace: agent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: workspace-gateway-sandboxes
+  namespace: worker
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "secrets"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  # Long-lived services (Deployment + Service).
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["create", "get", "list", "watch", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: workspace-gateway-sandboxes
+  namespace: worker
+subjects:
+  - kind: ServiceAccount
+    name: workspace-gateway
+    namespace: agent
+roleRef:
+  kind: Role
+  name: workspace-gateway-sandboxes
+  apiGroup: rbac.authorization.k8s.io

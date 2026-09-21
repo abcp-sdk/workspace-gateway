@@ -1,0 +1,12 @@
+# Toolchain image: Node.js + npm/pnpm/yarn (corepack).
+#
+# Generic: the tarball is pre-downloaded (fetch-artifacts.sh) and COPYed from
+# the build context; nothing is fetched at build time.
+ARG BASE_IMAGE=toolchain-base:debian-trixie
+FROM ${BASE_IMAGE}
+COPY cache/node-v26.9.0-linux-x64.tar.xz /tmp/node.tar.xz
+RUN mkdir -p /opt && tar -xJf /tmp/node.tar.xz -C /opt \
+ && ln -s /opt/node-v26.9.0-linux-x64 /opt/node && rm /tmp/node.tar.xz
+ENV PATH=/opt/node/bin:$PATH
+# corepack shims need a writable dir; keep them on PATH.
+RUN corepack enable --install-directory /usr/local/bin 2>/dev/null || true

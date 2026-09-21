@@ -1,0 +1,94 @@
+# Toolchain image: Clang + libc++ + LLVM + Conan 2.
+#
+# Built on the shared toolchain-base (which already carries gcc/build-essential
+# and the common utilities). This image ADDS the modern LLVM toolchain and makes
+# clang/libc++/lld the defaults, while gcc stays available as a fallback.
+#
+# LLVM is installed from apt.llvm.org (Debian trixie ships at most clang-22 and
+# no libc++ at all); the `-23` suite is the current stable line. The suite comes
+# from an in-region mirror (fast), the ~3 KB signing key from apt.llvm.org.
+# Conan 2 is a Python tool shipped as an offline wheel set (same as the
+# easyworker conan image) so `conan install` works without a registry.
+ARG BASE_IMAGE=toolchain-base:debian-trixie
+FROM ${BASE_IMAGE}
+
+ARG LLVM_MIRROR=mirrors.tuna.tsinghua.edu.cn/llvm-apt
+ARG LLVM_MAJOR=23
+
+# C/C++ build generators (the base has gcc + make but not these).
+RUN set -eux; \
+    apt-get -o Acquire::Retries=10 update; \
+    for i in 1 2 3 4 5 6; do \
+      apt-get -o Acquire::Retries=10 install -y --no-install-recommends \
+        cmake ninja-build meson python3 \
+      && break || { echo "apt retry $i"; sleep 3; }; \
+    done; \
+    rm -rf /var/lib/apt/lists/*
+
+# LLVM toolchain from apt.llvm.org (key from upstream, suite from the mirror).
+RUN set -eux; \
+    . /etc/os-release; \
+    install -d -m0755 /etc/apt/keyrings; \
+    curl -fSL --retry 5 https://apt.llvm.org/llvm-snapshot.gpg.key -o /etc/apt/keyrings/llvm.gpg; \
+    printf 'Types: deb\nURIs: https://%s/%s\nSuites: llvm-toolchain-%s-%s\nComponents: main\nSigned-By: /etc/apt/keyrings/llvm.gpg\n' \
+        "$LLVM_MIRROR" "$VERSION_CODENAME" "$VERSION_CODENAME" "$LLVM_MAJOR" > /etc/apt/sources.list.d/llvm.sources; \
+    LLVM_PKGS=""; \
+    for p in clang lld clang-tools clangd clang-format; do LLVM_PKGS="$LLVM_PKGS $p-$LLVM_MAJOR"; done; \
+    for p in libc++ libc++abi libunwind libclang-rt libomp; do LLVM_PKGS="$LLVM_PKGS $p-$LLVM_MAJOR-dev"; done; \
+    apt-get -o Acquire::Retries=10 update; \
+    for i in 1 2 3 4 5 6; do \
+      apt-get -o Acquire::Retries=10 install -y --no-install-recommends $LLVM_PKGS \
+      && break || { echo "apt retry $i"; sleep 3; }; \
+    done; \
+    rm -rf /var/lib/apt/lists/*; \
+    printf 'Types: deb\nURIs: https://apt.llvm.org/%s\nSuites: llvm-toolchain-%s-%s\nComponents: main\nSigned-By: /etc/apt/keyrings/llvm.gpg\n' \
+        "$VERSION_CODENAME" "$VERSION_CODENAME" "$LLVM_MAJOR" > /etc/apt/sources.list.d/llvm.sources
+
+# Unversioned entry points (clang, clang++, lld, clangd, ...).
+RUN set -eux; \
+    for t in clang clang++ clang-cpp clang-cl clang-tidy clang-apply-replacements \
+             clangd clang-format clang-format-diff clang-rename clang-check \
+             lld ld.lld lld-link wasm-ld; do \
+      [ -x "/usr/bin/$t-$LLVM_MAJOR" ] || [ -e "/usr/lib/llvm-$LLVM_MAJOR/bin/$t" ] || continue; \
+      if [ -e "/usr/lib/llvm-$LLVM_MAJOR/bin/$t" ] && [ ! -e "/usr/bin/$t-$LLVM_MAJOR" ]; then \
+        ln -s "/usr/lib/llvm-$LLVM_MAJOR/bin/$t" "/usr/bin/$t-$LLVM_MAJOR"; \
+      fi; \
+      update-alternatives --install "/usr/bin/$t" "$t" "/usr/bin/$t-$LLVM_MAJOR" 100; \
+    done
+
+# clang + libc++ + lld are the defaults (gcc stays installed as a fallback).
+ENV CC=clang \
+    CXX=clang++ \
+    CXXFLAGS="-stdlib=libc++" \
+    LDFLAGS="-stdlib=libc++ -fuse-ld=lld"
+
+# Conan 2 from the offline wheel set (context: cache/cpython-*.tar.gz and
+# cache/conan-wheels-*.tar.gz), installed into /opt/python so it is independent
+# of the distro python.
+COPY cache/cpython-3.14.7+20260901-x86_64-unknown-linux-gnu-install_only.tar.gz /tmp/py.tar.gz
+COPY cache/conan-wheels-2.32.0.tar.gz /tmp/conan.tar.gz
+RUN set -eux; \
+    mkdir -p /opt; \
+    tar -xzf /tmp/py.tar.gz -C /opt; \
+    mv /opt/python /opt/python-3.14.7; ln -s /opt/python-3.14.7 /opt/python; rm /tmp/py.tar.gz; \
+    mkdir -p /tmp/conan && tar -xzf /tmp/conan.tar.gz -C /tmp/conan; \
+    /opt/python/bin/pip install --no-cache-dir --no-index --find-links /tmp/conan "conan==2.32.0"; \
+    rm -rf /tmp/conan /tmp/conan.tar.gz
+ENV PATH=/opt/python/bin:$PATH
+
+# Smoke test: C++26 with libc++/lld, and conan.
+RUN set -eux; \
+    mkdir -p /tmp/cpp26; \
+    printf '%s\n' \
+        '#include <print>' \
+        '#include <type_traits>' \
+        'template <class... Ts> struct first { using type = Ts...[0]; };' \
+        'int main() {' \
+        '  static_assert(__cplusplus >= 202400L, "C++26 not enabled");' \
+        '  static_assert(std::is_same_v<first<int, char>::type, int>, "pack indexing");' \
+        '  std::println("cpp{} clang{} libc++ ok", __cplusplus / 100, __clang_major__);' \
+        '}' > /tmp/cpp26/main.cpp; \
+    clang++ -std=c++26 /tmp/cpp26/main.cpp -o /tmp/cpp26/app; \
+    /tmp/cpp26/app; \
+    rm -rf /tmp/cpp26; \
+    clang++ --version | head -1; conan --version; cmake --version | head -1; ninja --version

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: workspace
+description: Workspace stack — a dedicated agent (role presets) + workspace/playwright extensions + workspace-gateway + workspace-webui, sharing the infra release (NATS account `workspace`, S3, Forgejo, buildkitd, Selenium).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

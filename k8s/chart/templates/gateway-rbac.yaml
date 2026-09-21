@@ -1,0 +1,13 @@
+{{- if and .Values.gateway.enabled .Values.serviceAccount.create }}
+# The gateway's ServiceAccount lives in the workspace namespace. Its sandbox
+# RBAC (Role/RoleBinding in the `worker` namespace) is rendered SEPARATELY by
+# worker-rbac.yaml — a cross-namespace Helm release is not always possible when
+# the credentials are namespace-scoped (see README).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "workspace.saName" . }}
+  namespace: {{ include "workspace.namespace" . }}
+  labels:
+    {{- include "workspace.labels" . | nindent 4 }}
+{{- end }}

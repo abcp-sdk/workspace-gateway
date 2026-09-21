@@ -1,0 +1,229 @@
+syntax = "proto3";
+
+// easyworker: the sandbox worker contract (Connect RPC).
+//
+// Replaces the legacy worker-go WebSocket JSON-RPC surface (/ws + /ws/job SSE)
+// with the platform's standard Connect stack — same RPC semantics as the rest
+// of easylab-platform (agent.v1 / easylab.v1), dual-stack h1+h2c, codegen via
+// buf (buf.gen.worker.yaml mirrors buf.gen.easylab.yaml).
+//
+// Commands run through the BUILTIN shell (mvdan.cc/sh/v3 interp) on every
+// platform. There is NO passthrough to a host shell and NO fallback: the
+// builtin interpreter is the only executor, so bash semantics are identical
+// on linux/windows/macos (including scratch/distroless images, where no shell
+// exists at all). Windows batch wrappers (.cmd/.bat) are transparently
+// dispatched via cmd /c inside the interp ExecHandler; kills use Job Objects
+// (fallback taskkill /T).
+//
+// The worker is a PURE EXECUTOR: it knows nothing about repos/revs. Workspace
+// sync and rev coherence are owned by easylab, which keeps the
+// worker<->repo/branch mapping plus last_synced_rev in its own persistent
+// metadata and detects worker restarts via Info.boot_id. (CI mode needs no
+// gate either: checkout happens inside the job, like actions/checkout.)
+//
+// Job output history persists to sqlite (WORKER_DB; emptyDir in-cluster, so
+// everything is ephemeral to the pod) with a retention window (default 24h).
+//
+// Server: easyworker binary (also the binary injected into cluster sandboxes;
+// WORKER_PORT pins the listen port). Client: ext-ops (ops-extension).
+package worker.v1;
+
+option go_package = "github.com/abcp-sdk/workspace-gateway/gen/worker/v1;workerv1";
+
+// ---- capability ----
+
+message InfoRequest {}
+message InfoResponse {
+  string os = 1;        // runtime.GOOS
+  string arch = 2;      // runtime.GOARCH
+  string shell = 3;     // always "builtin(mvdan-sh)" — reported for the model
+  string workspace = 4; // absolute workspace root (default cwd for execute)
+  string boot_id = 5;   // per-process UUID: easylab compares it against the
+                        // boot_id recorded at sync time to detect worker
+                        // restarts and re-sync workspaces
+}
+
+// ---- jobs ----
+
+// Execute always registers a job (no fast/slow split, same as legacy worker).
+message ExecuteRequest {
+  string command = 1;
+  string workdir = 2; // relative to the workspace root
+  map<string, string> env = 3;
+}
+message ExecuteResponse { string job_id = 1; }
+
+message JobEntry {
+  string id = 1;
+  string command = 2;
+  string state = 3; // running | done | killed | failed
+  int32 exit_code = 4;
+  int64 started_at = 5;  // unix millis
+  int64 finished_at = 6; // unix millis, 0 while running
+}
+message ListJobsRequest {}
+message ListJobsResponse { repeated JobEntry jobs = 1; }
+
+// WatchJob is the Connect server-streaming replacement for the /ws/job SSE
+// endpoint: it replays buffered history first, then streams live output until
+// the job completes (or the watcher disconnects; the job itself keeps running).
+message WatchJobRequest { string job_id = 1; }
+message WatchJobResponse {
+  oneof event {
+    string output = 1; // job.output: incremental stdout chunk
+    Done done = 2;     // job.completed: terminal event, always sent last
+  }
+  message Done {
+    int32 exit_code = 1;
+    string stdout = 2; // tail
+    string stderr = 3; // tail
+  }
+}
+
+message JobOutputRequest {
+  string job_id = 1;
+  int32 start = 2;   // line index, negative counts from the end (-200 = last 200)
+  int32 end = 3;     // exclusive; 0 = through the end of buffer
+  string stream = 4; // all | stdout | stderr (default all)
+}
+message JobOutputResponse {
+  repeated string lines = 1;
+  int32 total_lines = 2;
+  int32 start_line = 3;
+  int32 end_line = 4;
+  bool done = 5;
+}
+
+// Wait blocks until the job completes or timeout_ms elapses. The worker caps
+// the wait at 60s (job_wait cap, matching the legacy contract; clients use a
+// 65s read timeout).
+message JobWaitRequest {
+  string job_id = 1;
+  int32 timeout_ms = 2;
+}
+message JobWaitResponse {
+  string state = 1;
+  int32 exit_code = 2;
+}
+
+message JobStdinRequest {
+  string job_id = 1;
+  bytes data = 2;
+  bool close = 3; // close the stdin pipe after writing
+}
+message JobStdinResponse { bool ok = 1; }
+
+message JobKillRequest { string job_id = 1; }
+message JobKillResponse { bool ok = 1; }
+
+// ---- files (binary-safe: content is bytes, no base64 hop) ----
+
+message FileReadRequest { string path = 1; }
+message FileReadResponse { bytes content = 1; }
+
+message FileWriteRequest {
+  string path = 1;
+  bytes content = 2;
+}
+message FileWriteResponse { bool ok = 1; }
+
+message FileEntry {
+  string path = 1;
+  int64 size = 2;
+  bool is_dir = 3;
+}
+message FileListRequest { string path = 1; }
+message FileListResponse {
+  bool is_dir = 1;
+  repeated FileEntry files = 2;
+}
+
+// ---- workspace sync (easylab -> worker) ----
+
+// SyncFolder unpacks a tarball of a directory tree into the worker's
+// workspace (the create/refresh path for sandbox + CI job workspaces). Every
+// entry is resolved under the workspace root (containment); `clean` empties
+// `dest` first. `rev` is advisory (recorded for idempotency/audit).
+message SyncFolderRequest {
+  bytes  tarball = 1;
+  string dest    = 2; // workspace-relative subdir; default "." (root)
+  bool   clean   = 3; // true = empty dest before unpacking
+  string rev     = 4; // optional revision id being synced
+}
+message SyncFolderResponse {
+  int32  files = 1;
+  string root  = 2; // the workspace root used
+}
+
+service WorkerService {
+  rpc Info(InfoRequest) returns (InfoResponse);
+  rpc Execute(ExecuteRequest) returns (ExecuteResponse);
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+  rpc WatchJob(WatchJobRequest) returns (stream WatchJobResponse);
+  rpc JobOutput(JobOutputRequest) returns (JobOutputResponse);
+  rpc JobWait(JobWaitRequest) returns (JobWaitResponse);
+  rpc JobStdin(JobStdinRequest) returns (JobStdinResponse);
+  rpc JobKill(JobKillRequest) returns (JobKillResponse);
+  rpc FileRead(FileReadRequest) returns (FileReadResponse);
+  rpc FileWrite(FileWriteRequest) returns (FileWriteResponse);
+  rpc FileList(FileListRequest) returns (FileListResponse);
+  rpc SyncFolder(SyncFolderRequest) returns (SyncFolderResponse);
+}
+
+// ---- exclusive enrollment ----
+//
+// A worker is fail-closed: until it has a bearer token it executes nothing.
+// Two ways to obtain one:
+//
+//   1. PreAuthorized — the launcher sets WORKER_TOKEN in the container/host
+//      env (per-sandbox unique). No claim happens; the enroll face never
+//      opens. This is the easyLab-managed sandbox path.
+//   2. Unclaimed — no WORKER_TOKEN: the worker mints a one-time code at boot
+//      and prints it to stdout. The first caller presenting that code claims
+//      the worker EXCLUSIVELY; the worker then issues a token and permanently
+//      closes the enroll face (a second claim → AlreadyExists). This is the
+//      externally-registered sandbox / host runner path (2B).
+//
+// The one-time code is never baked into an image and is destroyed on claim.
+// Restarting the worker returns it to Unclaimed with a fresh code.
+service WorkerEnroll {
+  // Status reports whether the worker still needs claiming (used by a
+  // controller to detect a restarted/unclaimed worker).
+  rpc Status(EnrollStatusRequest) returns (EnrollStatusResponse);
+  // Claim consumes the one-time code and installs the worker-issued bearer
+  // token. One winner per worker lifetime; subsequent calls → AlreadyExists.
+  rpc Claim(EnrollClaimRequest) returns (EnrollClaimResponse);
+  // Unrelease revokes the current token and returns the worker to Unclaimed
+  // with a FRESH one-time code. The released worker can then be claimed again
+  // by any caller holding the new code. Requires the CURRENT bearer token
+  // (only the current owner may release); pre-authorized (managed) workers
+  // cannot be released.
+  rpc Unrelease(EnrollUnreleaseRequest) returns (EnrollUnreleaseResponse);
+}
+
+message EnrollStatusRequest {}
+message EnrollStatusResponse {
+  bool claimed = 1;     // a token is installed (preauthorized or claimed)
+  bool needs_code = 2;  // true while Unclaimed (no WORKER_TOKEN, not yet claimed)
+  bool preauthorized = 3; // true when WORKER_TOKEN was supplied at boot
+  string boot_id = 4;
+}
+
+message EnrollClaimRequest {
+  string code = 1;     // one-time code printed by the worker at startup
+  string owner_id = 2; // optional caller identity, recorded for audit
+}
+message EnrollClaimResponse {
+  bool ok = 1;
+  string token = 2; // worker-issued bearer token for WorkerService
+}
+
+message EnrollUnreleaseRequest {
+  // owner_id identifies the releasing caller (audit). The caller must also
+  // present the current bearer token (the worker verifies it).
+  string owner_id = 1;
+}
+message EnrollUnreleaseResponse {
+  bool ok = 1;
+  string code = 2; // fresh one-time code (empty for pre-authorized workers)
+}

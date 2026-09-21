@@ -1,0 +1,106 @@
+# workspace-gateway: fronts the abc agent for the workspace webui.
+#
+# It is the ONLY trusted session-creation entry point (derives the role +
+# immutable preset) and provides read-only git browse + sandbox management.
+# Deployed in the agent namespace; talks to the agent (h2c) and Forgejo over
+# Service DNS, and manages easyworker sandboxes in the `worker` namespace
+# IN-PROCESS (the standalone worker-manager was folded in here).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workspace-gateway
+  labels: { app: workspace-gateway }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: workspace-gateway }
+  template:
+    metadata:
+      labels: { app: workspace-gateway }
+    spec:
+      serviceAccountName: workspace-gateway
+      containers:
+        - name: workspace-gateway
+          image: git.agent.fenjin.org/abcp/workspace-gateway:TAG
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: PORT, value: "8080" }
+            - { name: GATEWAY_DB, value: /data/workspace-gateway.db }
+            - { name: AGENT_URL, value: "http://standalone-agent:80" }
+            # Sandboxes are managed in this namespace, in-process.
+            - { name: SANDBOX_NAMESPACE, value: worker }
+            - { name: FORGEJO_URL, value: "http://git.agent.svc.cluster.local" }
+            - name: FORGEJO_TOKEN
+              valueFrom:
+                secretKeyRef: { name: workspace-gateway-forgejo, key: token }
+            # Shared service token the workspace extension presents for sandbox
+            # RPCs (it has no tenant bearer). CHANGE THIS.
+            - name: GATEWAY_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef: { name: workspace-gateway-service, key: token }
+            - { name: GATEWAY_SERVICE_TENANT, value: workspace-extension }
+            # Sandbox base images: any ref is accepted; these set the defaults.
+            - { name: IMAGE_REGISTRY_HOST, value: "git.agent.fenjin.org" }
+            - { name: TOOLCHAIN_ORG, value: agent-toolchain }
+            - { name: DEFAULT_BASE_IMAGE, value: "git.agent.fenjin.org/agent-toolchain/toolchain-base:debian-trixie" }
+            - { name: DERIVE_REPO, value: "root/sandbox" }
+            - { name: WORKER_BIN, value: /usr/local/lib/easyworker/easyworker }
+            # Runtime settings override (optional JSON; built-in defaults used otherwise).
+            - { name: WORKSPACE_RUNTIME, value: "" }
+            # Image builds (repo-build-image) + derive run buildctl against buildkitd.
+            - { name: BUILDKIT_ADDR, value: "tcp://buildkitd.agent.svc.cluster.local:1234" }
+            - { name: DOCKER_CONFIG, value: /home/user/.docker }
+            # The namespace injects http_proxy but NOT no_proxy; without this the
+            # gateway would proxy in-cluster Forgejo/agent and registry pushes.
+            - { name: NO_PROXY, value: "localhost,127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.svc.cluster.local,.svc,.fenjin.org,.nip.io,10.199.64.20" }
+            - { name: no_proxy, value: "localhost,127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.svc.cluster.local,.svc,.fenjin.org,.nip.io,10.199.64.20" }
+          ports:
+            - { containerPort: 8080, protocol: TCP }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          volumeMounts:
+            - { mountPath: /data, name: data }
+            - { mountPath: /home/user/.docker, name: docker-config, readOnly: true }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+      volumes:
+        - name: data
+          emptyDir: {}
+        # Registry push credentials for image builds (root creds).
+        - name: docker-config
+          secret: { secretName: buildkitd-docker-config }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: workspace-gateway
+  labels: { app: workspace-gateway }
+spec:
+  selector: { app: workspace-gateway }
+  ports:
+    - { name: http, port: 80, targetPort: 8080 }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: workspace-gateway-forgejo
+type: Opaque
+stringData:
+  # Shared Forgejo token. CHANGE THIS.
+  token: devpassword
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: workspace-gateway-service
+type: Opaque
+stringData:
+  # Shared service token for sandbox RPCs (workspace-extension -> gateway).
+  token: devservice-token

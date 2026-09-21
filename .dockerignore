@@ -1,0 +1,4 @@
+# Never send the 4 GB artifact cache as build context.
+images/cache
+# Local build logs / scratch.
+*.log

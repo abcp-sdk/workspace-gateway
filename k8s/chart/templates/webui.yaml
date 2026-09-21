@@ -1,0 +1,80 @@
+{{- if .Values.webui.enabled }}
+# Workspace webui: Caddy aggregator (static SPA + same-origin RPC). It proxies
+# /agent.v1.* and /workspace.v1.* to the workspace gateway over h2c.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workspace-webui
+  namespace: {{ include "workspace.namespace" . }}
+  labels:
+    {{- include "workspace.labels" . | nindent 4 }}
+    app: workspace-webui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: workspace-webui
+  template:
+    metadata:
+      labels:
+        {{- include "workspace.labels" . | nindent 8 }}
+        app: workspace-webui
+    spec:
+      containers:
+        - name: webui
+          image: {{ .Values.webui.image.repository }}:{{ .Values.webui.image.tag }}
+          imagePullPolicy: {{ .Values.webui.image.pullPolicy }}
+          env:
+            - name: GATEWAY_UPSTREAM
+              value: {{ include "workspace.gatewayUrl" . | quote }}
+          ports:
+            - { containerPort: {{ .Values.webui.port }}, protocol: TCP }
+          resources:
+            {{- toYaml .Values.webui.resources | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /healthz, port: {{ .Values.webui.port }} }
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: {{ .Values.webui.port }} }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.webui.service.name }}
+  namespace: {{ include "workspace.namespace" . }}
+  labels:
+    {{- include "workspace.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.webui.service.type }}
+  selector:
+    app: workspace-webui
+  ports:
+    - name: http
+      port: 80
+      targetPort: {{ .Values.webui.port }}
+{{- if .Values.webui.aliasService.enabled }}
+---
+# Alias Service with the FRIENDLY name: the cluster ingress convention routes
+# `<service>.<namespace>.agent.10.199.64.20.nip.io` to the Service of that
+# name, so this exposes the webui at
+#   https://workspace.agent.10.199.64.20.nip.io
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.webui.aliasService.name }}
+  namespace: {{ include "workspace.namespace" . }}
+  labels:
+    {{- include "workspace.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.webui.service.type }}
+  selector:
+    app: workspace-webui
+  ports:
+    - name: http
+      port: 80
+      targetPort: {{ .Values.webui.port }}
+{{- end }}
+{{- end }}

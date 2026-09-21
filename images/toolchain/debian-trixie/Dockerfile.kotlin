@@ -1,0 +1,11 @@
+# Toolchain image: Kotlin (+ Gradle, the standard Kotlin build tool).
+#
+# Extends the java toolchain: Kotlin's stdlib/compiler are JVM artifacts and
+# the JDK's cacerts is where the egress CA gets imported, so reusing the java
+# image covers trust and the JVM in one go. Gradle is already installed there.
+ARG BASE_IMAGE=toolchain-java:debian-trixie
+FROM ${BASE_IMAGE}
+COPY cache/kotlin-compiler-2.4.20.zip /tmp/kotlin.zip
+RUN unzip -q /tmp/kotlin.zip -d /opt && rm /tmp/kotlin.zip && ln -s /opt/kotlinc /opt/kotlin
+ENV PATH=/opt/kotlin/bin:$PATH
+RUN kotlinc -version
