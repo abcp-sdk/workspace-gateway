@@ -75,6 +75,9 @@ type Config struct {
 	DefaultProfile string
 	// Calibrations are force-set on their (resolved) tenants.
 	Calibrations []Calibration
+	// PresetCleanup removes retired system presets (direct KV delete; the
+	// agent refuses to delete system presets via its API).
+	PresetCleanup PresetCleanup
 	// Timeout bounds the whole run. Zero = 5 minutes.
 	Timeout time.Duration
 }
@@ -84,6 +87,8 @@ type Result struct {
 	Tenants      []string
 	Providers    int
 	Calibrations int
+	// PresetsRemoved counts retired system presets deleted from KV.
+	PresetsRemoved int
 	// Warnings are non-fatal (a single provider/knob that failed). The run
 	// keeps going so one bad tenant does not block the rest.
 	Warnings []string
@@ -239,6 +244,14 @@ func Run(ctx context.Context, cfg Config) (Result, error) {
 			}
 			res.Calibrations++
 		}
+	}
+
+	// Retired system presets: removed directly from the NATS KV bucket.
+	if n, warns, err := cfg.PresetCleanup.Run(ctx, res.Tenants); err != nil {
+		res.Warnings = append(res.Warnings, fmt.Sprintf("preset cleanup: %v", err))
+	} else {
+		res.PresetsRemoved = n
+		res.Warnings = append(res.Warnings, warns...)
 	}
 
 	return res, nil

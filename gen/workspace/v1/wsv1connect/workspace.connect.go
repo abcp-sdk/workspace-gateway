@@ -103,6 +103,12 @@ const (
 	// BranchSessionServiceEnsureRepoProcedure is the fully-qualified name of the BranchSessionService's
 	// EnsureRepo RPC.
 	BranchSessionServiceEnsureRepoProcedure = "/workspace.v1.BranchSessionService/EnsureRepo"
+	// BranchSessionServiceCreateOrgProcedure is the fully-qualified name of the BranchSessionService's
+	// CreateOrg RPC.
+	BranchSessionServiceCreateOrgProcedure = "/workspace.v1.BranchSessionService/CreateOrg"
+	// BranchSessionServiceListOrgsProcedure is the fully-qualified name of the BranchSessionService's
+	// ListOrgs RPC.
+	BranchSessionServiceListOrgsProcedure = "/workspace.v1.BranchSessionService/ListOrgs"
 	// BranchSessionServiceImportRepoProcedure is the fully-qualified name of the BranchSessionService's
 	// ImportRepo RPC.
 	BranchSessionServiceImportRepoProcedure = "/workspace.v1.BranchSessionService/ImportRepo"
@@ -305,6 +311,10 @@ type BranchSessionServiceClient interface {
 	GetCommit(context.Context, *connect.Request[v1.GetCommitRequest]) (*connect.Response[v1.GetCommitResponse], error)
 	CommitDiff(context.Context, *connect.Request[v1.CommitDiffRequest]) (*connect.Response[v1.DiffResponse], error)
 	EnsureRepo(context.Context, *connect.Request[v1.EnsureRepoRequest]) (*connect.Response[v1.EnsureRepoResponse], error)
+	// CreateOrg creates an org owned by the caller's tenant (admin).
+	CreateOrg(context.Context, *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error)
+	// ListOrgs lists the caller's tenant-owned orgs (incl. empty ones).
+	ListOrgs(context.Context, *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error)
 	// ImportRepo migrates an EXTERNAL git repository into an org (admin).
 	ImportRepo(context.Context, *connect.Request[v1.ImportRepoRequest]) (*connect.Response[v1.ImportRepoResponse], error)
 	// change requests (read-only in this surface: List/Get/diff/comments)
@@ -501,6 +511,18 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+BranchSessionServiceEnsureRepoProcedure,
 			connect.WithSchema(branchSessionServiceMethods.ByName("EnsureRepo")),
+			connect.WithClientOptions(opts...),
+		),
+		createOrg: connect.NewClient[v1.CreateOrgRequest, v1.CreateOrgResponse](
+			httpClient,
+			baseURL+BranchSessionServiceCreateOrgProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("CreateOrg")),
+			connect.WithClientOptions(opts...),
+		),
+		listOrgs: connect.NewClient[v1.ListOrgsRequest, v1.ListOrgsResponse](
+			httpClient,
+			baseURL+BranchSessionServiceListOrgsProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListOrgs")),
 			connect.WithClientOptions(opts...),
 		),
 		importRepo: connect.NewClient[v1.ImportRepoRequest, v1.ImportRepoResponse](
@@ -869,6 +891,8 @@ type branchSessionServiceClient struct {
 	getCommit            *connect.Client[v1.GetCommitRequest, v1.GetCommitResponse]
 	commitDiff           *connect.Client[v1.CommitDiffRequest, v1.DiffResponse]
 	ensureRepo           *connect.Client[v1.EnsureRepoRequest, v1.EnsureRepoResponse]
+	createOrg            *connect.Client[v1.CreateOrgRequest, v1.CreateOrgResponse]
+	listOrgs             *connect.Client[v1.ListOrgsRequest, v1.ListOrgsResponse]
 	importRepo           *connect.Client[v1.ImportRepoRequest, v1.ImportRepoResponse]
 	listMRs              *connect.Client[v1.ListMRsRequest, v1.ListMRsResponse]
 	getMR                *connect.Client[v1.GetMRRequest, v1.GetMRResponse]
@@ -1021,6 +1045,16 @@ func (c *branchSessionServiceClient) CommitDiff(ctx context.Context, req *connec
 // EnsureRepo calls workspace.v1.BranchSessionService.EnsureRepo.
 func (c *branchSessionServiceClient) EnsureRepo(ctx context.Context, req *connect.Request[v1.EnsureRepoRequest]) (*connect.Response[v1.EnsureRepoResponse], error) {
 	return c.ensureRepo.CallUnary(ctx, req)
+}
+
+// CreateOrg calls workspace.v1.BranchSessionService.CreateOrg.
+func (c *branchSessionServiceClient) CreateOrg(ctx context.Context, req *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error) {
+	return c.createOrg.CallUnary(ctx, req)
+}
+
+// ListOrgs calls workspace.v1.BranchSessionService.ListOrgs.
+func (c *branchSessionServiceClient) ListOrgs(ctx context.Context, req *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error) {
+	return c.listOrgs.CallUnary(ctx, req)
 }
 
 // ImportRepo calls workspace.v1.BranchSessionService.ImportRepo.
@@ -1338,6 +1372,10 @@ type BranchSessionServiceHandler interface {
 	GetCommit(context.Context, *connect.Request[v1.GetCommitRequest]) (*connect.Response[v1.GetCommitResponse], error)
 	CommitDiff(context.Context, *connect.Request[v1.CommitDiffRequest]) (*connect.Response[v1.DiffResponse], error)
 	EnsureRepo(context.Context, *connect.Request[v1.EnsureRepoRequest]) (*connect.Response[v1.EnsureRepoResponse], error)
+	// CreateOrg creates an org owned by the caller's tenant (admin).
+	CreateOrg(context.Context, *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error)
+	// ListOrgs lists the caller's tenant-owned orgs (incl. empty ones).
+	ListOrgs(context.Context, *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error)
 	// ImportRepo migrates an EXTERNAL git repository into an org (admin).
 	ImportRepo(context.Context, *connect.Request[v1.ImportRepoRequest]) (*connect.Response[v1.ImportRepoResponse], error)
 	// change requests (read-only in this surface: List/Get/diff/comments)
@@ -1530,6 +1568,18 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		BranchSessionServiceEnsureRepoProcedure,
 		svc.EnsureRepo,
 		connect.WithSchema(branchSessionServiceMethods.ByName("EnsureRepo")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceCreateOrgHandler := connect.NewUnaryHandler(
+		BranchSessionServiceCreateOrgProcedure,
+		svc.CreateOrg,
+		connect.WithSchema(branchSessionServiceMethods.ByName("CreateOrg")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceListOrgsHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListOrgsProcedure,
+		svc.ListOrgs,
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListOrgs")),
 		connect.WithHandlerOptions(opts...),
 	)
 	branchSessionServiceImportRepoHandler := connect.NewUnaryHandler(
@@ -1914,6 +1964,10 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceCommitDiffHandler.ServeHTTP(w, r)
 		case BranchSessionServiceEnsureRepoProcedure:
 			branchSessionServiceEnsureRepoHandler.ServeHTTP(w, r)
+		case BranchSessionServiceCreateOrgProcedure:
+			branchSessionServiceCreateOrgHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListOrgsProcedure:
+			branchSessionServiceListOrgsHandler.ServeHTTP(w, r)
 		case BranchSessionServiceImportRepoProcedure:
 			branchSessionServiceImportRepoHandler.ServeHTTP(w, r)
 		case BranchSessionServiceListMRsProcedure:
@@ -2111,6 +2165,14 @@ func (UnimplementedBranchSessionServiceHandler) CommitDiff(context.Context, *con
 
 func (UnimplementedBranchSessionServiceHandler) EnsureRepo(context.Context, *connect.Request[v1.EnsureRepoRequest]) (*connect.Response[v1.EnsureRepoResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.EnsureRepo is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) CreateOrg(context.Context, *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CreateOrg is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) ListOrgs(context.Context, *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListOrgs is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) ImportRepo(context.Context, *connect.Request[v1.ImportRepoRequest]) (*connect.Response[v1.ImportRepoResponse], error) {

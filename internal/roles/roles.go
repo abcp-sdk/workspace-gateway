@@ -7,7 +7,6 @@
 //	admin                -> create org/repo, read-only, NO sandbox
 //	org:repo:main        -> maintainer (read, review/merge MRs, branch+dispatch, sandbox)
 //	org:repo:<other>     -> developer  (write its branch, propose MRs, sandbox)
-//	<free> role=planner  -> planner    (read all visible repos + sandbox)
 //	<free> role=explorer -> explorer   (read all visible repos only)
 //
 // RULE: the `main` branch can ONLY change by merging an MR. A maintainer
@@ -29,7 +28,6 @@ const (
 	Admin      Role = "admin"
 	Maintainer Role = "maintainer"
 	Developer  Role = "developer"
-	Planner    Role = "planner"
 	Explorer   Role = "explorer"
 )
 
@@ -106,9 +104,6 @@ func ToolsFor(r Role) []string {
 	case Developer:
 		// Work on its branch (incl. sandbox-port), propose MRs, sandbox.
 		return concat(generalTools, repoReadTools, repoProposeTools, sandboxBase, []string{"sandbox-port"})
-	case Planner:
-		// Read every visible repo + experiment in a sandbox (no git write).
-		return concat(generalTools, repoReadTools, sandboxBase)
 	case Explorer:
 		// Read every visible repo only; no sandbox, no writes.
 		return concat(generalTools, repoReadTools)
@@ -182,7 +177,7 @@ func RoleForBranch(branch string) Role {
 // ValidRole reports whether s is a known role id.
 func ValidRole(s string) bool {
 	switch Role(s) {
-	case Admin, Maintainer, Developer, Planner, Explorer:
+	case Admin, Maintainer, Developer, Explorer:
 		return true
 	}
 	return false

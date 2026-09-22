@@ -171,14 +171,20 @@ func runProvision(agentURL string) {
 	}
 	_ = json.Unmarshal([]byte(envOr("PROVISION_CALIBRATIONS", "[]")), &cfg.Calibrations)
 	_ = json.Unmarshal([]byte(envOr("PROVISION_TENANT_PROFILE", "{}")), &cfg.TenantProfile)
+	if raw := os.Getenv("PROVISION_RETIRED_PRESETS"); raw != "" {
+		var ids []string
+		if err := json.Unmarshal([]byte(raw), &ids); err == nil {
+			cfg.PresetCleanup = provision.PresetCleanup{NATSURL: os.Getenv("NATS_URL"), Tenant: "*", Presets: ids}
+		}
+	}
 
 	res, err := provision.Run(context.Background(), cfg)
 	if err != nil {
 		log.Printf("warn: provision: %v", err)
 		return
 	}
-	log.Printf("provision: tenants=%v providers=%d calibrations=%d warnings=%d",
-		res.Tenants, res.Providers, res.Calibrations, len(res.Warnings))
+	log.Printf("provision: tenants=%v providers=%d calibrations=%d presets_removed=%d warnings=%d",
+		res.Tenants, res.Providers, res.Calibrations, res.PresetsRemoved, len(res.Warnings))
 	for _, w := range res.Warnings {
 		log.Printf("warn: provision: %s", w)
 	}

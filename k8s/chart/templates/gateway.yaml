@@ -47,6 +47,9 @@ spec:
             {{- if .Values.gateway.provision.enabled }}
             - { name: PROVISION_ON_BOOT, value: "true" }
             - { name: PROVISION_DEFAULT_PROFILE, value: {{ .Values.gateway.provision.defaultProfile | quote }} }
+            - { name: NATS_URL, value: {{ include "workspace.natsUrl" . | quote }} }
+            - name: PROVISION_RETIRED_PRESETS
+              value: {{ .Values.gateway.provision.retiredPresets | toJson | quote }}
             - name: PROVISION_TENANT_PROFILE
               value: {{ .Values.gateway.provision.tenantProfile | toJson | quote }}
             - name: PROVISION_CALIBRATIONS

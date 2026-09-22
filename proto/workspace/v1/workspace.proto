@@ -68,11 +68,11 @@ message ForkBranchSessionRequest {
 }
 message ForkBranchSessionResponse { BranchSession branch_session = 1; }
 
-// ---- standalone (free) sessions: planner / explorer ----
+// ---- standalone (free) sessions: admin / explorer ----
 
 message CreateFreeSessionRequest {
   string name = 1;
-  string role = 2; // planner | explorer
+  string role = 2; // admin | explorer
   string model = 3;
 }
 message CreateFreeSessionResponse { string session = 1; string preset = 2; }
@@ -245,6 +245,18 @@ message EnsureRepoRequest {
   string repo = 2;
 }
 message EnsureRepoResponse { bool created = 1; }
+
+// CreateOrg creates an organization owned by the caller's tenant (idempotent:
+// an org already owned is returned unchanged). Admin action.
+message CreateOrgRequest {
+  string org = 1;
+}
+message CreateOrgResponse { string org = 1; }
+
+// ListOrgs lists the orgs the caller's tenant owns (including empty ones, which
+// ListRepos cannot surface).
+message ListOrgsRequest {}
+message ListOrgsResponse { repeated string orgs = 1; }
 
 // ImportRepo migrates an EXTERNAL git repository into `org` (the tenant must own
 // it). Forgejo clones the FULL repository; when `ref` is given that ref becomes
@@ -594,6 +606,10 @@ service BranchSessionService {
   rpc GetCommit(GetCommitRequest) returns (GetCommitResponse);
   rpc CommitDiff(CommitDiffRequest) returns (DiffResponse);
   rpc EnsureRepo(EnsureRepoRequest) returns (EnsureRepoResponse);
+  // CreateOrg creates an org owned by the caller's tenant (admin).
+  rpc CreateOrg(CreateOrgRequest) returns (CreateOrgResponse);
+  // ListOrgs lists the caller's tenant-owned orgs (incl. empty ones).
+  rpc ListOrgs(ListOrgsRequest) returns (ListOrgsResponse);
   // ImportRepo migrates an EXTERNAL git repository into an org (admin).
   rpc ImportRepo(ImportRepoRequest) returns (ImportRepoResponse);
   // change requests (read-only in this surface: List/Get/diff/comments)

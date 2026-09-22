@@ -58,11 +58,7 @@ func TestDeveloperProposesNotMerges(t *testing.T) {
 	}
 }
 
-func TestPlannerAndExplorer(t *testing.T) {
-	p := ToolsFor(Planner)
-	if !has(p, "sandbox-exec") || has(p, "sandbox-port") || has(p, "repo-write") {
-		t.Fatal("planner: sandbox yes, git write no")
-	}
+func TestExplorer(t *testing.T) {
 	e := ToolsFor(Explorer)
 	if has(e, "sandbox-exec") || has(e, "repo-write") {
 		t.Fatal("explorer: no sandbox, no write")
@@ -95,7 +91,7 @@ func TestParseSession(t *testing.T) {
 }
 
 func TestNoToolsNeverEmpty(t *testing.T) {
-	for _, r := range []Role{Admin, Maintainer, Developer, Planner, Explorer} {
+	for _, r := range []Role{Admin, Maintainer, Developer, Explorer} {
 		if len(ToolsFor(r)) == 0 {
 			t.Fatalf("%s tools must not be empty (empty == all)", r)
 		}

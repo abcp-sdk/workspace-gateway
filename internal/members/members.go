@@ -126,7 +126,7 @@ func (s *Store) ListRepos(tenant string) ([][2]string, error) {
 	return out, rows.Err()
 }
 
-// AddFreeSession records a standalone session's role (planner/explorer).
+// AddFreeSession records a standalone session's role (admin/explorer).
 func (s *Store) AddFreeSession(tenant, session, role string) error {
 	_, err := s.db.Exec(
 		`INSERT OR REPLACE INTO free_sessions (tenant, session, role) VALUES (?,?,?)`,

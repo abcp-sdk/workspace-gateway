@@ -19,7 +19,7 @@ func TestAllPresetsValid(t *testing.T) {
 		}
 		ids[p.ID] = true
 	}
-	for _, want := range []string{"admin", "maintainer", "developer", "planner", "explorer"} {
+	for _, want := range []string{"admin", "maintainer", "developer", "explorer"} {
 		if !ids[want] {
 			t.Fatalf("missing preset %s", want)
 		}

@@ -318,18 +318,17 @@ func (s *Service) ForkBranchSession(ctx context.Context, req *connect.Request[ws
 }
 
 // CreateFreeSession creates a standalone (non-repo-bound) session. Free
-// sessions carry a tenant-scoped role: admin (manage org/repo), planner
-// (read + sandbox) or explorer (read-only). Any number of each may exist; the
-// role decides what the session may DO, never what it may SEE (visibility is
-// the tenant).
+// sessions carry a tenant-scoped role: admin (manage org/repo) or explorer
+// (read-only). Any number of each may exist; the role decides what the session
+// may DO, never what it may SEE (visibility is the tenant).
 func (s *Service) CreateFreeSession(ctx context.Context, req *connect.Request[wsv1.CreateFreeSessionRequest]) (*connect.Response[wsv1.CreateFreeSessionResponse], error) {
 	tenant, err := s.resolveTenant(ctx, req.Header())
 	if err != nil {
 		return nil, err
 	}
 	role := roles.Role(req.Msg.GetRole())
-	if role != roles.Admin && role != roles.Planner && role != roles.Explorer {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("role must be admin|planner|explorer"))
+	if role != roles.Admin && role != roles.Explorer {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("role must be admin|explorer"))
 	}
 	name := req.Msg.GetName()
 	if name == "" || !roles.ValidComponent(name) {
@@ -804,6 +803,40 @@ func (s *Service) EnsureRepo(ctx context.Context, req *connect.Request[wsv1.Ensu
 	// 1:1). Idempotent: a re-ensure leaves an existing session untouched.
 	s.ensureMainSession(ctx, req.Header(), org, repo)
 	return connect.NewResponse(&wsv1.EnsureRepoResponse{Created: created}), nil
+}
+
+// CreateOrg creates an organization owned by the caller's tenant (idempotent:
+// an org already owned is returned unchanged). Admin action.
+func (s *Service) CreateOrg(ctx context.Context, req *connect.Request[wsv1.CreateOrgRequest]) (*connect.Response[wsv1.CreateOrgResponse], error) {
+	tenant, err := s.resolveTenant(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireAdmin(tenant); err != nil {
+		return nil, err
+	}
+	org := req.Msg.GetOrg()
+	if !roles.ValidComponent(org) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org must be a simple name"))
+	}
+	if err := s.claimOrg(ctx, tenant, org); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&wsv1.CreateOrgResponse{Org: org}), nil
+}
+
+// ListOrgs lists the caller's tenant-owned orgs (including empty ones, which
+// ListRepos cannot surface).
+func (s *Service) ListOrgs(ctx context.Context, req *connect.Request[wsv1.ListOrgsRequest]) (*connect.Response[wsv1.ListOrgsResponse], error) {
+	tenant, err := s.resolveTenant(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	orgs, err := s.members.ListOrgs(tenant)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.ListOrgsResponse{Orgs: orgs}), nil
 }
 
 // ensureMainSession idempotently creates the `org:repo:main` session bound to

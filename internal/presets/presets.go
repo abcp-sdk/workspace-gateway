@@ -66,18 +66,6 @@ func All() []Entry {
 			MaxTurns: 50,
 		},
 		{
-			ID: "planner",
-			SystemPrompt: "You are a planner with no repository of your own. You may " +
-				"read any repository you can see and experiment freely in a sandbox. " +
-				"You cannot write to any repository.",
-			SystemPromptI18n: i18n(
-				"You are a planner with no repository of your own. You may read any repository you can see and experiment freely in a sandbox. You cannot write to any repository.",
-				"你是规划者，没有自己的仓库。你可以读取你能看到的任何仓库，并在沙箱中自由试验。你不能写入任何仓库。",
-			),
-			Tools:    roles.ToolsFor(roles.Planner),
-			MaxTurns: 50,
-		},
-		{
 			ID: "explorer",
 			SystemPrompt: "You are a read-only explorer. You may read any repository " +
 				"you can see. You have no sandbox and cannot write anything.",
