@@ -29,10 +29,7 @@ spec:
               value: {{ include "workspace.natsUrl" . | quote }}
             - name: PORT
               value: "8080"
-            - name: NO_PROXY
-              value: {{ include "workspace.noProxy" . | quote }}
-            - name: no_proxy
-              value: {{ include "workspace.noProxy" . | quote }}
+            {{- include "workspace.egressProxyEnv" . | nindent 12 }}
           ports:
             - { containerPort: 8080, protocol: TCP }
           resources:

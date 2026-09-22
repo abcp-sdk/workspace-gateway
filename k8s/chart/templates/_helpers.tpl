@@ -58,3 +58,23 @@ default
 {{- define "workspace.noProxy" -}}
 localhost,127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.svc.cluster.local,.svc,.fenjin.org,.nip.io,10.199.64.20
 {{- end -}}
+
+{{/* Outbound egress proxy env for a Node process. `NODE_USE_ENV_PROXY=1` makes
+     Node's built-in fetch honor HTTP(S)_PROXY (Node 24+); the bundled
+     web-fetch / brave-search tools run IN the agent process and rely on it. */}}
+{{- define "workspace.egressProxyEnv" -}}
+- name: NODE_USE_ENV_PROXY
+  value: "1"
+- name: http_proxy
+  value: {{ .Values.infra.proxy.http | quote }}
+- name: https_proxy
+  value: {{ .Values.infra.proxy.https | quote }}
+- name: HTTP_PROXY
+  value: {{ .Values.infra.proxy.http | quote }}
+- name: HTTPS_PROXY
+  value: {{ .Values.infra.proxy.https | quote }}
+- name: no_proxy
+  value: {{ include "workspace.noProxy" . | quote }}
+- name: NO_PROXY
+  value: {{ include "workspace.noProxy" . | quote }}
+{{- end -}}

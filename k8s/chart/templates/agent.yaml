@@ -64,6 +64,7 @@ spec:
                 (dict "tenant" .Values.playwright.seedTenant "extId" "playwright" "name" "selenium-url" "value" .Values.infra.seleniumUrl)
                 | toJson | quote }}
             {{- include "workspace.objectStoreEnv" . | nindent 12 }}
+            {{- include "workspace.egressProxyEnv" . | nindent 12 }}
           ports:
             - { containerPort: {{ .Values.agent.port }}, protocol: TCP }
           resources:

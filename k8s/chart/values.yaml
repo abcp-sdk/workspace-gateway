@@ -3,7 +3,7 @@
 # This chart deploys a SELF-CONTAINED workspace stack, separate from the
 # standalone agent chart:
 #   - `workspace-agent` Pod: a dedicated agent (h2c) whose role presets
-#     (admin/maintainer/developer/planner/explorer) come from SYSTEM_PRESETS_FILE
+#     (admin/maintainer/developer/explorer) come from SYSTEM_PRESETS_FILE
 #     and whose tenants are bootstrapped for the workspace model.
 #   - `workspace-extension` Pod: sandbox-*/repo-* tools (NATS only).
 #   - `playwright-extension` Pod: browser tool server (drives infra Selenium).
@@ -42,6 +42,12 @@ infra:
   buildkit:
     addr: "tcp://buildkitd.agent.svc.cluster.local:1234"
   seleniumUrl: "http://selenium.agent.svc.cluster.local:4444"
+  # Outbound HTTP(S) proxy (infra mihomo). The workspace-agent loads the
+  # bundled web-fetch / brave-search tools IN-PROCESS, so its Node fetch must
+  # egress through this proxy (NODE_USE_ENV_PROXY=1 makes Node honor it).
+  proxy:
+    http: "http://mihomo.develop.svc.cluster.local:7890"
+    https: "http://mihomo.develop.svc.cluster.local:7890"
   # Registry host + toolchain org surfaced by list-oci-images.
   registry:
     host: "git.agent.fenjin.org"
@@ -81,7 +87,7 @@ workspaceExtension:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/workspace-extension
-    tag: "20260922043301"
+    tag: "20260922082349"
     pullPolicy: IfNotPresent
   # Tenant seeded with the gateway/forgejo defaults. `"*"` = every tenant.
   seedTenant: "*"
@@ -109,7 +115,7 @@ gateway:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/workspace-gateway
-    tag: "20260922051508"
+    tag: "20260922083902"
     pullPolicy: IfNotPresent
   # Namespace the sandbox/service backend manages, and where its RBAC lands.
   sandbox:
@@ -157,7 +163,8 @@ gateway:
     defaultBaseImage: "git.agent.fenjin.org/agent-toolchain/toolchain-base:debian-trixie"
     deriveRepo: "root/sandbox"
     workerBin: "/usr/local/lib/easyworker/easyworker"
-  # Optional JSON overriding KVM/GPU device names + KVM security context.
+  # Optional JSON overriding KVM/GPU device names, the GPU RuntimeClass (needed
+  # for /dev/nvidia* to appear), and the KVM security context.
   runtime: ""
   resources:
     requests: { cpu: 50m, memory: 64Mi }
@@ -174,7 +181,7 @@ webui:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/workspace-webui
-    tag: "20260922054015"
+    tag: "20260922074803"
     pullPolicy: IfNotPresent
   port: 8080
   service:
