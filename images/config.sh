@@ -25,7 +25,7 @@ case "$DISTRO" in
   *) echo "workspace toolchain images currently support DISTRO=debian-trixie only" >&2; exit 1 ;;
 esac
 
-REGISTRY="${REGISTRY:-git.agent.fenjin.org}"
+REGISTRY="${REGISTRY:-git.agent.svc.cluster.local}"
 # The toolchain base images live under a dedicated org namespace so the
 # gateway's list-oci-images default (agent-toolchain) finds them.
 NAMESPACE="${NAMESPACE:-agent-toolchain}"

@@ -5,7 +5,7 @@
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-REGISTRY="${REGISTRY:-git.agent.fenjin.org}"
+REGISTRY="${REGISTRY:-git.agent.svc.cluster.local}"
 NAMESPACE="${NAMESPACE:-abcp}"
 NAME="${NAME:-workspace-gateway}"
 TAG="${TAG:-$(date +%Y%m%d%H%M%S)}"
