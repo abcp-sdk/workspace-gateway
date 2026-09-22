@@ -56,8 +56,6 @@ spec:
               value: {{ list
                 (dict "tenant" "*" "extId" "workspace" "name" "gateway-url" "value" (printf "http://workspace-gateway.%s.svc.cluster.local:80" (include "workspace.namespace" .)))
                 (dict "tenant" "*" "extId" "workspace" "name" "gateway-token" "value" .Values.gateway.serviceToken.token)
-                (dict "tenant" "*" "extId" "workspace" "name" "forgejo-url" "value" .Values.infra.forgejo.url)
-                (dict "tenant" "*" "extId" "workspace" "name" "forgejo-token" "value" .Values.gateway.forgejo.token)
                 (dict "tenant" "*" "extId" "playwright" "name" "selenium-url" "value" .Values.infra.seleniumUrl)
                 | toJson | quote }}
             {{- end }}

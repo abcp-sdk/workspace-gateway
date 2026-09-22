@@ -81,7 +81,7 @@ workspaceExtension:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/workspace-extension
-    tag: "20260922042339"
+    tag: "20260922043301"
     pullPolicy: IfNotPresent
   # Tenant seeded with the gateway/forgejo defaults. `"*"` = every tenant.
   seedTenant: "*"
