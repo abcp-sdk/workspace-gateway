@@ -21,7 +21,7 @@ spec:
       serviceAccountName: workspace-gateway
       containers:
         - name: workspace-gateway
-          image: git.agent.fenjin.org/abcp/workspace-gateway:TAG
+          image: git.agent.svc.cluster.local/abcp/workspace-gateway:TAG
           imagePullPolicy: IfNotPresent
           env:
             - { name: PORT, value: "8080" }
@@ -40,9 +40,9 @@ spec:
                 secretKeyRef: { name: workspace-gateway-service, key: token }
             - { name: GATEWAY_SERVICE_TENANT, value: workspace-extension }
             # Sandbox base images: any ref is accepted; these set the defaults.
-            - { name: IMAGE_REGISTRY_HOST, value: "git.agent.fenjin.org" }
+            - { name: IMAGE_REGISTRY_HOST, value: "git.agent.svc.cluster.local" }
             - { name: TOOLCHAIN_ORG, value: agent-toolchain }
-            - { name: DEFAULT_BASE_IMAGE, value: "git.agent.fenjin.org/agent-toolchain/toolchain-base:debian-trixie" }
+            - { name: DEFAULT_BASE_IMAGE, value: "git.agent.svc.cluster.local/agent-toolchain/toolchain-base:debian-trixie" }
             - { name: DERIVE_REPO, value: "root/sandbox" }
             - { name: WORKER_BIN, value: /usr/local/lib/easyworker/easyworker }
             # Runtime settings override (optional JSON; built-in defaults used otherwise).
