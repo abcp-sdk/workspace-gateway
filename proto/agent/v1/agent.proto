@@ -58,6 +58,14 @@ message Message {
   string prev_id = 3;
   string created_at = 4;
   repeated Part parts = 5;
+  // ORIGIN of the message, when known. Empty for assistant/system rows the
+  // agent authored itself. A user message carries the mailbox source it was
+  // delivered with:
+  //   `user`               — a human prompt (HTTP Prompt route)
+  //   `session:{session}`  — another session (subsession-create / mail-send)
+  //   `system:{name}`      — a system/automation source
+  //   other                — extension-defined; clients degrade gracefully
+  string source = 6;
 }
 
 // A tool/text part body. `data` is the JSON/plain payload.

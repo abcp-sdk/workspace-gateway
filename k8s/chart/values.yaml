@@ -109,7 +109,7 @@ gateway:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/workspace-gateway
-    tag: "20260922042059"
+    tag: "20260922051508"
     pullPolicy: IfNotPresent
   # Namespace the sandbox/service backend manages, and where its RBAC lands.
   sandbox:
@@ -174,7 +174,7 @@ webui:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/workspace-webui
-    tag: "20260922034649"
+    tag: "20260922054015"
     pullPolicy: IfNotPresent
   port: 8080
   service:

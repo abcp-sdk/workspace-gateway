@@ -271,12 +271,21 @@ func (x *Session) GetGroup() string {
 
 // Message row (bare).
 type Message struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Role          string                 `protobuf:"bytes,2,opt,name=role,proto3" json:"role,omitempty"`
-	PrevId        string                 `protobuf:"bytes,3,opt,name=prev_id,json=prevId,proto3" json:"prev_id,omitempty"`
-	CreatedAt     string                 `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	Parts         []*Part                `protobuf:"bytes,5,rep,name=parts,proto3" json:"parts,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Id        string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Role      string                 `protobuf:"bytes,2,opt,name=role,proto3" json:"role,omitempty"`
+	PrevId    string                 `protobuf:"bytes,3,opt,name=prev_id,json=prevId,proto3" json:"prev_id,omitempty"`
+	CreatedAt string                 `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Parts     []*Part                `protobuf:"bytes,5,rep,name=parts,proto3" json:"parts,omitempty"`
+	// ORIGIN of the message, when known. Empty for assistant/system rows the
+	// agent authored itself. A user message carries the mailbox source it was
+	// delivered with:
+	//
+	//	`user`               — a human prompt (HTTP Prompt route)
+	//	`session:{session}`  — another session (subsession-create / mail-send)
+	//	`system:{name}`      — a system/automation source
+	//	other                — extension-defined; clients degrade gracefully
+	Source        string `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -344,6 +353,13 @@ func (x *Message) GetParts() []*Part {
 		return x.Parts
 	}
 	return nil
+}
+
+func (x *Message) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
 }
 
 // A tool/text part body. `data` is the JSON/plain payload.
@@ -6421,14 +6437,15 @@ const file_agent_v1_agent_proto_rawDesc = "" +
 	"\avariant\x18\x16 \x01(\tR\avariant\x12\x1f\n" +
 	"\vmessage_seq\x18\x17 \x01(\x05R\n" +
 	"messageSeq\x12\x14\n" +
-	"\x05group\x18\x18 \x01(\tR\x05group\"\x8b\x01\n" +
+	"\x05group\x18\x18 \x01(\tR\x05group\"\xa3\x01\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04role\x18\x02 \x01(\tR\x04role\x12\x17\n" +
 	"\aprev_id\x18\x03 \x01(\tR\x06prevId\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x04 \x01(\tR\tcreatedAt\x12$\n" +
-	"\x05parts\x18\x05 \x03(\v2\x0e.agent.v1.PartR\x05parts\"o\n" +
+	"\x05parts\x18\x05 \x03(\v2\x0e.agent.v1.PartR\x05parts\x12\x16\n" +
+	"\x06source\x18\x06 \x01(\tR\x06source\"o\n" +
 	"\x04Part\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
