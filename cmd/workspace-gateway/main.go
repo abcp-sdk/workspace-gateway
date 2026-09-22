@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -24,6 +25,7 @@ import (
 	"github.com/abcp-sdk/workspace-gateway/internal/forgejo"
 	"github.com/abcp-sdk/workspace-gateway/internal/imagebuild"
 	"github.com/abcp-sdk/workspace-gateway/internal/members"
+	"github.com/abcp-sdk/workspace-gateway/internal/provision"
 	"github.com/abcp-sdk/workspace-gateway/internal/runtimeprofiles"
 	"github.com/abcp-sdk/workspace-gateway/internal/sandboxmgr"
 	"github.com/abcp-sdk/workspace-gateway/internal/sandboxreaper"
@@ -97,6 +99,15 @@ func main() {
 		ServiceToken: os.Getenv("GATEWAY_SERVICE_TOKEN"),
 		AdminToken:   os.Getenv("AGENT_ADMIN_TOKEN"),
 	})
+
+	// Converge the agent to the deployment's expected state (idempotent):
+	// per-tenant providers + force-set deployment-owned extension config. It
+	// runs in the background so a slow/absent agent never blocks serving; a
+	// failure is logged and retried on the next boot. Disable with
+	// PROVISION_ON_BOOT=false.
+	if envOr("PROVISION_ON_BOOT", "true") == "true" && os.Getenv("AGENT_ADMIN_TOKEN") != "" {
+		go runProvision(agentURL)
+	}
 	svc := workspacesvc.New(workspacesvc.Deps{
 		Agent:    ac.Raw(),
 		Members:  store,
@@ -148,4 +159,27 @@ func main() {
 	}
 	log.Printf("workspace-gateway listening on %s (agent=%s forgejo=%s sandbox-ns=%s)", listen, agentURL, gitURL, sandboxNS)
 	log.Fatal(srv.ListenAndServe())
+}
+
+// runProvision converges the agent (providers + deployment-owned config).
+// Idempotent; failures are logged, never fatal (the agent may not be up yet).
+func runProvision(agentURL string) {
+	cfg := provision.Config{
+		AgentURL:       agentURL,
+		AdminToken:     os.Getenv("AGENT_ADMIN_TOKEN"),
+		DefaultProfile: envOr("PROVISION_DEFAULT_PROFILE", "std"),
+	}
+	_ = json.Unmarshal([]byte(envOr("PROVISION_CALIBRATIONS", "[]")), &cfg.Calibrations)
+	_ = json.Unmarshal([]byte(envOr("PROVISION_TENANT_PROFILE", "{}")), &cfg.TenantProfile)
+
+	res, err := provision.Run(context.Background(), cfg)
+	if err != nil {
+		log.Printf("warn: provision: %v", err)
+		return
+	}
+	log.Printf("provision: tenants=%v providers=%d calibrations=%d warnings=%d",
+		res.Tenants, res.Providers, res.Calibrations, len(res.Warnings))
+	for _, w := range res.Warnings {
+		log.Printf("warn: provision: %s", w)
+	}
 }

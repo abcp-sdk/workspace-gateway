@@ -109,7 +109,7 @@ gateway:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/workspace-gateway
-    tag: "20260921170417"
+    tag: "20260922023852"
     pullPolicy: IfNotPresent
   # Namespace the sandbox/service backend manages, and where its RBAC lands.
   sandbox:
@@ -132,6 +132,20 @@ gateway:
   # a tenant token on behalf of the extension's service token. Defaults to the
   # agent's own admin token when unset.
   agentAdminToken: ""
+  # On boot the gateway CONVERGES the agent (idempotent): it (a) seeds every
+  # tenant with the platform providers so sessions can run, and (b) FORCE-sets
+  # the deployment-owned extension config below. Force-set matters because the
+  # agent seeds config create-if-absent, so a stale value otherwise wins over
+  # the chart forever. The template builds the calibration list from the same
+  # values the agent's seed uses.
+  provision:
+    enabled: true
+    # tenant override -> profile name. Tenants not listed use `defaultProfile`.
+    # `full` = the dev004 gateway (includes local/* models); `std` = the gray
+    # gateway (no local/*).
+    tenantProfile:
+      myuser: full
+    defaultProfile: std
   # Forgejo shared token (repo tools + EnsureRepo/protect). API writes need a
   # real PAT (basic auth is read-only); this is the dev PAT for root.
   forgejo:
