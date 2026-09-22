@@ -48,6 +48,7 @@ type RepoInfo struct {
 	Repo          string `json:"repo"`
 	DefaultBranch string `json:"default_branch"`
 	Private       bool   `json:"private"`
+	Empty         bool   `json:"empty"`
 }
 
 // TreeEntry is one file/dir in a tree.
@@ -151,6 +152,7 @@ func (c *Client) GetRepo(ctx context.Context, org, repo string) (RepoInfo, error
 		Repo:          repo,
 		DefaultBranch: str(raw["default_branch"]),
 		Private:       boolv(raw["private"]),
+		Empty:         boolv(raw["empty"]),
 	}, nil
 }
 
@@ -903,6 +905,149 @@ func (c *Client) ListRepos(ctx context.Context) ([]RepoInfo, error) {
 		})
 	}
 	return out, nil
+}
+
+// ---- tenant-scoped repo operations (used by the workspace extension via the
+// gateway, replacing the extension's direct Forgejo calls) ----
+
+// ContentEntry is one file/dir in a contents listing.
+type ContentEntry struct {
+	Path string
+	Name string
+	Type string // file | dir | symlink | submodule
+	Size int64
+	SHA  string
+}
+
+// Contents reads a file (UTF-8 text + blob sha) or lists a directory at ref.
+// ref empty = the repository default branch. isDir distinguishes the two.
+func (c *Client) Contents(ctx context.Context, org, repo, ref, path string) (isDir bool, text, sha string, size int64, entries []ContentEntry, err error) {
+	q := url.Values{}
+	if ref != "" {
+		q.Set("ref", ref)
+	}
+	var raw any
+	if err = c.do(ctx, "GET", "/repos/"+seg(org)+"/"+seg(repo)+"/contents/"+encPath(path), q, nil, &raw); err != nil {
+		return
+	}
+	if arr, ok := raw.([]any); ok {
+		isDir = true
+		entries = make([]ContentEntry, 0, len(arr))
+		for _, e := range arr {
+			m, _ := e.(map[string]any)
+			entries = append(entries, ContentEntry{
+				Path: str(m["path"]), Name: str(m["name"]), Type: str(m["type"]),
+				Size: int64(num(m["size"])), SHA: str(m["sha"]),
+			})
+		}
+		return
+	}
+	m, _ := raw.(map[string]any)
+	if str(m["type"]) == "dir" {
+		return true, "", "", 0, nil, nil
+	}
+	content := str(m["content"])
+	if str(m["encoding"]) == "base64" {
+		if b, derr := base64.StdEncoding.DecodeString(content); derr == nil {
+			content = string(b)
+		}
+	}
+	return false, content, str(m["sha"]), int64(num(m["size"])), nil, nil
+}
+
+// RawContents reads a file's raw BYTES at ref/path (binary-safe).
+func (c *Client) RawContents(ctx context.Context, org, repo, ref, path string) ([]byte, string, error) {
+	return c.RawFile(ctx, org, repo, ref, path)
+}
+
+// ComparePatch is one changed file from a compare.
+type ComparePatch struct {
+	Path      string
+	Status    string
+	Additions int32
+	Deletions int32
+	Patch     string
+}
+
+// Compare returns per-file patches between two refs (`base...head`).
+func (c *Client) Compare(ctx context.Context, org, repo, base, head string) ([]ComparePatch, error) {
+	var out struct {
+		Files []struct {
+			Filename  string `json:"filename"`
+			Status    string `json:"status"`
+			Additions int32  `json:"additions"`
+			Deletions int32  `json:"deletions"`
+			Patch     string `json:"patch"`
+		} `json:"files"`
+	}
+	err := c.do(ctx, "GET", "/repos/"+seg(org)+"/"+seg(repo)+"/compare/"+seg(base)+"..."+seg(head), nil, nil, &out)
+	if err != nil {
+		return nil, err
+	}
+	files := make([]ComparePatch, 0, len(out.Files))
+	for _, f := range out.Files {
+		files = append(files, ComparePatch{Path: f.Filename, Status: f.Status, Additions: f.Additions, Deletions: f.Deletions, Patch: f.Patch})
+	}
+	return files, nil
+}
+
+// FileOp is one file operation for CommitFiles.
+type FileOp struct {
+	Path     string
+	Op       string // create | update | delete
+	Content  string
+	Bytes    []byte // wins over Content when non-nil
+	SHA      string
+	FromPath string
+}
+
+// CommitFiles creates ONE commit with several file operations.
+func (c *Client) CommitFiles(ctx context.Context, org, repo, message, ref, newBranch string, files []FileOp) (string, error) {
+	ops := make([]map[string]any, 0, len(files))
+	for _, f := range files {
+		op := f.Op
+		if op == "" {
+			op = "update"
+		}
+		body := map[string]any{"operation": op, "path": f.Path}
+		if op != "delete" {
+			var b []byte
+			if f.Bytes != nil {
+				b = f.Bytes
+			} else {
+				b = []byte(f.Content)
+			}
+			body["content"] = base64.StdEncoding.EncodeToString(b)
+		}
+		if f.SHA != "" {
+			body["sha"] = f.SHA
+		}
+		if f.FromPath != "" {
+			body["from_path"] = f.FromPath
+		}
+		ops = append(ops, body)
+	}
+	in := map[string]any{"message": message, "files": ops}
+	if ref != "" {
+		in["branch"] = ref
+	}
+	if newBranch != "" {
+		in["new_branch"] = newBranch
+	}
+	var out map[string]any
+	if err := c.do(ctx, "POST", "/repos/"+seg(org)+"/"+seg(repo)+"/contents", nil, in, &out); err != nil {
+		return "", err
+	}
+	// The commit sha is nested under `commit` on most responses.
+	if commit, ok := out["commit"].(map[string]any); ok {
+		return str(commit["sha"]), nil
+	}
+	return str(out["commit_id"]), nil
+}
+
+// CreateTagAt creates a tag at a target ref.
+func (c *Client) CreateTagAt(ctx context.Context, org, repo, name, target string) error {
+	return c.do(ctx, "POST", "/repos/"+seg(org)+"/"+seg(repo)+"/tags", nil, map[string]any{"tag_name": name, "target": target}, nil)
 }
 
 func seg(s string) string { return url.PathEscape(s) }

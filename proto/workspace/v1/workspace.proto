@@ -258,6 +258,112 @@ message CreateOrgResponse { string org = 1; }
 message ListOrgsRequest {}
 message ListOrgsResponse { repeated string orgs = 1; }
 
+// ---- tenant-scoped repo operations (the extension's ONLY path to Forgejo) ----
+//
+// These mirror the Forgejo REST surface the workspace extension used to call
+// directly with a SHARED admin token (a cross-tenant leak). Routing them
+// through the gateway makes ownership (ensureVisible) the single gate.
+
+// RepoMeta returns one repository's metadata (default branch + empty flag).
+message RepoMetaRequest {
+  string org = 1;
+  string repo = 2;
+}
+message RepoMetaResponse {
+  string org = 1;
+  string repo = 2;
+  string default_branch = 3;
+  bool private = 4;
+  bool empty = 5;
+}
+
+// Contents reads a file's UTF-8 text or lists a directory at ref/path.
+message ContentsRequest {
+  string org = 1;
+  string repo = 2;
+  string ref = 3;
+  string path = 4;
+}
+message ContentDirEntry {
+  string path = 1;
+  string name = 2;
+  string type = 3; // file | dir | symlink | submodule
+  int64 size = 4;
+  string sha = 5;
+}
+message ContentsResponse {
+  bool is_dir = 1;
+  string text = 2; // when !is_dir
+  string sha = 3;
+  int64 size = 4;
+  repeated ContentDirEntry entries = 5; // when is_dir
+}
+
+// CommitFiles creates one commit with several file operations.
+message CommitFileOp {
+  string path = 1;
+  string operation = 2; // create | update | delete
+  string content = 3; // UTF-8 (when content_bytes empty)
+  bytes content_bytes = 4; // raw bytes (binary-safe; wins over content)
+  string sha = 5; // optimistic lock for update/delete
+  string from_path = 6; // rename source
+}
+message CommitFilesRequest {
+  string org = 1;
+  string repo = 2;
+  string message = 3;
+  string ref = 4;
+  string new_branch = 5;
+  repeated CommitFileOp files = 6;
+}
+message CommitFilesResponse {
+  string sha = 1;
+  string message = 2;
+}
+
+// Compare returns per-file patches between two refs (`base...head`).
+message CompareRequest {
+  string org = 1;
+  string repo = 2;
+  string base = 3;
+  string head = 4;
+}
+message CompareFile {
+  string path = 1;
+  string status = 2;
+  int32 additions = 3;
+  int32 deletions = 4;
+  string patch = 5;
+}
+message CompareResponse { repeated CompareFile files = 1; }
+
+// CreateTag creates a tag at a target ref.
+message CreateTagRequest {
+  string org = 1;
+  string repo = 2;
+  string name = 3;
+  string target = 4;
+}
+message CreateTagResponse { bool ok = 1; }
+
+// CreateBranch creates a branch from an existing ref.
+message CreateBranchRequest {
+  string org = 1;
+  string repo = 2;
+  string name = 3;
+  string from = 4;
+}
+message CreateBranchResponse { bool ok = 1; }
+
+// Archive returns a repo tree at a ref as a tar.gz (sandbox checkout).
+message ArchiveRequest {
+  string org = 1;
+  string repo = 2;
+  string ref = 3;
+}
+message ArchiveResponse { bytes data = 1; }
+
+
 // ImportRepo migrates an EXTERNAL git repository into `org` (the tenant must own
 // it). Forgejo clones the FULL repository; when `ref` is given that ref becomes
 // the default branch and the other branches are deleted (single-branch import).
@@ -610,6 +716,14 @@ service BranchSessionService {
   rpc CreateOrg(CreateOrgRequest) returns (CreateOrgResponse);
   // ListOrgs lists the caller's tenant-owned orgs (incl. empty ones).
   rpc ListOrgs(ListOrgsRequest) returns (ListOrgsResponse);
+  // Tenant-scoped repo operations (the extension's ONLY path to Forgejo).
+  rpc RepoMeta(RepoMetaRequest) returns (RepoMetaResponse);
+  rpc Contents(ContentsRequest) returns (ContentsResponse);
+  rpc CommitFiles(CommitFilesRequest) returns (CommitFilesResponse);
+  rpc Compare(CompareRequest) returns (CompareResponse);
+  rpc CreateTag(CreateTagRequest) returns (CreateTagResponse);
+  rpc CreateBranch(CreateBranchRequest) returns (CreateBranchResponse);
+  rpc Archive(ArchiveRequest) returns (ArchiveResponse);
   // ImportRepo migrates an EXTERNAL git repository into an org (admin).
   rpc ImportRepo(ImportRepoRequest) returns (ImportRepoResponse);
   // change requests (read-only in this surface: List/Get/diff/comments)

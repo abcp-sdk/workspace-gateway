@@ -839,6 +839,121 @@ func (s *Service) ListOrgs(ctx context.Context, req *connect.Request[wsv1.ListOr
 	return connect.NewResponse(&wsv1.ListOrgsResponse{Orgs: orgs}), nil
 }
 
+// ---- tenant-scoped repo operations (the extension's ONLY path to Forgejo) ----
+//
+// Every one of these first calls ensureVisible, so a tenant can only touch a
+// repo it owns. This replaces the extension's former direct Forgejo calls made
+// with a SHARED admin token (which exposed every tenant's repos).
+
+// RepoMeta returns one repository's metadata (ownership-checked).
+func (s *Service) RepoMeta(ctx context.Context, req *connect.Request[wsv1.RepoMetaRequest]) (*connect.Response[wsv1.RepoMetaResponse], error) {
+	m := req.Msg
+	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+		return nil, err
+	}
+	info, err := s.git.GetRepo(ctx, m.GetOrg(), m.GetRepo())
+	if err != nil {
+		return nil, mrError(err)
+	}
+	return connect.NewResponse(&wsv1.RepoMetaResponse{
+		Org: info.Org, Repo: info.Repo, DefaultBranch: info.DefaultBranch, Private: info.Private, Empty: info.Empty,
+	}), nil
+}
+
+// Contents reads a file (text) or lists a directory at ref/path.
+func (s *Service) Contents(ctx context.Context, req *connect.Request[wsv1.ContentsRequest]) (*connect.Response[wsv1.ContentsResponse], error) {
+	m := req.Msg
+	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+		return nil, err
+	}
+	isDir, text, sha, size, entries, err := s.git.Contents(ctx, m.GetOrg(), m.GetRepo(), m.GetRef(), m.GetPath())
+	if err != nil {
+		return nil, mrError(err)
+	}
+	res := &wsv1.ContentsResponse{IsDir: isDir, Text: text, Sha: sha, Size: size}
+	for _, e := range entries {
+		res.Entries = append(res.Entries, &wsv1.ContentDirEntry{Path: e.Path, Name: e.Name, Type: e.Type, Size: e.Size, Sha: e.SHA})
+	}
+	return connect.NewResponse(res), nil
+}
+
+// CommitFiles creates one commit of several file operations on a branch.
+func (s *Service) CommitFiles(ctx context.Context, req *connect.Request[wsv1.CommitFilesRequest]) (*connect.Response[wsv1.CommitFilesResponse], error) {
+	m := req.Msg
+	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+		return nil, err
+	}
+	if len(m.GetFiles()) == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("files is required"))
+	}
+	ops := make([]forgejo.FileOp, 0, len(m.GetFiles()))
+	for _, f := range m.GetFiles() {
+		ops = append(ops, forgejo.FileOp{
+			Path: f.GetPath(), Op: f.GetOperation(), Content: f.GetContent(),
+			Bytes: f.GetContentBytes(), SHA: f.GetSha(), FromPath: f.GetFromPath(),
+		})
+	}
+	sha, err := s.git.CommitFiles(ctx, m.GetOrg(), m.GetRepo(), m.GetMessage(), m.GetRef(), m.GetNewBranch(), ops)
+	if err != nil {
+		return nil, mrError(err)
+	}
+	return connect.NewResponse(&wsv1.CommitFilesResponse{Sha: sha}), nil
+}
+
+// Compare returns per-file patches between two refs.
+func (s *Service) Compare(ctx context.Context, req *connect.Request[wsv1.CompareRequest]) (*connect.Response[wsv1.CompareResponse], error) {
+	m := req.Msg
+	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+		return nil, err
+	}
+	files, err := s.git.Compare(ctx, m.GetOrg(), m.GetRepo(), m.GetBase(), m.GetHead())
+	if err != nil {
+		return nil, mrError(err)
+	}
+	out := make([]*wsv1.CompareFile, 0, len(files))
+	for _, f := range files {
+		out = append(out, &wsv1.CompareFile{Path: f.Path, Status: f.Status, Additions: f.Additions, Deletions: f.Deletions, Patch: f.Patch})
+	}
+	return connect.NewResponse(&wsv1.CompareResponse{Files: out}), nil
+}
+
+// CreateTag creates a tag at a target ref.
+func (s *Service) CreateTag(ctx context.Context, req *connect.Request[wsv1.CreateTagRequest]) (*connect.Response[wsv1.CreateTagResponse], error) {
+	m := req.Msg
+	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+		return nil, err
+	}
+	if err := s.git.CreateTagAt(ctx, m.GetOrg(), m.GetRepo(), m.GetName(), m.GetTarget()); err != nil {
+		return nil, mrError(err)
+	}
+	return connect.NewResponse(&wsv1.CreateTagResponse{Ok: true}), nil
+}
+
+// CreateBranch creates a branch from an existing ref.
+func (s *Service) CreateBranch(ctx context.Context, req *connect.Request[wsv1.CreateBranchRequest]) (*connect.Response[wsv1.CreateBranchResponse], error) {
+	m := req.Msg
+	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+		return nil, err
+	}
+	if err := s.git.CreateBranch(ctx, m.GetOrg(), m.GetRepo(), m.GetName(), m.GetFrom()); err != nil {
+		return nil, mrError(err)
+	}
+	return connect.NewResponse(&wsv1.CreateBranchResponse{Ok: true}), nil
+}
+
+// Archive returns a repo tree at a ref as a tar.gz (sandbox checkout).
+func (s *Service) Archive(ctx context.Context, req *connect.Request[wsv1.ArchiveRequest]) (*connect.Response[wsv1.ArchiveResponse], error) {
+	m := req.Msg
+	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+		return nil, err
+	}
+	data, err := s.git.ArchiveTarGz(ctx, m.GetOrg(), m.GetRepo(), m.GetRef())
+	if err != nil {
+		return nil, mrError(err)
+	}
+	return connect.NewResponse(&wsv1.ArchiveResponse{Data: data}), nil
+}
+
 // ensureMainSession idempotently creates the `org:repo:main` session bound to
 // the maintainer role. Best-effort: a repo is still usable if this fails.
 func (s *Service) ensureMainSession(ctx context.Context, hdr map[string][]string, org, repo string) {

@@ -109,6 +109,27 @@ const (
 	// BranchSessionServiceListOrgsProcedure is the fully-qualified name of the BranchSessionService's
 	// ListOrgs RPC.
 	BranchSessionServiceListOrgsProcedure = "/workspace.v1.BranchSessionService/ListOrgs"
+	// BranchSessionServiceRepoMetaProcedure is the fully-qualified name of the BranchSessionService's
+	// RepoMeta RPC.
+	BranchSessionServiceRepoMetaProcedure = "/workspace.v1.BranchSessionService/RepoMeta"
+	// BranchSessionServiceContentsProcedure is the fully-qualified name of the BranchSessionService's
+	// Contents RPC.
+	BranchSessionServiceContentsProcedure = "/workspace.v1.BranchSessionService/Contents"
+	// BranchSessionServiceCommitFilesProcedure is the fully-qualified name of the
+	// BranchSessionService's CommitFiles RPC.
+	BranchSessionServiceCommitFilesProcedure = "/workspace.v1.BranchSessionService/CommitFiles"
+	// BranchSessionServiceCompareProcedure is the fully-qualified name of the BranchSessionService's
+	// Compare RPC.
+	BranchSessionServiceCompareProcedure = "/workspace.v1.BranchSessionService/Compare"
+	// BranchSessionServiceCreateTagProcedure is the fully-qualified name of the BranchSessionService's
+	// CreateTag RPC.
+	BranchSessionServiceCreateTagProcedure = "/workspace.v1.BranchSessionService/CreateTag"
+	// BranchSessionServiceCreateBranchProcedure is the fully-qualified name of the
+	// BranchSessionService's CreateBranch RPC.
+	BranchSessionServiceCreateBranchProcedure = "/workspace.v1.BranchSessionService/CreateBranch"
+	// BranchSessionServiceArchiveProcedure is the fully-qualified name of the BranchSessionService's
+	// Archive RPC.
+	BranchSessionServiceArchiveProcedure = "/workspace.v1.BranchSessionService/Archive"
 	// BranchSessionServiceImportRepoProcedure is the fully-qualified name of the BranchSessionService's
 	// ImportRepo RPC.
 	BranchSessionServiceImportRepoProcedure = "/workspace.v1.BranchSessionService/ImportRepo"
@@ -315,6 +336,14 @@ type BranchSessionServiceClient interface {
 	CreateOrg(context.Context, *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error)
 	// ListOrgs lists the caller's tenant-owned orgs (incl. empty ones).
 	ListOrgs(context.Context, *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error)
+	// Tenant-scoped repo operations (the extension's ONLY path to Forgejo).
+	RepoMeta(context.Context, *connect.Request[v1.RepoMetaRequest]) (*connect.Response[v1.RepoMetaResponse], error)
+	Contents(context.Context, *connect.Request[v1.ContentsRequest]) (*connect.Response[v1.ContentsResponse], error)
+	CommitFiles(context.Context, *connect.Request[v1.CommitFilesRequest]) (*connect.Response[v1.CommitFilesResponse], error)
+	Compare(context.Context, *connect.Request[v1.CompareRequest]) (*connect.Response[v1.CompareResponse], error)
+	CreateTag(context.Context, *connect.Request[v1.CreateTagRequest]) (*connect.Response[v1.CreateTagResponse], error)
+	CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error)
+	Archive(context.Context, *connect.Request[v1.ArchiveRequest]) (*connect.Response[v1.ArchiveResponse], error)
 	// ImportRepo migrates an EXTERNAL git repository into an org (admin).
 	ImportRepo(context.Context, *connect.Request[v1.ImportRepoRequest]) (*connect.Response[v1.ImportRepoResponse], error)
 	// change requests (read-only in this surface: List/Get/diff/comments)
@@ -523,6 +552,48 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+BranchSessionServiceListOrgsProcedure,
 			connect.WithSchema(branchSessionServiceMethods.ByName("ListOrgs")),
+			connect.WithClientOptions(opts...),
+		),
+		repoMeta: connect.NewClient[v1.RepoMetaRequest, v1.RepoMetaResponse](
+			httpClient,
+			baseURL+BranchSessionServiceRepoMetaProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("RepoMeta")),
+			connect.WithClientOptions(opts...),
+		),
+		contents: connect.NewClient[v1.ContentsRequest, v1.ContentsResponse](
+			httpClient,
+			baseURL+BranchSessionServiceContentsProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("Contents")),
+			connect.WithClientOptions(opts...),
+		),
+		commitFiles: connect.NewClient[v1.CommitFilesRequest, v1.CommitFilesResponse](
+			httpClient,
+			baseURL+BranchSessionServiceCommitFilesProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("CommitFiles")),
+			connect.WithClientOptions(opts...),
+		),
+		compare: connect.NewClient[v1.CompareRequest, v1.CompareResponse](
+			httpClient,
+			baseURL+BranchSessionServiceCompareProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("Compare")),
+			connect.WithClientOptions(opts...),
+		),
+		createTag: connect.NewClient[v1.CreateTagRequest, v1.CreateTagResponse](
+			httpClient,
+			baseURL+BranchSessionServiceCreateTagProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("CreateTag")),
+			connect.WithClientOptions(opts...),
+		),
+		createBranch: connect.NewClient[v1.CreateBranchRequest, v1.CreateBranchResponse](
+			httpClient,
+			baseURL+BranchSessionServiceCreateBranchProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("CreateBranch")),
+			connect.WithClientOptions(opts...),
+		),
+		archive: connect.NewClient[v1.ArchiveRequest, v1.ArchiveResponse](
+			httpClient,
+			baseURL+BranchSessionServiceArchiveProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("Archive")),
 			connect.WithClientOptions(opts...),
 		),
 		importRepo: connect.NewClient[v1.ImportRepoRequest, v1.ImportRepoResponse](
@@ -893,6 +964,13 @@ type branchSessionServiceClient struct {
 	ensureRepo           *connect.Client[v1.EnsureRepoRequest, v1.EnsureRepoResponse]
 	createOrg            *connect.Client[v1.CreateOrgRequest, v1.CreateOrgResponse]
 	listOrgs             *connect.Client[v1.ListOrgsRequest, v1.ListOrgsResponse]
+	repoMeta             *connect.Client[v1.RepoMetaRequest, v1.RepoMetaResponse]
+	contents             *connect.Client[v1.ContentsRequest, v1.ContentsResponse]
+	commitFiles          *connect.Client[v1.CommitFilesRequest, v1.CommitFilesResponse]
+	compare              *connect.Client[v1.CompareRequest, v1.CompareResponse]
+	createTag            *connect.Client[v1.CreateTagRequest, v1.CreateTagResponse]
+	createBranch         *connect.Client[v1.CreateBranchRequest, v1.CreateBranchResponse]
+	archive              *connect.Client[v1.ArchiveRequest, v1.ArchiveResponse]
 	importRepo           *connect.Client[v1.ImportRepoRequest, v1.ImportRepoResponse]
 	listMRs              *connect.Client[v1.ListMRsRequest, v1.ListMRsResponse]
 	getMR                *connect.Client[v1.GetMRRequest, v1.GetMRResponse]
@@ -1055,6 +1133,41 @@ func (c *branchSessionServiceClient) CreateOrg(ctx context.Context, req *connect
 // ListOrgs calls workspace.v1.BranchSessionService.ListOrgs.
 func (c *branchSessionServiceClient) ListOrgs(ctx context.Context, req *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error) {
 	return c.listOrgs.CallUnary(ctx, req)
+}
+
+// RepoMeta calls workspace.v1.BranchSessionService.RepoMeta.
+func (c *branchSessionServiceClient) RepoMeta(ctx context.Context, req *connect.Request[v1.RepoMetaRequest]) (*connect.Response[v1.RepoMetaResponse], error) {
+	return c.repoMeta.CallUnary(ctx, req)
+}
+
+// Contents calls workspace.v1.BranchSessionService.Contents.
+func (c *branchSessionServiceClient) Contents(ctx context.Context, req *connect.Request[v1.ContentsRequest]) (*connect.Response[v1.ContentsResponse], error) {
+	return c.contents.CallUnary(ctx, req)
+}
+
+// CommitFiles calls workspace.v1.BranchSessionService.CommitFiles.
+func (c *branchSessionServiceClient) CommitFiles(ctx context.Context, req *connect.Request[v1.CommitFilesRequest]) (*connect.Response[v1.CommitFilesResponse], error) {
+	return c.commitFiles.CallUnary(ctx, req)
+}
+
+// Compare calls workspace.v1.BranchSessionService.Compare.
+func (c *branchSessionServiceClient) Compare(ctx context.Context, req *connect.Request[v1.CompareRequest]) (*connect.Response[v1.CompareResponse], error) {
+	return c.compare.CallUnary(ctx, req)
+}
+
+// CreateTag calls workspace.v1.BranchSessionService.CreateTag.
+func (c *branchSessionServiceClient) CreateTag(ctx context.Context, req *connect.Request[v1.CreateTagRequest]) (*connect.Response[v1.CreateTagResponse], error) {
+	return c.createTag.CallUnary(ctx, req)
+}
+
+// CreateBranch calls workspace.v1.BranchSessionService.CreateBranch.
+func (c *branchSessionServiceClient) CreateBranch(ctx context.Context, req *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error) {
+	return c.createBranch.CallUnary(ctx, req)
+}
+
+// Archive calls workspace.v1.BranchSessionService.Archive.
+func (c *branchSessionServiceClient) Archive(ctx context.Context, req *connect.Request[v1.ArchiveRequest]) (*connect.Response[v1.ArchiveResponse], error) {
+	return c.archive.CallUnary(ctx, req)
 }
 
 // ImportRepo calls workspace.v1.BranchSessionService.ImportRepo.
@@ -1376,6 +1489,14 @@ type BranchSessionServiceHandler interface {
 	CreateOrg(context.Context, *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error)
 	// ListOrgs lists the caller's tenant-owned orgs (incl. empty ones).
 	ListOrgs(context.Context, *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error)
+	// Tenant-scoped repo operations (the extension's ONLY path to Forgejo).
+	RepoMeta(context.Context, *connect.Request[v1.RepoMetaRequest]) (*connect.Response[v1.RepoMetaResponse], error)
+	Contents(context.Context, *connect.Request[v1.ContentsRequest]) (*connect.Response[v1.ContentsResponse], error)
+	CommitFiles(context.Context, *connect.Request[v1.CommitFilesRequest]) (*connect.Response[v1.CommitFilesResponse], error)
+	Compare(context.Context, *connect.Request[v1.CompareRequest]) (*connect.Response[v1.CompareResponse], error)
+	CreateTag(context.Context, *connect.Request[v1.CreateTagRequest]) (*connect.Response[v1.CreateTagResponse], error)
+	CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error)
+	Archive(context.Context, *connect.Request[v1.ArchiveRequest]) (*connect.Response[v1.ArchiveResponse], error)
 	// ImportRepo migrates an EXTERNAL git repository into an org (admin).
 	ImportRepo(context.Context, *connect.Request[v1.ImportRepoRequest]) (*connect.Response[v1.ImportRepoResponse], error)
 	// change requests (read-only in this surface: List/Get/diff/comments)
@@ -1580,6 +1701,48 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		BranchSessionServiceListOrgsProcedure,
 		svc.ListOrgs,
 		connect.WithSchema(branchSessionServiceMethods.ByName("ListOrgs")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceRepoMetaHandler := connect.NewUnaryHandler(
+		BranchSessionServiceRepoMetaProcedure,
+		svc.RepoMeta,
+		connect.WithSchema(branchSessionServiceMethods.ByName("RepoMeta")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceContentsHandler := connect.NewUnaryHandler(
+		BranchSessionServiceContentsProcedure,
+		svc.Contents,
+		connect.WithSchema(branchSessionServiceMethods.ByName("Contents")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceCommitFilesHandler := connect.NewUnaryHandler(
+		BranchSessionServiceCommitFilesProcedure,
+		svc.CommitFiles,
+		connect.WithSchema(branchSessionServiceMethods.ByName("CommitFiles")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceCompareHandler := connect.NewUnaryHandler(
+		BranchSessionServiceCompareProcedure,
+		svc.Compare,
+		connect.WithSchema(branchSessionServiceMethods.ByName("Compare")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceCreateTagHandler := connect.NewUnaryHandler(
+		BranchSessionServiceCreateTagProcedure,
+		svc.CreateTag,
+		connect.WithSchema(branchSessionServiceMethods.ByName("CreateTag")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceCreateBranchHandler := connect.NewUnaryHandler(
+		BranchSessionServiceCreateBranchProcedure,
+		svc.CreateBranch,
+		connect.WithSchema(branchSessionServiceMethods.ByName("CreateBranch")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceArchiveHandler := connect.NewUnaryHandler(
+		BranchSessionServiceArchiveProcedure,
+		svc.Archive,
+		connect.WithSchema(branchSessionServiceMethods.ByName("Archive")),
 		connect.WithHandlerOptions(opts...),
 	)
 	branchSessionServiceImportRepoHandler := connect.NewUnaryHandler(
@@ -1968,6 +2131,20 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceCreateOrgHandler.ServeHTTP(w, r)
 		case BranchSessionServiceListOrgsProcedure:
 			branchSessionServiceListOrgsHandler.ServeHTTP(w, r)
+		case BranchSessionServiceRepoMetaProcedure:
+			branchSessionServiceRepoMetaHandler.ServeHTTP(w, r)
+		case BranchSessionServiceContentsProcedure:
+			branchSessionServiceContentsHandler.ServeHTTP(w, r)
+		case BranchSessionServiceCommitFilesProcedure:
+			branchSessionServiceCommitFilesHandler.ServeHTTP(w, r)
+		case BranchSessionServiceCompareProcedure:
+			branchSessionServiceCompareHandler.ServeHTTP(w, r)
+		case BranchSessionServiceCreateTagProcedure:
+			branchSessionServiceCreateTagHandler.ServeHTTP(w, r)
+		case BranchSessionServiceCreateBranchProcedure:
+			branchSessionServiceCreateBranchHandler.ServeHTTP(w, r)
+		case BranchSessionServiceArchiveProcedure:
+			branchSessionServiceArchiveHandler.ServeHTTP(w, r)
 		case BranchSessionServiceImportRepoProcedure:
 			branchSessionServiceImportRepoHandler.ServeHTTP(w, r)
 		case BranchSessionServiceListMRsProcedure:
@@ -2173,6 +2350,34 @@ func (UnimplementedBranchSessionServiceHandler) CreateOrg(context.Context, *conn
 
 func (UnimplementedBranchSessionServiceHandler) ListOrgs(context.Context, *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListOrgs is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) RepoMeta(context.Context, *connect.Request[v1.RepoMetaRequest]) (*connect.Response[v1.RepoMetaResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.RepoMeta is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) Contents(context.Context, *connect.Request[v1.ContentsRequest]) (*connect.Response[v1.ContentsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Contents is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) CommitFiles(context.Context, *connect.Request[v1.CommitFilesRequest]) (*connect.Response[v1.CommitFilesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CommitFiles is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) Compare(context.Context, *connect.Request[v1.CompareRequest]) (*connect.Response[v1.CompareResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Compare is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) CreateTag(context.Context, *connect.Request[v1.CreateTagRequest]) (*connect.Response[v1.CreateTagResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CreateTag is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CreateBranch is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) Archive(context.Context, *connect.Request[v1.ArchiveRequest]) (*connect.Response[v1.ArchiveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Archive is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) ImportRepo(context.Context, *connect.Request[v1.ImportRepoRequest]) (*connect.Response[v1.ImportRepoResponse], error) {
