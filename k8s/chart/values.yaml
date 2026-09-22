@@ -52,7 +52,7 @@ agent:
   enabled: true
   image:
     repository: git.agent.fenjin.org/abcp/agent
-    tag: "20260921141115"
+    tag: "20260922054428"
     pullPolicy: IfNotPresent
   port: 8080
   service:
