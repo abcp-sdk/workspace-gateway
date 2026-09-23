@@ -2369,7 +2369,7 @@ const file_worker_v1_worker_proto_rawDesc = "" +
 	"\fWorkerEnroll\x12I\n" +
 	"\x06Status\x12\x1e.worker.v1.EnrollStatusRequest\x1a\x1f.worker.v1.EnrollStatusResponse\x12F\n" +
 	"\x05Claim\x12\x1d.worker.v1.EnrollClaimRequest\x1a\x1e.worker.v1.EnrollClaimResponse\x12R\n" +
-	"\tUnrelease\x12!.worker.v1.EnrollUnreleaseRequest\x1a\".worker.v1.EnrollUnreleaseResponseB?Z=github.com/easylab-platform/easyworker/gen/worker/v1;workerv1b\x06proto3"
+	"\tUnrelease\x12!.worker.v1.EnrollUnreleaseRequest\x1a\".worker.v1.EnrollUnreleaseResponseB9Z7github.com/abcp-sdk/agent-worker/gen/worker/v1;workerv1b\x06proto3"
 
 var (
 	file_worker_v1_worker_proto_rawDescOnce sync.Once

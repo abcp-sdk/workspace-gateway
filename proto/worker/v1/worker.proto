@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-// easyworker: the sandbox worker contract (Connect RPC).
+// agent-worker: the sandbox worker contract (Connect RPC).
 //
 // Replaces the legacy worker-go WebSocket JSON-RPC surface (/ws + /ws/job SSE)
 // with the platform's standard Connect stack — same RPC semantics as the rest
@@ -24,7 +24,7 @@ syntax = "proto3";
 // Job output history persists to sqlite (WORKER_DB; emptyDir in-cluster, so
 // everything is ephemeral to the pod) with a retention window (default 24h).
 //
-// Server: easyworker binary (also the binary injected into cluster sandboxes;
+// Server: agent-worker binary (also the binary injected into cluster sandboxes;
 // WORKER_PORT pins the listen port). Client: ext-ops (ops-extension).
 package worker.v1;
 
@@ -41,6 +41,9 @@ message InfoResponse {
   string boot_id = 5;   // per-process UUID: easylab compares it against the
                         // boot_id recorded at sync time to detect worker
                         // restarts and re-sync workspaces
+  int64 dropped_lines = 6; // output lines lost to backpressure (store channel
+                           // full + ring overflow) since process start; a
+                           // rising counter means consumers are too slow
 }
 
 // ---- jobs ----
@@ -50,6 +53,10 @@ message ExecuteRequest {
   string command = 1;
   string workdir = 2; // relative to the workspace root
   map<string, string> env = 3;
+  // Optional wall-clock deadline: when set and exceeded, the job's whole
+  // process tree is killed and the job ends in state `killed`. Cleaner than
+  // wrapping the command in `timeout`, which swallows the recorded output.
+  int32 timeout_ms = 4;
 }
 message ExecuteResponse { string job_id = 1; }
 
@@ -61,7 +68,9 @@ message JobEntry {
   int64 started_at = 5;  // unix millis
   int64 finished_at = 6; // unix millis, 0 while running
 }
-message ListJobsRequest {}
+message ListJobsRequest {
+  int32 limit = 1; // newest-first cap; <=0 = 500 (server cap)
+}
 message ListJobsResponse { repeated JobEntry jobs = 1; }
 
 // WatchJob is the Connect server-streaming replacement for the /ws/job SSE
@@ -95,8 +104,8 @@ message JobOutputResponse {
 }
 
 // Wait blocks until the job completes or timeout_ms elapses. The worker caps
-// the wait at 60s (job_wait cap, matching the legacy contract; clients use a
-// 65s read timeout).
+// the wait at WORKER_WAIT_MAX (default 600s). A response with state
+// `running` means the deadline expired, not that the job failed.
 message JobWaitRequest {
   string job_id = 1;
   int32 timeout_ms = 2;
@@ -118,8 +127,21 @@ message JobKillResponse { bool ok = 1; }
 
 // ---- files (binary-safe: content is bytes, no base64 hop) ----
 
-message FileReadRequest { string path = 1; }
-message FileReadResponse { bytes content = 1; }
+message FileReadRequest {
+  string path = 1;
+  // Optional 0-based line window (both inclusive of the line numbering used
+  // by the response). Omitted/zero values read the WHOLE file — the window
+  // exists so a caller can page a huge file without transferring it all.
+  int32 start_line = 2; // first line to return (0-based); negative counts
+                        // from the end (-200 = start 200 lines before EOF)
+  int32 end_line = 3;   // exclusive end (0 = through EOF)
+}
+message FileReadResponse {
+  bytes content = 1;
+  int32 total_lines = 2; // lines in the whole file
+  int32 start_line = 3;  // first line actually returned (0-based)
+  int32 end_line = 4;    // exclusive end actually returned
+}
 
 message FileWriteRequest {
   string path = 1;
@@ -127,12 +149,34 @@ message FileWriteRequest {
 }
 message FileWriteResponse { bool ok = 1; }
 
+message FileDeleteRequest { string path = 1; }
+message FileDeleteResponse { bool ok = 1; }
+
+message FileMoveRequest {
+  string from = 1;
+  string to = 2;
+}
+message FileMoveResponse { bool ok = 1; }
+
+message FileCopyRequest {
+  string from = 1;
+  string to = 2;
+}
+message FileCopyResponse { bool ok = 1; }
+
 message FileEntry {
   string path = 1;
   int64 size = 2;
   bool is_dir = 3;
 }
-message FileListRequest { string path = 1; }
+message FileListRequest {
+  string path = 1;
+  // Optional server-side recursion: expand directories up to `depth` levels
+  // (1 = immediate children only, the default). One RPC replaces the
+  // client-side BFS that cost one round-trip per directory.
+  int32 depth = 2;
+  int32 limit = 3; // max entries returned (<=0 = 1000, hard cap 10000)
+}
 message FileListResponse {
   bool is_dir = 1;
   repeated FileEntry files = 2;
@@ -166,6 +210,9 @@ service WorkerService {
   rpc JobKill(JobKillRequest) returns (JobKillResponse);
   rpc FileRead(FileReadRequest) returns (FileReadResponse);
   rpc FileWrite(FileWriteRequest) returns (FileWriteResponse);
+  rpc FileDelete(FileDeleteRequest) returns (FileDeleteResponse);
+  rpc FileMove(FileMoveRequest) returns (FileMoveResponse);
+  rpc FileCopy(FileCopyRequest) returns (FileCopyResponse);
   rpc FileList(FileListRequest) returns (FileListResponse);
   rpc SyncFolder(SyncFolderRequest) returns (SyncFolderResponse);
 }

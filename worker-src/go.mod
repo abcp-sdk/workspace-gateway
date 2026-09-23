@@ -1,4 +1,4 @@
-module github.com/easylab-platform/easyworker
+module github.com/abcp-sdk/agent-worker
 
 go 1.26.0
 

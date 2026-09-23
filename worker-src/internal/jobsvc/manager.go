@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/easylab-platform/easyworker/internal/shellh"
+	"github.com/abcp-sdk/agent-worker/internal/shellh"
 )
 
 // Job states (matching the legacy vocabulary).

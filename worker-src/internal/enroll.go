@@ -5,8 +5,8 @@ import (
 	"errors"
 
 	"connectrpc.com/connect"
-	workerv1 "github.com/easylab-platform/easyworker/gen/worker/v1"
-	"github.com/easylab-platform/easyworker/internal/auth"
+	workerv1 "github.com/abcp-sdk/agent-worker/gen/worker/v1"
+	"github.com/abcp-sdk/agent-worker/internal/auth"
 )
 
 // EnrollService implements workerv1connect.WorkerEnrollHandler: the one-time,

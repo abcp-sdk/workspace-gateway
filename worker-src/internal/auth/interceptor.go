@@ -14,7 +14,7 @@ import (
 //
 // Fail-closed: every unary and streaming WorkerService call is rejected with
 // Unauthenticated unless the request carries an accepted token. The enroll
-// service is mounted separately (see cmd/easyworker) and manages its own gate.
+// service is mounted separately (see cmd/agent-worker) and manages its own gate.
 type interceptor struct {
 	gate *Gate
 }

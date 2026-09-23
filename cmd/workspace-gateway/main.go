@@ -138,7 +138,7 @@ func main() {
 			RegistryHost:   registryHost,
 			RegistryScheme: registryScheme,
 			DeriveRepo:     envOr("DERIVE_REPO", "root/sandbox"),
-			WorkerBin:      envOr("WORKER_BIN", "/usr/local/lib/easyworker/easyworker"),
+			WorkerBin:      envOr("WORKER_BIN", "/usr/local/lib/agent-worker/agent-worker"),
 			RegistryUser:   os.Getenv("FORGEJO_USER"),
 			RegistryPass:   os.Getenv("FORGEJO_PASSWORD"),
 		},

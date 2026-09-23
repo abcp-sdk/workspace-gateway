@@ -51,7 +51,7 @@ speaks `agent.v1` directly. The `agent.v1` handler is deliberately NOT mounted.
   `EnsureRepo`, `ListMRs`, `CreateMR`, `CommentMR`, `MergeMR`.
 - **Sandboxes**: `ListSandboxes`, `CreateSandbox`, `GetSandbox`,
   `DeleteSandbox`, `ResolveSandbox`. A sandbox may be launched from **ANY base
-  image**: the gateway derives a runnable image by injecting the easyworker
+  image**: the gateway derives a runnable image by injecting the agent-worker
   binary into the base at launch time (`FROM <base>` + COPY worker + worker
   entrypoint), pushed content-addressed to `root/sandbox:<hash>`.
 - **OCI images**: `ListOCIImages` (browse a namespace; pass `name` to list one
@@ -96,7 +96,7 @@ folded in under `internal/sandboxmgr`).
 | `TOOLCHAIN_ORG` | default owner `ListOCIImages` browses (default `agent-toolchain`) |
 | `DEFAULT_BASE_IMAGE` | base image used when `CreateSandbox` omits one |
 | `DERIVE_REPO` | repo for derived sandbox images (default `root/sandbox`) |
-| `WORKER_BIN` | easyworker binary injected into derived images |
+| `WORKER_BIN` | agent-worker binary injected into derived images |
 | `BUILDKIT_ADDR` | buildkitd address for `BuildSandboxImage` + derive |
 | `WORKSPACE_RUNTIME` | optional JSON overriding KVM/GPU device names + KVM security context |
 | `SANDBOX_IDLE_TTL` | reclaim sandboxes idle this long (default `24h`; `0` disables) |

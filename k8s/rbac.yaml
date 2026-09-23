@@ -1,6 +1,6 @@
 # RBAC for the workspace-gateway sandbox backend (folded-in worker-manager).
 #
-# The gateway RUNS in the agent namespace but manages easyworker sandboxes in
+# The gateway RUNS in the agent namespace but manages agent-worker sandboxes in
 # the `worker` namespace, so:
 #   - its ServiceAccount lives in the agent namespace (AGENT_NS below);
 #   - a Role in `worker` grants pod/service/secret CRUD;

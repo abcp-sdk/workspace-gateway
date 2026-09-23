@@ -8,13 +8,13 @@ import (
 
 	"connectrpc.com/connect"
 
-	workerv1 "github.com/easylab-platform/easyworker/gen/worker/v1"
-	"github.com/easylab-platform/easyworker/gen/worker/v1/workerv1connect"
-	"github.com/easylab-platform/easyworker/internal"
-	"github.com/easylab-platform/easyworker/internal/auth"
-	"github.com/easylab-platform/easyworker/internal/filesvc"
-	"github.com/easylab-platform/easyworker/internal/jobsvc"
-	"github.com/easylab-platform/easyworker/internal/shellh"
+	workerv1 "github.com/abcp-sdk/agent-worker/gen/worker/v1"
+	"github.com/abcp-sdk/agent-worker/gen/worker/v1/workerv1connect"
+	"github.com/abcp-sdk/agent-worker/internal"
+	"github.com/abcp-sdk/agent-worker/internal/auth"
+	"github.com/abcp-sdk/agent-worker/internal/filesvc"
+	"github.com/abcp-sdk/agent-worker/internal/jobsvc"
+	"github.com/abcp-sdk/agent-worker/internal/shellh"
 )
 
 // newServer builds a real worker handler (auth gate + enroll + WorkerService)

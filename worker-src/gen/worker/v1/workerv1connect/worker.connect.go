@@ -34,7 +34,7 @@ import (
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/easylab-platform/easyworker/gen/worker/v1"
+	v1 "github.com/abcp-sdk/agent-worker/gen/worker/v1"
 	http "net/http"
 	strings "strings"
 )

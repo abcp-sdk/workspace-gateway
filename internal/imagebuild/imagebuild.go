@@ -43,8 +43,8 @@ type Builder struct {
 	MaxContextBytes int64
 	// Buildctl is the buildctl binary path (default "buildctl").
 	Buildctl string
-	// WorkerBin is the path to the easyworker linux/amd64 binary to inject
-	// into derived sandbox images (default "/usr/local/lib/easyworker/easyworker").
+	// WorkerBin is the path to the agent-worker linux/amd64 binary to inject
+	// into derived sandbox images (default "/usr/local/lib/agent-worker/agent-worker").
 	WorkerBin string
 	// RegistryUser/RegistryPass authenticate the ImageExists check.
 	RegistryUser string
@@ -131,7 +131,7 @@ func (b *Builder) Build(ctx context.Context, req Request) (Result, error) {
 	return Result{ImageRef: ref, Log: log}, nil
 }
 
-// Derive builds a sandbox image by injecting the easyworker binary into an
+// Derive builds a sandbox image by injecting the agent-worker binary into an
 // arbitrary base image (easylab's model): `FROM <base>` + COPY worker + set
 // the worker env/entrypoint. The derived tag is content-addressed over
 // (base image, worker binary), so identical requests reuse one image.
@@ -164,12 +164,12 @@ func (b *Builder) Derive(ctx context.Context, baseImage string) (ref string, bui
 		return "", false, err
 	}
 	defer os.RemoveAll(dir)
-	if err := os.WriteFile(filepath.Join(dir, "easyworker"), bin, 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "agent-worker"), bin, 0o755); err != nil {
 		return "", false, err
 	}
 	// No WORKER_WORKSPACE/WORKDIR: the worker uses its own default (~/workspace)
 	// and creates it at startup.
-	cf := fmt.Sprintf("FROM %s\nCOPY easyworker /usr/local/bin/easyworker\nRUN mkdir -p /data\nENV WORKER_PORT=48080 \\\n    WORKER_DB=/data/jobs.db\nEXPOSE 48080\nENTRYPOINT [\"/usr/local/bin/easyworker\"]\n", baseImage)
+	cf := fmt.Sprintf("FROM %s\nCOPY agent-worker /usr/local/bin/agent-worker\nRUN mkdir -p /data\nENV WORKER_PORT=48080 \\\n    WORKER_DB=/data/jobs.db\nEXPOSE 48080\nENTRYPOINT [\"/usr/local/bin/agent-worker\"]\n", baseImage)
 	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte(cf), 0o644); err != nil {
 		return "", false, err
 	}
@@ -386,7 +386,7 @@ func (b *Builder) workerBin() string {
 	if b.WorkerBin != "" {
 		return b.WorkerBin
 	}
-	return "/usr/local/lib/easyworker/easyworker"
+	return "/usr/local/lib/agent-worker/agent-worker"
 }
 
 // ImageExists reports whether a manifest for ref already exists in the registry

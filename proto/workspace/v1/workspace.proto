@@ -819,6 +819,9 @@ message ServiceInfo {
   string message = 14;
   // Unix-millis TTL deadline of a preview service (0 = none).
   int64 expires_at = 15;
+  // Paused is true when the service is scaled to zero replicas (PauseService);
+  // ResumeService restores the replica count it had before the pause.
+  bool paused = 16;
 }
 
 // ServicePortInfo is one exposed port of a service.
@@ -903,6 +906,17 @@ message ListServicesResponse { repeated ServiceInfo services = 1; }
 
 message DeleteServiceRequest { string name = 1; }
 message DeleteServiceResponse { bool ok = 1; }
+
+// PauseService scales a service to zero replicas (without deleting it). The
+// replica count in effect at pause time is remembered so ResumeService can
+// restore it.
+message PauseServiceRequest { string name = 1; }
+message PauseServiceResponse { ServiceInfo service = 1; }
+
+// ResumeService restores a paused service to the replica count it had before
+// PauseService.
+message ResumeServiceRequest { string name = 1; }
+message ResumeServiceResponse { ServiceInfo service = 1; }
 
 // ---- service logs ----
 message ServiceLogsRequest {
@@ -1045,6 +1059,8 @@ service BranchSessionService {
   rpc PreviewService(PreviewServiceRequest) returns (PreviewServiceResponse);
   rpc ListServices(ListServicesRequest) returns (ListServicesResponse);
   rpc DeleteService(DeleteServiceRequest) returns (DeleteServiceResponse);
+  rpc PauseService(PauseServiceRequest) returns (PauseServiceResponse);
+  rpc ResumeService(ResumeServiceRequest) returns (ResumeServiceResponse);
   // service logs (read a service's container logs; seam for a log backend)
   rpc ServiceLogs(ServiceLogsRequest) returns (ServiceLogsResponse);
   rpc WatchServiceLogs(WatchServiceLogsRequest) returns (stream WatchServiceLogsResponse);

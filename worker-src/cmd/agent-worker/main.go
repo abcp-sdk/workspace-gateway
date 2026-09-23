@@ -1,4 +1,4 @@
-// Command easyworker is the sandbox worker: a single static binary exposing
+// Command agent-worker is the sandbox worker: a single static binary exposing
 // the WorkerService Connect API. It runs (a) as a plain host process on
 // windows/macos/linux (the forgejo-runner desktop model: register and dial
 // out), and (b) as the worker injected into cluster sandboxes (WORKER_PORT
@@ -24,18 +24,19 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	workerv1connect "github.com/easylab-platform/easyworker/gen/worker/v1/workerv1connect"
-	"github.com/easylab-platform/easyworker/internal"
-	"github.com/easylab-platform/easyworker/internal/auth"
-	"github.com/easylab-platform/easyworker/internal/filesvc"
-	"github.com/easylab-platform/easyworker/internal/jobsvc"
-	"github.com/easylab-platform/easyworker/internal/shellh"
+	workerv1connect "github.com/abcp-sdk/agent-worker/gen/worker/v1/workerv1connect"
+	"github.com/abcp-sdk/agent-worker/internal"
+	"github.com/abcp-sdk/agent-worker/internal/auth"
+	"github.com/abcp-sdk/agent-worker/internal/filesvc"
+	"github.com/abcp-sdk/agent-worker/internal/jobsvc"
+	"github.com/abcp-sdk/agent-worker/internal/shellh"
+	"github.com/abcp-sdk/agent-worker/internal/webui"
 )
 
 func main() {
 	addr := flag.String("addr", "", "listen address (default 0.0.0.0:${WORKER_PORT:-8080})")
 	workspace := flag.String("workspace", "", "workspace root (default ${WORKER_WORKSPACE} or ~/workspace)")
-	dbPath := flag.String("db", "", "job history sqlite path (default ${WORKER_DB} or ./easyworker.db)")
+	dbPath := flag.String("db", "", "job history sqlite path (default ${WORKER_DB} or ./agent-worker.db)")
 	flag.Parse()
 
 	listen := *addr
@@ -52,7 +53,7 @@ func main() {
 	}
 	db := *dbPath
 	if db == "" {
-		db = envOr("WORKER_DB", "easyworker.db")
+		db = envOr("WORKER_DB", "agent-worker.db")
 	}
 
 	// Job env: clean base + passthrough of proxy/registry knobs (ext-ops /
@@ -100,15 +101,19 @@ func main() {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	})
+	// Built-in static control panel at "/" (same-origin with the RPC above).
+	// Registered LAST: the RPC handlers own their longer, more specific paths
+	// ("/worker.v1.*"), which the ServeMux prefers over this catch-all.
+	mux.Handle("/", webui.Handler())
 
 	// Surface the enrollment state. A RESUMED worker keeps its prior token and
 	// is already claimable/usable; an UNCLAIMED worker prints its one-time code
 	// (stdout) for a launcher to capture.
 	switch {
 	case gate.Resumed():
-		log.Printf("easyworker RESUMED — persisted enrollment (no re-claim needed)")
+		log.Printf("agent-worker RESUMED — persisted enrollment (no re-claim needed)")
 	case gate.Code() != "":
-		log.Printf("easyworker UNCLAIMED — enrollment code: %s", gate.Code())
+		log.Printf("agent-worker UNCLAIMED — enrollment code: %s", gate.Code())
 	}
 
 	// Dual-stack h1 + h2c, mirroring easylab's listener shape so both Connect
@@ -126,7 +131,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("easyworker listening on %s (os=%s arch=%s workspace=%s shell=builtin)",
+	log.Printf("agent-worker listening on %s (os=%s arch=%s workspace=%s shell=builtin)",
 		listen, runtime.GOOS, runtime.GOARCH, ws)
 
 	// Graceful shutdown on SIGINT/SIGTERM (k8s sends SIGTERM before killing
@@ -137,7 +142,7 @@ func main() {
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 		<-sig
-		log.Printf("easyworker shutting down (signal received)")
+		log.Printf("agent-worker shutting down (signal received)")
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
@@ -186,7 +191,7 @@ func defaultWorkspace() string {
 // knobs and CA/trust configuration only (explicitly allowlisted). Everything
 // else is dropped.
 //
-// The CA/trust entries matter for preset images (easylab/easyworker-<lang>):
+// The CA/trust entries matter for preset images (easylab/agent-worker-<lang>):
 // those bake the egress CA into the image and set the per-runtime variables
 // here. Without forwarding them, a job would run in an image whose OWN
 // environment carries the trust config but the child process would not see it.

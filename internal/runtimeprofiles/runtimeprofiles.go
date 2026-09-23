@@ -33,7 +33,7 @@ type Settings struct {
 }
 
 // DefaultSettings are the built-in knobs (matching the cluster's device plugin
-// and the easyworker VM profiles).
+// and the agent-worker VM profiles).
 func DefaultSettings() Settings {
 	return Settings{
 		KVMDevice:   "squat.ai/kvm",

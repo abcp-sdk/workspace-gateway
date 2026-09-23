@@ -20,7 +20,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/workspace-gateway 
 # repo image builds against the cluster buildkitd.
 FROM ${BUILDKIT_IMAGE} AS buildkit
 
-# easyworker binary, injected into every sandbox base image at launch time
+# agent-worker binary, injected into every sandbox base image at launch time
 # (derive-on-launch). Built from the vendored copy under worker-src/, so the
 # gateway image is self-contained. That copy mirrors abcp-sdk/worker (the
 # abcp-sdk-owned fork of easylab-platform/easyworker carrying this gateway's
@@ -33,7 +33,7 @@ WORKDIR /src
 COPY worker-src/go.mod worker-src/go.sum ./
 RUN go mod download
 COPY worker-src/ ./
-RUN GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o /out/easyworker ./cmd/easyworker
+RUN GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o /out/agent-worker ./cmd/agent-worker
 
 FROM ${REGISTRY}/alpine:3.24
 # Keep the official CDN (the build runs behind a proxy; swapping to a mirror
@@ -44,8 +44,8 @@ ENV http_proxy=${HTTP_PROXY} https_proxy=${HTTPS_PROXY}
 RUN apk add --no-cache ca-certificates
 COPY --from=build /out/workspace-gateway /usr/local/bin/workspace-gateway
 COPY --from=buildkit /usr/bin/buildctl /usr/local/bin/buildctl
-COPY --from=worker /out/easyworker /usr/local/lib/easyworker/easyworker
+COPY --from=worker /out/agent-worker /usr/local/lib/agent-worker/agent-worker
 ENV PORT=8080 GATEWAY_DB=/data/workspace-gateway.db \
-    WORKER_BIN=/usr/local/lib/easyworker/easyworker
+    WORKER_BIN=/usr/local/lib/agent-worker/agent-worker
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/workspace-gateway"]

@@ -188,7 +188,7 @@ gateway:
   registry:
     defaultBaseImage: "git.agent.svc.cluster.local/agent-toolchain/toolchain-base:debian-trixie"
     deriveRepo: "root/sandbox"
-    workerBin: "/usr/local/lib/easyworker/easyworker"
+    workerBin: "/usr/local/lib/agent-worker/agent-worker"
   # Optional JSON overriding KVM/GPU device names, the GPU RuntimeClass (needed
   # for /dev/nvidia* to appear), and the KVM security context.
   runtime: ""

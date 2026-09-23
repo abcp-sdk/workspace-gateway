@@ -1,5 +1,5 @@
 // Package sandboxmgr is the gateway's Kubernetes backend: it creates, lists,
-// resolves and deletes easyworker sandboxes as Pod + Service + Secret triples
+// resolves and deletes agent-worker sandboxes as Pod + Service + Secret triples
 // in a single namespace. It knows nothing about repos, CI or easylab.
 package sandboxmgr
 
@@ -36,7 +36,7 @@ const (
 	// so a session can enumerate and fan out to its own sandboxes.
 	AnnoSession = "worker-manager/session"
 
-	// WorkerPort is the easyworker listen port baked into preset images.
+	// WorkerPort is the agent-worker listen port baked into preset images.
 	WorkerPort = 48080
 )
 

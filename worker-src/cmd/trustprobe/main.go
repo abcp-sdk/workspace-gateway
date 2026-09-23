@@ -7,8 +7,8 @@
 //
 //	trustprobe -addr http://<pod-ip>:48080
 //
-// It is used to validate the easyworker preset images
-// (easyworker/images): a preset must pass the probes with a pod spec that
+// It is used to validate the agent-worker preset images
+// (agent-worker/images): a preset must pass the probes with a pod spec that
 // injects nothing beyond the egress sidecar.
 package main
 
@@ -21,8 +21,8 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
-	workerv1 "github.com/easylab-platform/easyworker/gen/worker/v1"
-	"github.com/easylab-platform/easyworker/gen/worker/v1/workerv1connect"
+	workerv1 "github.com/abcp-sdk/agent-worker/gen/worker/v1"
+	"github.com/abcp-sdk/agent-worker/gen/worker/v1/workerv1connect"
 )
 
 // Each probe names the binary it needs (so a missing toolchain is a SKIP, not

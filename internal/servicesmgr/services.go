@@ -38,6 +38,10 @@ const (
 	// AnnoExpiresAt is the unix-millis deadline after which a preview service is
 	// reclaimed (empty/0 = no TTL).
 	AnnoExpiresAt = "workspace/service-expires-at"
+	// AnnoReplicasBeforePause remembers the replica count in effect when a
+	// service was paused (scaled to 0), so Resume can restore it. Presence of
+	// this annotation is what marks a service as PAUSED.
+	AnnoReplicasBeforePause = "workspace/service-replicas-before-pause"
 )
 
 // Stage values for AnnoStage.
@@ -64,6 +68,9 @@ type Service struct {
 	Stage string
 	// ExpiresAt is the unix-millis deadline for a preview service (0 = none).
 	ExpiresAt int64
+	// Paused is true when the service was scaled to zero by Pause (Replicas
+	// then reads 0). Resume restores the pre-pause replica count.
+	Paused bool
 	// Pod diagnostics (best-effort; zero when no pod is observed).
 	PodPhase string
 	Restarts int32
@@ -525,6 +532,57 @@ func (c *Client) ReapExpired(ctx context.Context, now int64) ([]string, error) {
 	return deleted, nil
 }
 
+// Pause scales a service's Deployment to zero replicas, remembering the count
+// it had (so Resume restores it). Idempotent: pausing an already-paused service
+// keeps the originally remembered count. Returns the updated view.
+func (c *Client) Pause(ctx context.Context, name string) (Service, error) {
+	d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return Service{}, err
+	}
+	if _, paused := d.Annotations[AnnoReplicasBeforePause]; !paused {
+		prev := int32(0)
+		if d.Spec.Replicas != nil {
+			prev = *d.Spec.Replicas
+		}
+		if prev < 1 {
+			prev = 1
+		}
+		if d.Annotations == nil {
+			d.Annotations = map[string]string{}
+		}
+		d.Annotations[AnnoReplicasBeforePause] = fmt.Sprint(prev)
+	}
+	zero := int32(0)
+	d.Spec.Replicas = &zero
+	if _, err := c.cs.AppsV1().Deployments(c.namespace).Update(ctx, d, metav1.UpdateOptions{}); err != nil {
+		return Service{}, err
+	}
+	return c.Get(ctx, name)
+}
+
+// Resume restores a paused service to the replica count remembered at pause
+// time (default 1 when absent) and clears the pause marker. Returns the
+// updated view.
+func (c *Client) Resume(ctx context.Context, name string) (Service, error) {
+	d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return Service{}, err
+	}
+	reps := int32(1)
+	if v := d.Annotations[AnnoReplicasBeforePause]; v != "" {
+		if n, perr := strconv.ParseInt(v, 10, 32); perr == nil && n > 0 {
+			reps = int32(n)
+		}
+	}
+	d.Spec.Replicas = &reps
+	delete(d.Annotations, AnnoReplicasBeforePause)
+	if _, err := c.cs.AppsV1().Deployments(c.namespace).Update(ctx, d, metav1.UpdateOptions{}); err != nil {
+		return Service{}, err
+	}
+	return c.Get(ctx, name)
+}
+
 // Delete removes the Deployment + its Service(s) (primary + siblings).
 func (c *Client) Delete(ctx context.Context, name string) (bool, error) {
 	_, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, name, metav1.GetOptions{})
@@ -590,6 +648,7 @@ func toService(c *Client, d *appsv1.Deployment, ports []Port) Service {
 			expires = n
 		}
 	}
+	_, paused := d.Annotations[AnnoReplicasBeforePause]
 	return Service{
 		Name: d.Name, Image: d.Annotations[AnnoImage], Phase: phase,
 		Ready: d.Status.ReadyReplicas > 0, Replicas: reps,
@@ -597,7 +656,7 @@ func toService(c *Client, d *appsv1.Deployment, ports []Port) Service {
 		Creator: d.Annotations[AnnoCreator], Session: d.Annotations[AnnoSession],
 		CreatedAt: d.CreationTimestamp.UnixMilli(),
 		Ports:     ports,
-		Stage:     stage, ExpiresAt: expires,
+		Stage:     stage, ExpiresAt: expires, Paused: paused,
 	}
 }
 

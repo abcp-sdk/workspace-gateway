@@ -1,4 +1,4 @@
-// Package workerclient is a minimal easyworker (worker.v1) Connect client over
+// Package workerclient is a minimal agent-worker (worker.v1) Connect client over
 // plain HTTP/1.1. The gateway uses it only to observe a sandbox's job history
 // (for idle reclamation); execution tools live in the workspace extension.
 package workerclient
@@ -44,7 +44,7 @@ type WatchEvent struct {
 	Stderr   string
 }
 
-// Client talks to one easyworker endpoint.
+// Client talks to one agent-worker endpoint.
 type Client struct {
 	c workerv1connect.WorkerServiceClient
 }

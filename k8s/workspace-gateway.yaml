@@ -3,7 +3,7 @@
 # It is the ONLY trusted session-creation entry point (derives the role +
 # immutable preset) and provides read-only git browse + sandbox management.
 # Deployed in the agent namespace; talks to the agent (h2c) and Forgejo over
-# Service DNS, and manages easyworker sandboxes in the `worker` namespace
+# Service DNS, and manages agent-worker sandboxes in the `worker` namespace
 # IN-PROCESS (the standalone worker-manager was folded in here).
 apiVersion: apps/v1
 kind: Deployment
@@ -46,7 +46,7 @@ spec:
             - { name: TOOLCHAIN_ORG, value: agent-toolchain }
             - { name: DEFAULT_BASE_IMAGE, value: "git.agent.svc.cluster.local/agent-toolchain/toolchain-base:debian-trixie" }
             - { name: DERIVE_REPO, value: "root/sandbox" }
-            - { name: WORKER_BIN, value: /usr/local/lib/easyworker/easyworker }
+            - { name: WORKER_BIN, value: /usr/local/lib/agent-worker/agent-worker }
             # Runtime settings override (optional JSON; built-in defaults used otherwise).
             - { name: WORKSPACE_RUNTIME, value: "" }
             # Image builds (repo-build-image) + derive run buildctl against buildkitd.

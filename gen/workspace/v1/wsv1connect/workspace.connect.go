@@ -229,6 +229,12 @@ const (
 	// BranchSessionServiceDeleteServiceProcedure is the fully-qualified name of the
 	// BranchSessionService's DeleteService RPC.
 	BranchSessionServiceDeleteServiceProcedure = "/workspace.v1.BranchSessionService/DeleteService"
+	// BranchSessionServicePauseServiceProcedure is the fully-qualified name of the
+	// BranchSessionService's PauseService RPC.
+	BranchSessionServicePauseServiceProcedure = "/workspace.v1.BranchSessionService/PauseService"
+	// BranchSessionServiceResumeServiceProcedure is the fully-qualified name of the
+	// BranchSessionService's ResumeService RPC.
+	BranchSessionServiceResumeServiceProcedure = "/workspace.v1.BranchSessionService/ResumeService"
 	// BranchSessionServiceServiceLogsProcedure is the fully-qualified name of the
 	// BranchSessionService's ServiceLogs RPC.
 	BranchSessionServiceServiceLogsProcedure = "/workspace.v1.BranchSessionService/ServiceLogs"
@@ -427,6 +433,8 @@ type BranchSessionServiceClient interface {
 	PreviewService(context.Context, *connect.Request[v1.PreviewServiceRequest]) (*connect.Response[v1.PreviewServiceResponse], error)
 	ListServices(context.Context, *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error)
 	DeleteService(context.Context, *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error)
+	PauseService(context.Context, *connect.Request[v1.PauseServiceRequest]) (*connect.Response[v1.PauseServiceResponse], error)
+	ResumeService(context.Context, *connect.Request[v1.ResumeServiceRequest]) (*connect.Response[v1.ResumeServiceResponse], error)
 	// service logs (read a service's container logs; seam for a log backend)
 	ServiceLogs(context.Context, *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error)
 	WatchServiceLogs(context.Context, *connect.Request[v1.WatchServiceLogsRequest]) (*connect.ServerStreamForClient[v1.WatchServiceLogsResponse], error)
@@ -854,6 +862,18 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(branchSessionServiceMethods.ByName("DeleteService")),
 			connect.WithClientOptions(opts...),
 		),
+		pauseService: connect.NewClient[v1.PauseServiceRequest, v1.PauseServiceResponse](
+			httpClient,
+			baseURL+BranchSessionServicePauseServiceProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("PauseService")),
+			connect.WithClientOptions(opts...),
+		),
+		resumeService: connect.NewClient[v1.ResumeServiceRequest, v1.ResumeServiceResponse](
+			httpClient,
+			baseURL+BranchSessionServiceResumeServiceProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ResumeService")),
+			connect.WithClientOptions(opts...),
+		),
 		serviceLogs: connect.NewClient[v1.ServiceLogsRequest, v1.ServiceLogsResponse](
 			httpClient,
 			baseURL+BranchSessionServiceServiceLogsProcedure,
@@ -1142,6 +1162,8 @@ type branchSessionServiceClient struct {
 	previewService       *connect.Client[v1.PreviewServiceRequest, v1.PreviewServiceResponse]
 	listServices         *connect.Client[v1.ListServicesRequest, v1.ListServicesResponse]
 	deleteService        *connect.Client[v1.DeleteServiceRequest, v1.DeleteServiceResponse]
+	pauseService         *connect.Client[v1.PauseServiceRequest, v1.PauseServiceResponse]
+	resumeService        *connect.Client[v1.ResumeServiceRequest, v1.ResumeServiceResponse]
 	serviceLogs          *connect.Client[v1.ServiceLogsRequest, v1.ServiceLogsResponse]
 	watchServiceLogs     *connect.Client[v1.WatchServiceLogsRequest, v1.WatchServiceLogsResponse]
 	buildPreviewImage    *connect.Client[v1.BuildPreviewImageRequest, v1.BuildPreviewImageResponse]
@@ -1486,6 +1508,16 @@ func (c *branchSessionServiceClient) DeleteService(ctx context.Context, req *con
 	return c.deleteService.CallUnary(ctx, req)
 }
 
+// PauseService calls workspace.v1.BranchSessionService.PauseService.
+func (c *branchSessionServiceClient) PauseService(ctx context.Context, req *connect.Request[v1.PauseServiceRequest]) (*connect.Response[v1.PauseServiceResponse], error) {
+	return c.pauseService.CallUnary(ctx, req)
+}
+
+// ResumeService calls workspace.v1.BranchSessionService.ResumeService.
+func (c *branchSessionServiceClient) ResumeService(ctx context.Context, req *connect.Request[v1.ResumeServiceRequest]) (*connect.Response[v1.ResumeServiceResponse], error) {
+	return c.resumeService.CallUnary(ctx, req)
+}
+
 // ServiceLogs calls workspace.v1.BranchSessionService.ServiceLogs.
 func (c *branchSessionServiceClient) ServiceLogs(ctx context.Context, req *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error) {
 	return c.serviceLogs.CallUnary(ctx, req)
@@ -1757,6 +1789,8 @@ type BranchSessionServiceHandler interface {
 	PreviewService(context.Context, *connect.Request[v1.PreviewServiceRequest]) (*connect.Response[v1.PreviewServiceResponse], error)
 	ListServices(context.Context, *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error)
 	DeleteService(context.Context, *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error)
+	PauseService(context.Context, *connect.Request[v1.PauseServiceRequest]) (*connect.Response[v1.PauseServiceResponse], error)
+	ResumeService(context.Context, *connect.Request[v1.ResumeServiceRequest]) (*connect.Response[v1.ResumeServiceResponse], error)
 	// service logs (read a service's container logs; seam for a log backend)
 	ServiceLogs(context.Context, *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error)
 	WatchServiceLogs(context.Context, *connect.Request[v1.WatchServiceLogsRequest], *connect.ServerStream[v1.WatchServiceLogsResponse]) error
@@ -2180,6 +2214,18 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		connect.WithSchema(branchSessionServiceMethods.ByName("DeleteService")),
 		connect.WithHandlerOptions(opts...),
 	)
+	branchSessionServicePauseServiceHandler := connect.NewUnaryHandler(
+		BranchSessionServicePauseServiceProcedure,
+		svc.PauseService,
+		connect.WithSchema(branchSessionServiceMethods.ByName("PauseService")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceResumeServiceHandler := connect.NewUnaryHandler(
+		BranchSessionServiceResumeServiceProcedure,
+		svc.ResumeService,
+		connect.WithSchema(branchSessionServiceMethods.ByName("ResumeService")),
+		connect.WithHandlerOptions(opts...),
+	)
 	branchSessionServiceServiceLogsHandler := connect.NewUnaryHandler(
 		BranchSessionServiceServiceLogsProcedure,
 		svc.ServiceLogs,
@@ -2526,6 +2572,10 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceListServicesHandler.ServeHTTP(w, r)
 		case BranchSessionServiceDeleteServiceProcedure:
 			branchSessionServiceDeleteServiceHandler.ServeHTTP(w, r)
+		case BranchSessionServicePauseServiceProcedure:
+			branchSessionServicePauseServiceHandler.ServeHTTP(w, r)
+		case BranchSessionServiceResumeServiceProcedure:
+			branchSessionServiceResumeServiceHandler.ServeHTTP(w, r)
 		case BranchSessionServiceServiceLogsProcedure:
 			branchSessionServiceServiceLogsHandler.ServeHTTP(w, r)
 		case BranchSessionServiceWatchServiceLogsProcedure:
@@ -2851,6 +2901,14 @@ func (UnimplementedBranchSessionServiceHandler) ListServices(context.Context, *c
 
 func (UnimplementedBranchSessionServiceHandler) DeleteService(context.Context, *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeleteService is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) PauseService(context.Context, *connect.Request[v1.PauseServiceRequest]) (*connect.Response[v1.PauseServiceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.PauseService is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) ResumeService(context.Context, *connect.Request[v1.ResumeServiceRequest]) (*connect.Response[v1.ResumeServiceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ResumeService is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) ServiceLogs(context.Context, *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error) {

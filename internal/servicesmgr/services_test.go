@@ -165,6 +165,58 @@ func TestDeleteBySessionOnlyPreview(t *testing.T) {
 	}
 }
 
+func TestPauseResume(t *testing.T) {
+	c := newTestClient()
+	ctx := context.Background()
+	if _, err := c.Deploy(ctx, Spec{Name: "app", Image: "i:1", Creator: "t", Replicas: 3}); err != nil {
+		t.Fatal(err)
+	}
+	// Pause scales to zero and remembers the prior count.
+	p, err := c.Pause(ctx, "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.Paused || p.Replicas != 0 {
+		t.Fatalf("pause view = %+v", p)
+	}
+	// Idempotent pause keeps the ORIGINAL remembered count.
+	if _, err := c.Pause(ctx, "app"); err != nil {
+		t.Fatal(err)
+	}
+	// Resume restores 3 and clears the marker.
+	r, err := c.Resume(ctx, "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Paused || r.Replicas != 3 {
+		t.Fatalf("resume view = %+v", r)
+	}
+}
+
+func TestResumeDefaultsToOne(t *testing.T) {
+	c := newTestClient()
+	ctx := context.Background()
+	if _, err := c.Deploy(ctx, Spec{Name: "app", Image: "i:1", Creator: "t"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Pause(ctx, "app"); err != nil {
+		t.Fatal(err)
+	}
+	// Clear the marker to simulate a legacy paused object.
+	d, _ := c.cs.AppsV1().Deployments("worker").Get(ctx, "app", metav1.GetOptions{})
+	delete(d.Annotations, AnnoReplicasBeforePause)
+	if _, err := c.cs.AppsV1().Deployments("worker").Update(ctx, d, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	r, err := c.Resume(ctx, "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Replicas != 1 {
+		t.Fatalf("resume default = %+v", r)
+	}
+}
+
 func TestDeployRefusesForeignService(t *testing.T) {
 	c := newTestClient()
 	ctx := context.Background()

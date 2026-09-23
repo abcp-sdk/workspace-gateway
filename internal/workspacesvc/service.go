@@ -1676,7 +1676,7 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name must be simple"))
 	}
 	// Any base image is accepted. Derive a runnable sandbox by injecting the
-	// easyworker binary (easylab's model). Empty = the deployment default base.
+	// agent-worker binary (easylab's model). Empty = the deployment default base.
 	base := req.Msg.GetImage()
 	if base == "" {
 		base = s.defaultBase
@@ -2006,6 +2006,54 @@ func (s *Service) DeleteService(ctx context.Context, req *connect.Request[wsv1.D
 	return connect.NewResponse(&wsv1.DeleteServiceResponse{Ok: ok}), nil
 }
 
+// PauseService scales a service to zero replicas without deleting it. The
+// replica count is remembered so ResumeService can restore it.
+func (s *Service) PauseService(ctx context.Context, req *connect.Request[wsv1.PauseServiceRequest]) (*connect.Response[wsv1.PauseServiceResponse], error) {
+	svc, err := s.pauseResume(ctx, req.Header(), req.Msg.GetName(), true)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&wsv1.PauseServiceResponse{Service: svc}), nil
+}
+
+// ResumeService restores a paused service to its pre-pause replica count.
+func (s *Service) ResumeService(ctx context.Context, req *connect.Request[wsv1.ResumeServiceRequest]) (*connect.Response[wsv1.ResumeServiceResponse], error) {
+	svc, err := s.pauseResume(ctx, req.Header(), req.Msg.GetName(), false)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&wsv1.ResumeServiceResponse{Service: svc}), nil
+}
+
+// pauseResume is the shared authorization + dispatch for Pause/Resume. Pausing
+// is only meaningful for a running service; resuming only for a paused one.
+func (s *Service) pauseResume(ctx context.Context, hdr map[string][]string, name string, pause bool) (*wsv1.ServiceInfo, error) {
+	tenant, err := s.sandboxAuth(ctx, hdr)
+	if err != nil {
+		return nil, err
+	}
+	if s.services == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+	}
+	cur, gerr := s.services.Get(ctx, name)
+	if gerr != nil {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("service not found"))
+	}
+	if cur.Creator != "" && cur.Creator != tenant {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("service not found"))
+	}
+	var out servicesmgr.Service
+	if pause {
+		out, err = s.services.Pause(ctx, name)
+	} else {
+		out, err = s.services.Resume(ctx, name)
+	}
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return toServiceInfo(out, s.servicePublicURLs(out, hdr)), nil
+}
+
 // PreviewService deploys a session-bound, cluster-only PREVIEW service for
 // developer verification. The name is prefixed with the session slug, no public
 // URL is produced, and the service carries a TTL for reclamation.
@@ -2305,7 +2353,7 @@ func toServiceInfo(svc servicesmgr.Service, publicURLs map[string]string) *wsv1.
 		Replicas: svc.Replicas, Url: svc.URL, Creator: svc.Creator, Session: svc.Session,
 		PublicUrl: primary, Ports: ports,
 		Stage: svc.Stage, PodPhase: svc.PodPhase, Restarts: svc.Restarts,
-		Message: svc.Message, ExpiresAt: svc.ExpiresAt,
+		Message: svc.Message, ExpiresAt: svc.ExpiresAt, Paused: svc.Paused,
 	}
 }
 

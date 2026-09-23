@@ -11,7 +11,7 @@ import (
 
 	_ "modernc.org/sqlite" // pure-Go driver (CGO_ENABLED=0 discipline)
 
-	"github.com/easylab-platform/easyworker/internal/shellh"
+	"github.com/abcp-sdk/agent-worker/internal/shellh"
 )
 
 // Store persists jobs and their line history to sqlite (modernc). The DB is

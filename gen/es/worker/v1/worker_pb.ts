@@ -2,7 +2,7 @@
 // @generated from file worker/v1/worker.proto (package worker.v1, syntax proto3)
 /* eslint-disable */
 
-// easyworker: the sandbox worker contract (Connect RPC).
+// agent-worker: the sandbox worker contract (Connect RPC).
 //
 // Replaces the legacy worker-go WebSocket JSON-RPC surface (/ws + /ws/job SSE)
 // with the platform's standard Connect stack — same RPC semantics as the rest
@@ -26,7 +26,7 @@
 // Job output history persists to sqlite (WORKER_DB; emptyDir in-cluster, so
 // everything is ephemeral to the pod) with a retention window (default 24h).
 //
-// Server: easyworker binary (also the binary injected into cluster sandboxes;
+// Server: agent-worker binary (also the binary injected into cluster sandboxes;
 // WORKER_PORT pins the listen port). Client: ext-ops (ops-extension).
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
@@ -37,7 +37,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file worker/v1/worker.proto.
  */
 export const file_worker_v1_worker: GenFile = /*@__PURE__*/
-  fileDesc("ChZ3b3JrZXIvdjEvd29ya2VyLnByb3RvEgl3b3JrZXIudjEiDQoLSW5mb1JlcXVlc3QiWwoMSW5mb1Jlc3BvbnNlEgoKAm9zGAEgASgJEgwKBGFyY2gYAiABKAkSDQoFc2hlbGwYAyABKAkSEQoJd29ya3NwYWNlGAQgASgJEg8KB2Jvb3RfaWQYBSABKAkijwEKDkV4ZWN1dGVSZXF1ZXN0Eg8KB2NvbW1hbmQYASABKAkSDwoHd29ya2RpchgCIAEoCRIvCgNlbnYYAyADKAsyIi53b3JrZXIudjEuRXhlY3V0ZVJlcXVlc3QuRW52RW50cnkaKgoIRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASIhCg9FeGVjdXRlUmVzcG9uc2USDgoGam9iX2lkGAEgASgJInIKCEpvYkVudHJ5EgoKAmlkGAEgASgJEg8KB2NvbW1hbmQYAiABKAkSDQoFc3RhdGUYAyABKAkSEQoJZXhpdF9jb2RlGAQgASgFEhIKCnN0YXJ0ZWRfYXQYBSABKAMSEwoLZmluaXNoZWRfYXQYBiABKAMiEQoPTGlzdEpvYnNSZXF1ZXN0IjUKEExpc3RKb2JzUmVzcG9uc2USIQoEam9icxgBIAMoCzITLndvcmtlci52MS5Kb2JFbnRyeSIhCg9XYXRjaEpvYlJlcXVlc3QSDgoGam9iX2lkGAEgASgJIpoBChBXYXRjaEpvYlJlc3BvbnNlEhAKBm91dHB1dBgBIAEoCUgAEjAKBGRvbmUYAiABKAsyIC53b3JrZXIudjEuV2F0Y2hKb2JSZXNwb25zZS5Eb25lSAAaOQoERG9uZRIRCglleGl0X2NvZGUYASABKAUSDgoGc3Rkb3V0GAIgASgJEg4KBnN0ZGVychgDIAEoCUIHCgVldmVudCJOChBKb2JPdXRwdXRSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCRINCgVzdGFydBgCIAEoBRILCgNlbmQYAyABKAUSDgoGc3RyZWFtGAQgASgJImsKEUpvYk91dHB1dFJlc3BvbnNlEg0KBWxpbmVzGAEgAygJEhMKC3RvdGFsX2xpbmVzGAIgASgFEhIKCnN0YXJ0X2xpbmUYAyABKAUSEAoIZW5kX2xpbmUYBCABKAUSDAoEZG9uZRgFIAEoCCI0Cg5Kb2JXYWl0UmVxdWVzdBIOCgZqb2JfaWQYASABKAkSEgoKdGltZW91dF9tcxgCIAEoBSIzCg9Kb2JXYWl0UmVzcG9uc2USDQoFc3RhdGUYASABKAkSEQoJZXhpdF9jb2RlGAIgASgFIj4KD0pvYlN0ZGluUmVxdWVzdBIOCgZqb2JfaWQYASABKAkSDAoEZGF0YRgCIAEoDBINCgVjbG9zZRgDIAEoCCIeChBKb2JTdGRpblJlc3BvbnNlEgoKAm9rGAEgASgIIiAKDkpvYktpbGxSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCSIdCg9Kb2JLaWxsUmVzcG9uc2USCgoCb2sYASABKAgiHwoPRmlsZVJlYWRSZXF1ZXN0EgwKBHBhdGgYASABKAkiIwoQRmlsZVJlYWRSZXNwb25zZRIPCgdjb250ZW50GAEgASgMIjEKEEZpbGVXcml0ZVJlcXVlc3QSDAoEcGF0aBgBIAEoCRIPCgdjb250ZW50GAIgASgMIh8KEUZpbGVXcml0ZVJlc3BvbnNlEgoKAm9rGAEgASgIIjcKCUZpbGVFbnRyeRIMCgRwYXRoGAEgASgJEgwKBHNpemUYAiABKAMSDgoGaXNfZGlyGAMgASgIIh8KD0ZpbGVMaXN0UmVxdWVzdBIMCgRwYXRoGAEgASgJIkcKEEZpbGVMaXN0UmVzcG9uc2USDgoGaXNfZGlyGAEgASgIEiMKBWZpbGVzGAIgAygLMhQud29ya2VyLnYxLkZpbGVFbnRyeSJOChFTeW5jRm9sZGVyUmVxdWVzdBIPCgd0YXJiYWxsGAEgASgMEgwKBGRlc3QYAiABKAkSDQoFY2xlYW4YAyABKAgSCwoDcmV2GAQgASgJIjEKElN5bmNGb2xkZXJSZXNwb25zZRINCgVmaWxlcxgBIAEoBRIMCgRyb290GAIgASgJIhUKE0Vucm9sbFN0YXR1c1JlcXVlc3QiYwoURW5yb2xsU3RhdHVzUmVzcG9uc2USDwoHY2xhaW1lZBgBIAEoCBISCgpuZWVkc19jb2RlGAIgASgIEhUKDXByZWF1dGhvcml6ZWQYAyABKAgSDwoHYm9vdF9pZBgEIAEoCSI0ChJFbnJvbGxDbGFpbVJlcXVlc3QSDAoEY29kZRgBIAEoCRIQCghvd25lcl9pZBgCIAEoCSIwChNFbnJvbGxDbGFpbVJlc3BvbnNlEgoKAm9rGAEgASgIEg0KBXRva2VuGAIgASgJIioKFkVucm9sbFVucmVsZWFzZVJlcXVlc3QSEAoIb3duZXJfaWQYASABKAkiMwoXRW5yb2xsVW5yZWxlYXNlUmVzcG9uc2USCgoCb2sYASABKAgSDAoEY29kZRgCIAEoCTLEBgoNV29ya2VyU2VydmljZRI3CgRJbmZvEhYud29ya2VyLnYxLkluZm9SZXF1ZXN0Ghcud29ya2VyLnYxLkluZm9SZXNwb25zZRJACgdFeGVjdXRlEhkud29ya2VyLnYxLkV4ZWN1dGVSZXF1ZXN0Ghoud29ya2VyLnYxLkV4ZWN1dGVSZXNwb25zZRJDCghMaXN0Sm9icxIaLndvcmtlci52MS5MaXN0Sm9ic1JlcXVlc3QaGy53b3JrZXIudjEuTGlzdEpvYnNSZXNwb25zZRJFCghXYXRjaEpvYhIaLndvcmtlci52MS5XYXRjaEpvYlJlcXVlc3QaGy53b3JrZXIudjEuV2F0Y2hKb2JSZXNwb25zZTABEkYKCUpvYk91dHB1dBIbLndvcmtlci52MS5Kb2JPdXRwdXRSZXF1ZXN0Ghwud29ya2VyLnYxLkpvYk91dHB1dFJlc3BvbnNlEkAKB0pvYldhaXQSGS53b3JrZXIudjEuSm9iV2FpdFJlcXVlc3QaGi53b3JrZXIudjEuSm9iV2FpdFJlc3BvbnNlEkMKCEpvYlN0ZGluEhoud29ya2VyLnYxLkpvYlN0ZGluUmVxdWVzdBobLndvcmtlci52MS5Kb2JTdGRpblJlc3BvbnNlEkAKB0pvYktpbGwSGS53b3JrZXIudjEuSm9iS2lsbFJlcXVlc3QaGi53b3JrZXIudjEuSm9iS2lsbFJlc3BvbnNlEkMKCEZpbGVSZWFkEhoud29ya2VyLnYxLkZpbGVSZWFkUmVxdWVzdBobLndvcmtlci52MS5GaWxlUmVhZFJlc3BvbnNlEkYKCUZpbGVXcml0ZRIbLndvcmtlci52MS5GaWxlV3JpdGVSZXF1ZXN0Ghwud29ya2VyLnYxLkZpbGVXcml0ZVJlc3BvbnNlEkMKCEZpbGVMaXN0Ehoud29ya2VyLnYxLkZpbGVMaXN0UmVxdWVzdBobLndvcmtlci52MS5GaWxlTGlzdFJlc3BvbnNlEkkKClN5bmNGb2xkZXISHC53b3JrZXIudjEuU3luY0ZvbGRlclJlcXVlc3QaHS53b3JrZXIudjEuU3luY0ZvbGRlclJlc3BvbnNlMvUBCgxXb3JrZXJFbnJvbGwSSQoGU3RhdHVzEh4ud29ya2VyLnYxLkVucm9sbFN0YXR1c1JlcXVlc3QaHy53b3JrZXIudjEuRW5yb2xsU3RhdHVzUmVzcG9uc2USRgoFQ2xhaW0SHS53b3JrZXIudjEuRW5yb2xsQ2xhaW1SZXF1ZXN0Gh4ud29ya2VyLnYxLkVucm9sbENsYWltUmVzcG9uc2USUgoJVW5yZWxlYXNlEiEud29ya2VyLnYxLkVucm9sbFVucmVsZWFzZVJlcXVlc3QaIi53b3JrZXIudjEuRW5yb2xsVW5yZWxlYXNlUmVzcG9uc2VCPlo8Z2l0aHViLmNvbS9hYmNwLXNkay93b3Jrc3BhY2UtZ2F0ZXdheS9nZW4vd29ya2VyL3YxO3dvcmtlcnYxYgZwcm90bzM");
+  fileDesc("ChZ3b3JrZXIvdjEvd29ya2VyLnByb3RvEgl3b3JrZXIudjEiDQoLSW5mb1JlcXVlc3QicgoMSW5mb1Jlc3BvbnNlEgoKAm9zGAEgASgJEgwKBGFyY2gYAiABKAkSDQoFc2hlbGwYAyABKAkSEQoJd29ya3NwYWNlGAQgASgJEg8KB2Jvb3RfaWQYBSABKAkSFQoNZHJvcHBlZF9saW5lcxgGIAEoAyKjAQoORXhlY3V0ZVJlcXVlc3QSDwoHY29tbWFuZBgBIAEoCRIPCgd3b3JrZGlyGAIgASgJEi8KA2VudhgDIAMoCzIiLndvcmtlci52MS5FeGVjdXRlUmVxdWVzdC5FbnZFbnRyeRISCgp0aW1lb3V0X21zGAQgASgFGioKCEVudkVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiIQoPRXhlY3V0ZVJlc3BvbnNlEg4KBmpvYl9pZBgBIAEoCSJyCghKb2JFbnRyeRIKCgJpZBgBIAEoCRIPCgdjb21tYW5kGAIgASgJEg0KBXN0YXRlGAMgASgJEhEKCWV4aXRfY29kZRgEIAEoBRISCgpzdGFydGVkX2F0GAUgASgDEhMKC2ZpbmlzaGVkX2F0GAYgASgDIiAKD0xpc3RKb2JzUmVxdWVzdBINCgVsaW1pdBgBIAEoBSI1ChBMaXN0Sm9ic1Jlc3BvbnNlEiEKBGpvYnMYASADKAsyEy53b3JrZXIudjEuSm9iRW50cnkiIQoPV2F0Y2hKb2JSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCSKaAQoQV2F0Y2hKb2JSZXNwb25zZRIQCgZvdXRwdXQYASABKAlIABIwCgRkb25lGAIgASgLMiAud29ya2VyLnYxLldhdGNoSm9iUmVzcG9uc2UuRG9uZUgAGjkKBERvbmUSEQoJZXhpdF9jb2RlGAEgASgFEg4KBnN0ZG91dBgCIAEoCRIOCgZzdGRlcnIYAyABKAlCBwoFZXZlbnQiTgoQSm9iT3V0cHV0UmVxdWVzdBIOCgZqb2JfaWQYASABKAkSDQoFc3RhcnQYAiABKAUSCwoDZW5kGAMgASgFEg4KBnN0cmVhbRgEIAEoCSJrChFKb2JPdXRwdXRSZXNwb25zZRINCgVsaW5lcxgBIAMoCRITCgt0b3RhbF9saW5lcxgCIAEoBRISCgpzdGFydF9saW5lGAMgASgFEhAKCGVuZF9saW5lGAQgASgFEgwKBGRvbmUYBSABKAgiNAoOSm9iV2FpdFJlcXVlc3QSDgoGam9iX2lkGAEgASgJEhIKCnRpbWVvdXRfbXMYAiABKAUiMwoPSm9iV2FpdFJlc3BvbnNlEg0KBXN0YXRlGAEgASgJEhEKCWV4aXRfY29kZRgCIAEoBSI+Cg9Kb2JTdGRpblJlcXVlc3QSDgoGam9iX2lkGAEgASgJEgwKBGRhdGEYAiABKAwSDQoFY2xvc2UYAyABKAgiHgoQSm9iU3RkaW5SZXNwb25zZRIKCgJvaxgBIAEoCCIgCg5Kb2JLaWxsUmVxdWVzdBIOCgZqb2JfaWQYASABKAkiHQoPSm9iS2lsbFJlc3BvbnNlEgoKAm9rGAEgASgIIkUKD0ZpbGVSZWFkUmVxdWVzdBIMCgRwYXRoGAEgASgJEhIKCnN0YXJ0X2xpbmUYAiABKAUSEAoIZW5kX2xpbmUYAyABKAUiXgoQRmlsZVJlYWRSZXNwb25zZRIPCgdjb250ZW50GAEgASgMEhMKC3RvdGFsX2xpbmVzGAIgASgFEhIKCnN0YXJ0X2xpbmUYAyABKAUSEAoIZW5kX2xpbmUYBCABKAUiMQoQRmlsZVdyaXRlUmVxdWVzdBIMCgRwYXRoGAEgASgJEg8KB2NvbnRlbnQYAiABKAwiHwoRRmlsZVdyaXRlUmVzcG9uc2USCgoCb2sYASABKAgiIQoRRmlsZURlbGV0ZVJlcXVlc3QSDAoEcGF0aBgBIAEoCSIgChJGaWxlRGVsZXRlUmVzcG9uc2USCgoCb2sYASABKAgiKwoPRmlsZU1vdmVSZXF1ZXN0EgwKBGZyb20YASABKAkSCgoCdG8YAiABKAkiHgoQRmlsZU1vdmVSZXNwb25zZRIKCgJvaxgBIAEoCCIrCg9GaWxlQ29weVJlcXVlc3QSDAoEZnJvbRgBIAEoCRIKCgJ0bxgCIAEoCSIeChBGaWxlQ29weVJlc3BvbnNlEgoKAm9rGAEgASgIIjcKCUZpbGVFbnRyeRIMCgRwYXRoGAEgASgJEgwKBHNpemUYAiABKAMSDgoGaXNfZGlyGAMgASgIIj0KD0ZpbGVMaXN0UmVxdWVzdBIMCgRwYXRoGAEgASgJEg0KBWRlcHRoGAIgASgFEg0KBWxpbWl0GAMgASgFIkcKEEZpbGVMaXN0UmVzcG9uc2USDgoGaXNfZGlyGAEgASgIEiMKBWZpbGVzGAIgAygLMhQud29ya2VyLnYxLkZpbGVFbnRyeSJOChFTeW5jRm9sZGVyUmVxdWVzdBIPCgd0YXJiYWxsGAEgASgMEgwKBGRlc3QYAiABKAkSDQoFY2xlYW4YAyABKAgSCwoDcmV2GAQgASgJIjEKElN5bmNGb2xkZXJSZXNwb25zZRINCgVmaWxlcxgBIAEoBRIMCgRyb290GAIgASgJIhUKE0Vucm9sbFN0YXR1c1JlcXVlc3QiYwoURW5yb2xsU3RhdHVzUmVzcG9uc2USDwoHY2xhaW1lZBgBIAEoCBISCgpuZWVkc19jb2RlGAIgASgIEhUKDXByZWF1dGhvcml6ZWQYAyABKAgSDwoHYm9vdF9pZBgEIAEoCSI0ChJFbnJvbGxDbGFpbVJlcXVlc3QSDAoEY29kZRgBIAEoCRIQCghvd25lcl9pZBgCIAEoCSIwChNFbnJvbGxDbGFpbVJlc3BvbnNlEgoKAm9rGAEgASgIEg0KBXRva2VuGAIgASgJIioKFkVucm9sbFVucmVsZWFzZVJlcXVlc3QSEAoIb3duZXJfaWQYASABKAkiMwoXRW5yb2xsVW5yZWxlYXNlUmVzcG9uc2USCgoCb2sYASABKAgSDAoEY29kZRgCIAEoCTKZCAoNV29ya2VyU2VydmljZRI3CgRJbmZvEhYud29ya2VyLnYxLkluZm9SZXF1ZXN0Ghcud29ya2VyLnYxLkluZm9SZXNwb25zZRJACgdFeGVjdXRlEhkud29ya2VyLnYxLkV4ZWN1dGVSZXF1ZXN0Ghoud29ya2VyLnYxLkV4ZWN1dGVSZXNwb25zZRJDCghMaXN0Sm9icxIaLndvcmtlci52MS5MaXN0Sm9ic1JlcXVlc3QaGy53b3JrZXIudjEuTGlzdEpvYnNSZXNwb25zZRJFCghXYXRjaEpvYhIaLndvcmtlci52MS5XYXRjaEpvYlJlcXVlc3QaGy53b3JrZXIudjEuV2F0Y2hKb2JSZXNwb25zZTABEkYKCUpvYk91dHB1dBIbLndvcmtlci52MS5Kb2JPdXRwdXRSZXF1ZXN0Ghwud29ya2VyLnYxLkpvYk91dHB1dFJlc3BvbnNlEkAKB0pvYldhaXQSGS53b3JrZXIudjEuSm9iV2FpdFJlcXVlc3QaGi53b3JrZXIudjEuSm9iV2FpdFJlc3BvbnNlEkMKCEpvYlN0ZGluEhoud29ya2VyLnYxLkpvYlN0ZGluUmVxdWVzdBobLndvcmtlci52MS5Kb2JTdGRpblJlc3BvbnNlEkAKB0pvYktpbGwSGS53b3JrZXIudjEuSm9iS2lsbFJlcXVlc3QaGi53b3JrZXIudjEuSm9iS2lsbFJlc3BvbnNlEkMKCEZpbGVSZWFkEhoud29ya2VyLnYxLkZpbGVSZWFkUmVxdWVzdBobLndvcmtlci52MS5GaWxlUmVhZFJlc3BvbnNlEkYKCUZpbGVXcml0ZRIbLndvcmtlci52MS5GaWxlV3JpdGVSZXF1ZXN0Ghwud29ya2VyLnYxLkZpbGVXcml0ZVJlc3BvbnNlEkkKCkZpbGVEZWxldGUSHC53b3JrZXIudjEuRmlsZURlbGV0ZVJlcXVlc3QaHS53b3JrZXIudjEuRmlsZURlbGV0ZVJlc3BvbnNlEkMKCEZpbGVNb3ZlEhoud29ya2VyLnYxLkZpbGVNb3ZlUmVxdWVzdBobLndvcmtlci52MS5GaWxlTW92ZVJlc3BvbnNlEkMKCEZpbGVDb3B5Ehoud29ya2VyLnYxLkZpbGVDb3B5UmVxdWVzdBobLndvcmtlci52MS5GaWxlQ29weVJlc3BvbnNlEkMKCEZpbGVMaXN0Ehoud29ya2VyLnYxLkZpbGVMaXN0UmVxdWVzdBobLndvcmtlci52MS5GaWxlTGlzdFJlc3BvbnNlEkkKClN5bmNGb2xkZXISHC53b3JrZXIudjEuU3luY0ZvbGRlclJlcXVlc3QaHS53b3JrZXIudjEuU3luY0ZvbGRlclJlc3BvbnNlMvUBCgxXb3JrZXJFbnJvbGwSSQoGU3RhdHVzEh4ud29ya2VyLnYxLkVucm9sbFN0YXR1c1JlcXVlc3QaHy53b3JrZXIudjEuRW5yb2xsU3RhdHVzUmVzcG9uc2USRgoFQ2xhaW0SHS53b3JrZXIudjEuRW5yb2xsQ2xhaW1SZXF1ZXN0Gh4ud29ya2VyLnYxLkVucm9sbENsYWltUmVzcG9uc2USUgoJVW5yZWxlYXNlEiEud29ya2VyLnYxLkVucm9sbFVucmVsZWFzZVJlcXVlc3QaIi53b3JrZXIudjEuRW5yb2xsVW5yZWxlYXNlUmVzcG9uc2VCPlo8Z2l0aHViLmNvbS9hYmNwLXNkay93b3Jrc3BhY2UtZ2F0ZXdheS9nZW4vd29ya2VyL3YxO3dvcmtlcnYxYgZwcm90bzM");
 
 /**
  * @generated from message worker.v1.InfoRequest
@@ -90,6 +90,16 @@ export type InfoResponse = Message<"worker.v1.InfoResponse"> & {
    * @generated from field: string boot_id = 5;
    */
   bootId: string;
+
+  /**
+   * boot_id recorded at sync time to detect worker
+   * restarts and re-sync workspaces
+   *
+   * output lines lost to backpressure (store channel
+   *
+   * @generated from field: int64 dropped_lines = 6;
+   */
+  droppedLines: bigint;
 };
 
 /**
@@ -121,6 +131,15 @@ export type ExecuteRequest = Message<"worker.v1.ExecuteRequest"> & {
    * @generated from field: map<string, string> env = 3;
    */
   env: { [key: string]: string };
+
+  /**
+   * Optional wall-clock deadline: when set and exceeded, the job's whole
+   * process tree is killed and the job ends in state `killed`. Cleaner than
+   * wrapping the command in `timeout`, which swallows the recorded output.
+   *
+   * @generated from field: int32 timeout_ms = 4;
+   */
+  timeoutMs: number;
 };
 
 /**
@@ -199,6 +218,12 @@ export const JobEntrySchema: GenMessage<JobEntry> = /*@__PURE__*/
  * @generated from message worker.v1.ListJobsRequest
  */
 export type ListJobsRequest = Message<"worker.v1.ListJobsRequest"> & {
+  /**
+   * newest-first cap; <=0 = 500 (server cap)
+   *
+   * @generated from field: int32 limit = 1;
+   */
+  limit: number;
 };
 
 /**
@@ -387,8 +412,8 @@ export const JobOutputResponseSchema: GenMessage<JobOutputResponse> = /*@__PURE_
 
 /**
  * Wait blocks until the job completes or timeout_ms elapses. The worker caps
- * the wait at 60s (job_wait cap, matching the legacy contract; clients use a
- * 65s read timeout).
+ * the wait at WORKER_WAIT_MAX (default 600s). A response with state
+ * `running` means the deadline expired, not that the job failed.
  *
  * @generated from message worker.v1.JobWaitRequest
  */
@@ -521,6 +546,26 @@ export type FileReadRequest = Message<"worker.v1.FileReadRequest"> & {
    * @generated from field: string path = 1;
    */
   path: string;
+
+  /**
+   * Optional 0-based line window (both inclusive of the line numbering used
+   * by the response). Omitted/zero values read the WHOLE file — the window
+   * exists so a caller can page a huge file without transferring it all.
+   *
+   * first line to return (0-based); negative counts
+   *
+   * @generated from field: int32 start_line = 2;
+   */
+  startLine: number;
+
+  /**
+   * from the end (-200 = start 200 lines before EOF)
+   *
+   * exclusive end (0 = through EOF)
+   *
+   * @generated from field: int32 end_line = 3;
+   */
+  endLine: number;
 };
 
 /**
@@ -538,6 +583,27 @@ export type FileReadResponse = Message<"worker.v1.FileReadResponse"> & {
    * @generated from field: bytes content = 1;
    */
   content: Uint8Array;
+
+  /**
+   * lines in the whole file
+   *
+   * @generated from field: int32 total_lines = 2;
+   */
+  totalLines: number;
+
+  /**
+   * first line actually returned (0-based)
+   *
+   * @generated from field: int32 start_line = 3;
+   */
+  startLine: number;
+
+  /**
+   * exclusive end actually returned
+   *
+   * @generated from field: int32 end_line = 4;
+   */
+  endLine: number;
 };
 
 /**
@@ -587,6 +653,118 @@ export const FileWriteResponseSchema: GenMessage<FileWriteResponse> = /*@__PURE_
   messageDesc(file_worker_v1_worker, 20);
 
 /**
+ * @generated from message worker.v1.FileDeleteRequest
+ */
+export type FileDeleteRequest = Message<"worker.v1.FileDeleteRequest"> & {
+  /**
+   * @generated from field: string path = 1;
+   */
+  path: string;
+};
+
+/**
+ * Describes the message worker.v1.FileDeleteRequest.
+ * Use `create(FileDeleteRequestSchema)` to create a new message.
+ */
+export const FileDeleteRequestSchema: GenMessage<FileDeleteRequest> = /*@__PURE__*/
+  messageDesc(file_worker_v1_worker, 21);
+
+/**
+ * @generated from message worker.v1.FileDeleteResponse
+ */
+export type FileDeleteResponse = Message<"worker.v1.FileDeleteResponse"> & {
+  /**
+   * @generated from field: bool ok = 1;
+   */
+  ok: boolean;
+};
+
+/**
+ * Describes the message worker.v1.FileDeleteResponse.
+ * Use `create(FileDeleteResponseSchema)` to create a new message.
+ */
+export const FileDeleteResponseSchema: GenMessage<FileDeleteResponse> = /*@__PURE__*/
+  messageDesc(file_worker_v1_worker, 22);
+
+/**
+ * @generated from message worker.v1.FileMoveRequest
+ */
+export type FileMoveRequest = Message<"worker.v1.FileMoveRequest"> & {
+  /**
+   * @generated from field: string from = 1;
+   */
+  from: string;
+
+  /**
+   * @generated from field: string to = 2;
+   */
+  to: string;
+};
+
+/**
+ * Describes the message worker.v1.FileMoveRequest.
+ * Use `create(FileMoveRequestSchema)` to create a new message.
+ */
+export const FileMoveRequestSchema: GenMessage<FileMoveRequest> = /*@__PURE__*/
+  messageDesc(file_worker_v1_worker, 23);
+
+/**
+ * @generated from message worker.v1.FileMoveResponse
+ */
+export type FileMoveResponse = Message<"worker.v1.FileMoveResponse"> & {
+  /**
+   * @generated from field: bool ok = 1;
+   */
+  ok: boolean;
+};
+
+/**
+ * Describes the message worker.v1.FileMoveResponse.
+ * Use `create(FileMoveResponseSchema)` to create a new message.
+ */
+export const FileMoveResponseSchema: GenMessage<FileMoveResponse> = /*@__PURE__*/
+  messageDesc(file_worker_v1_worker, 24);
+
+/**
+ * @generated from message worker.v1.FileCopyRequest
+ */
+export type FileCopyRequest = Message<"worker.v1.FileCopyRequest"> & {
+  /**
+   * @generated from field: string from = 1;
+   */
+  from: string;
+
+  /**
+   * @generated from field: string to = 2;
+   */
+  to: string;
+};
+
+/**
+ * Describes the message worker.v1.FileCopyRequest.
+ * Use `create(FileCopyRequestSchema)` to create a new message.
+ */
+export const FileCopyRequestSchema: GenMessage<FileCopyRequest> = /*@__PURE__*/
+  messageDesc(file_worker_v1_worker, 25);
+
+/**
+ * @generated from message worker.v1.FileCopyResponse
+ */
+export type FileCopyResponse = Message<"worker.v1.FileCopyResponse"> & {
+  /**
+   * @generated from field: bool ok = 1;
+   */
+  ok: boolean;
+};
+
+/**
+ * Describes the message worker.v1.FileCopyResponse.
+ * Use `create(FileCopyResponseSchema)` to create a new message.
+ */
+export const FileCopyResponseSchema: GenMessage<FileCopyResponse> = /*@__PURE__*/
+  messageDesc(file_worker_v1_worker, 26);
+
+/**
  * @generated from message worker.v1.FileEntry
  */
 export type FileEntry = Message<"worker.v1.FileEntry"> & {
@@ -611,7 +789,7 @@ export type FileEntry = Message<"worker.v1.FileEntry"> & {
  * Use `create(FileEntrySchema)` to create a new message.
  */
 export const FileEntrySchema: GenMessage<FileEntry> = /*@__PURE__*/
-  messageDesc(file_worker_v1_worker, 21);
+  messageDesc(file_worker_v1_worker, 27);
 
 /**
  * @generated from message worker.v1.FileListRequest
@@ -621,6 +799,22 @@ export type FileListRequest = Message<"worker.v1.FileListRequest"> & {
    * @generated from field: string path = 1;
    */
   path: string;
+
+  /**
+   * Optional server-side recursion: expand directories up to `depth` levels
+   * (1 = immediate children only, the default). One RPC replaces the
+   * client-side BFS that cost one round-trip per directory.
+   *
+   * @generated from field: int32 depth = 2;
+   */
+  depth: number;
+
+  /**
+   * max entries returned (<=0 = 1000, hard cap 10000)
+   *
+   * @generated from field: int32 limit = 3;
+   */
+  limit: number;
 };
 
 /**
@@ -628,7 +822,7 @@ export type FileListRequest = Message<"worker.v1.FileListRequest"> & {
  * Use `create(FileListRequestSchema)` to create a new message.
  */
 export const FileListRequestSchema: GenMessage<FileListRequest> = /*@__PURE__*/
-  messageDesc(file_worker_v1_worker, 22);
+  messageDesc(file_worker_v1_worker, 28);
 
 /**
  * @generated from message worker.v1.FileListResponse
@@ -650,7 +844,7 @@ export type FileListResponse = Message<"worker.v1.FileListResponse"> & {
  * Use `create(FileListResponseSchema)` to create a new message.
  */
 export const FileListResponseSchema: GenMessage<FileListResponse> = /*@__PURE__*/
-  messageDesc(file_worker_v1_worker, 23);
+  messageDesc(file_worker_v1_worker, 29);
 
 /**
  * SyncFolder unpacks a tarball of a directory tree into the worker's
@@ -693,7 +887,7 @@ export type SyncFolderRequest = Message<"worker.v1.SyncFolderRequest"> & {
  * Use `create(SyncFolderRequestSchema)` to create a new message.
  */
 export const SyncFolderRequestSchema: GenMessage<SyncFolderRequest> = /*@__PURE__*/
-  messageDesc(file_worker_v1_worker, 24);
+  messageDesc(file_worker_v1_worker, 30);
 
 /**
  * @generated from message worker.v1.SyncFolderResponse
@@ -717,7 +911,7 @@ export type SyncFolderResponse = Message<"worker.v1.SyncFolderResponse"> & {
  * Use `create(SyncFolderResponseSchema)` to create a new message.
  */
 export const SyncFolderResponseSchema: GenMessage<SyncFolderResponse> = /*@__PURE__*/
-  messageDesc(file_worker_v1_worker, 25);
+  messageDesc(file_worker_v1_worker, 31);
 
 /**
  * @generated from message worker.v1.EnrollStatusRequest
@@ -730,7 +924,7 @@ export type EnrollStatusRequest = Message<"worker.v1.EnrollStatusRequest"> & {
  * Use `create(EnrollStatusRequestSchema)` to create a new message.
  */
 export const EnrollStatusRequestSchema: GenMessage<EnrollStatusRequest> = /*@__PURE__*/
-  messageDesc(file_worker_v1_worker, 26);
+  messageDesc(file_worker_v1_worker, 32);
 
 /**
  * @generated from message worker.v1.EnrollStatusResponse
@@ -768,7 +962,7 @@ export type EnrollStatusResponse = Message<"worker.v1.EnrollStatusResponse"> & {
  * Use `create(EnrollStatusResponseSchema)` to create a new message.
  */
 export const EnrollStatusResponseSchema: GenMessage<EnrollStatusResponse> = /*@__PURE__*/
-  messageDesc(file_worker_v1_worker, 27);
+  messageDesc(file_worker_v1_worker, 33);
 
 /**
  * @generated from message worker.v1.EnrollClaimRequest
@@ -794,7 +988,7 @@ export type EnrollClaimRequest = Message<"worker.v1.EnrollClaimRequest"> & {
  * Use `create(EnrollClaimRequestSchema)` to create a new message.
  */
 export const EnrollClaimRequestSchema: GenMessage<EnrollClaimRequest> = /*@__PURE__*/
-  messageDesc(file_worker_v1_worker, 28);
+  messageDesc(file_worker_v1_worker, 34);
 
 /**
  * @generated from message worker.v1.EnrollClaimResponse
@@ -818,7 +1012,7 @@ export type EnrollClaimResponse = Message<"worker.v1.EnrollClaimResponse"> & {
  * Use `create(EnrollClaimResponseSchema)` to create a new message.
  */
 export const EnrollClaimResponseSchema: GenMessage<EnrollClaimResponse> = /*@__PURE__*/
-  messageDesc(file_worker_v1_worker, 29);
+  messageDesc(file_worker_v1_worker, 35);
 
 /**
  * @generated from message worker.v1.EnrollUnreleaseRequest
@@ -838,7 +1032,7 @@ export type EnrollUnreleaseRequest = Message<"worker.v1.EnrollUnreleaseRequest">
  * Use `create(EnrollUnreleaseRequestSchema)` to create a new message.
  */
 export const EnrollUnreleaseRequestSchema: GenMessage<EnrollUnreleaseRequest> = /*@__PURE__*/
-  messageDesc(file_worker_v1_worker, 30);
+  messageDesc(file_worker_v1_worker, 36);
 
 /**
  * @generated from message worker.v1.EnrollUnreleaseResponse
@@ -862,7 +1056,7 @@ export type EnrollUnreleaseResponse = Message<"worker.v1.EnrollUnreleaseResponse
  * Use `create(EnrollUnreleaseResponseSchema)` to create a new message.
  */
 export const EnrollUnreleaseResponseSchema: GenMessage<EnrollUnreleaseResponse> = /*@__PURE__*/
-  messageDesc(file_worker_v1_worker, 31);
+  messageDesc(file_worker_v1_worker, 37);
 
 /**
  * @generated from service worker.v1.WorkerService
@@ -947,6 +1141,30 @@ export const WorkerService: GenService<{
     methodKind: "unary";
     input: typeof FileWriteRequestSchema;
     output: typeof FileWriteResponseSchema;
+  },
+  /**
+   * @generated from rpc worker.v1.WorkerService.FileDelete
+   */
+  fileDelete: {
+    methodKind: "unary";
+    input: typeof FileDeleteRequestSchema;
+    output: typeof FileDeleteResponseSchema;
+  },
+  /**
+   * @generated from rpc worker.v1.WorkerService.FileMove
+   */
+  fileMove: {
+    methodKind: "unary";
+    input: typeof FileMoveRequestSchema;
+    output: typeof FileMoveResponseSchema;
+  },
+  /**
+   * @generated from rpc worker.v1.WorkerService.FileCopy
+   */
+  fileCopy: {
+    methodKind: "unary";
+    input: typeof FileCopyRequestSchema;
+    output: typeof FileCopyResponseSchema;
   },
   /**
    * @generated from rpc worker.v1.WorkerService.FileList

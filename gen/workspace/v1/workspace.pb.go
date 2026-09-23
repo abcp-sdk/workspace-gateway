@@ -8126,7 +8126,10 @@ type ServiceInfo struct {
 	Restarts int32  `protobuf:"varint,13,opt,name=restarts,proto3" json:"restarts,omitempty"`
 	Message  string `protobuf:"bytes,14,opt,name=message,proto3" json:"message,omitempty"`
 	// Unix-millis TTL deadline of a preview service (0 = none).
-	ExpiresAt     int64 `protobuf:"varint,15,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	ExpiresAt int64 `protobuf:"varint,15,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// Paused is true when the service is scaled to zero replicas (PauseService);
+	// ResumeService restores the replica count it had before the pause.
+	Paused        bool `protobuf:"varint,16,opt,name=paused,proto3" json:"paused,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8264,6 +8267,13 @@ func (x *ServiceInfo) GetExpiresAt() int64 {
 		return x.ExpiresAt
 	}
 	return 0
+}
+
+func (x *ServiceInfo) GetPaused() bool {
+	if x != nil {
+		return x.Paused
+	}
+	return false
 }
 
 // ServicePortInfo is one exposed port of a service.
@@ -8953,6 +8963,187 @@ func (x *DeleteServiceResponse) GetOk() bool {
 	return false
 }
 
+// PauseService scales a service to zero replicas (without deleting it). The
+// replica count in effect at pause time is remembered so ResumeService can
+// restore it.
+type PauseServiceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PauseServiceRequest) Reset() {
+	*x = PauseServiceRequest{}
+	mi := &file_workspace_v1_workspace_proto_msgTypes[144]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PauseServiceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PauseServiceRequest) ProtoMessage() {}
+
+func (x *PauseServiceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_workspace_v1_workspace_proto_msgTypes[144]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PauseServiceRequest.ProtoReflect.Descriptor instead.
+func (*PauseServiceRequest) Descriptor() ([]byte, []int) {
+	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{144}
+}
+
+func (x *PauseServiceRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type PauseServiceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Service       *ServiceInfo           `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PauseServiceResponse) Reset() {
+	*x = PauseServiceResponse{}
+	mi := &file_workspace_v1_workspace_proto_msgTypes[145]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PauseServiceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PauseServiceResponse) ProtoMessage() {}
+
+func (x *PauseServiceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_workspace_v1_workspace_proto_msgTypes[145]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PauseServiceResponse.ProtoReflect.Descriptor instead.
+func (*PauseServiceResponse) Descriptor() ([]byte, []int) {
+	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{145}
+}
+
+func (x *PauseServiceResponse) GetService() *ServiceInfo {
+	if x != nil {
+		return x.Service
+	}
+	return nil
+}
+
+// ResumeService restores a paused service to the replica count it had before
+// PauseService.
+type ResumeServiceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResumeServiceRequest) Reset() {
+	*x = ResumeServiceRequest{}
+	mi := &file_workspace_v1_workspace_proto_msgTypes[146]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResumeServiceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResumeServiceRequest) ProtoMessage() {}
+
+func (x *ResumeServiceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_workspace_v1_workspace_proto_msgTypes[146]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResumeServiceRequest.ProtoReflect.Descriptor instead.
+func (*ResumeServiceRequest) Descriptor() ([]byte, []int) {
+	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{146}
+}
+
+func (x *ResumeServiceRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type ResumeServiceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Service       *ServiceInfo           `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResumeServiceResponse) Reset() {
+	*x = ResumeServiceResponse{}
+	mi := &file_workspace_v1_workspace_proto_msgTypes[147]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResumeServiceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResumeServiceResponse) ProtoMessage() {}
+
+func (x *ResumeServiceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_workspace_v1_workspace_proto_msgTypes[147]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResumeServiceResponse.ProtoReflect.Descriptor instead.
+func (*ResumeServiceResponse) Descriptor() ([]byte, []int) {
+	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{147}
+}
+
+func (x *ResumeServiceResponse) GetService() *ServiceInfo {
+	if x != nil {
+		return x.Service
+	}
+	return nil
+}
+
 // ---- service logs ----
 type ServiceLogsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -8967,7 +9158,7 @@ type ServiceLogsRequest struct {
 
 func (x *ServiceLogsRequest) Reset() {
 	*x = ServiceLogsRequest{}
-	mi := &file_workspace_v1_workspace_proto_msgTypes[144]
+	mi := &file_workspace_v1_workspace_proto_msgTypes[148]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8979,7 +9170,7 @@ func (x *ServiceLogsRequest) String() string {
 func (*ServiceLogsRequest) ProtoMessage() {}
 
 func (x *ServiceLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_workspace_v1_workspace_proto_msgTypes[144]
+	mi := &file_workspace_v1_workspace_proto_msgTypes[148]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8992,7 +9183,7 @@ func (x *ServiceLogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceLogsRequest.ProtoReflect.Descriptor instead.
 func (*ServiceLogsRequest) Descriptor() ([]byte, []int) {
-	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{144}
+	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{148}
 }
 
 func (x *ServiceLogsRequest) GetName() string {
@@ -9025,7 +9216,7 @@ type ServiceLogsResponse struct {
 
 func (x *ServiceLogsResponse) Reset() {
 	*x = ServiceLogsResponse{}
-	mi := &file_workspace_v1_workspace_proto_msgTypes[145]
+	mi := &file_workspace_v1_workspace_proto_msgTypes[149]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9037,7 +9228,7 @@ func (x *ServiceLogsResponse) String() string {
 func (*ServiceLogsResponse) ProtoMessage() {}
 
 func (x *ServiceLogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_workspace_v1_workspace_proto_msgTypes[145]
+	mi := &file_workspace_v1_workspace_proto_msgTypes[149]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9050,7 +9241,7 @@ func (x *ServiceLogsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceLogsResponse.ProtoReflect.Descriptor instead.
 func (*ServiceLogsResponse) Descriptor() ([]byte, []int) {
-	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{145}
+	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{149}
 }
 
 func (x *ServiceLogsResponse) GetLines() []string {
@@ -9070,7 +9261,7 @@ type WatchServiceLogsRequest struct {
 
 func (x *WatchServiceLogsRequest) Reset() {
 	*x = WatchServiceLogsRequest{}
-	mi := &file_workspace_v1_workspace_proto_msgTypes[146]
+	mi := &file_workspace_v1_workspace_proto_msgTypes[150]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9082,7 +9273,7 @@ func (x *WatchServiceLogsRequest) String() string {
 func (*WatchServiceLogsRequest) ProtoMessage() {}
 
 func (x *WatchServiceLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_workspace_v1_workspace_proto_msgTypes[146]
+	mi := &file_workspace_v1_workspace_proto_msgTypes[150]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9095,7 +9286,7 @@ func (x *WatchServiceLogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchServiceLogsRequest.ProtoReflect.Descriptor instead.
 func (*WatchServiceLogsRequest) Descriptor() ([]byte, []int) {
-	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{146}
+	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{150}
 }
 
 func (x *WatchServiceLogsRequest) GetName() string {
@@ -9126,7 +9317,7 @@ type WatchServiceLogsResponse struct {
 
 func (x *WatchServiceLogsResponse) Reset() {
 	*x = WatchServiceLogsResponse{}
-	mi := &file_workspace_v1_workspace_proto_msgTypes[147]
+	mi := &file_workspace_v1_workspace_proto_msgTypes[151]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9138,7 +9329,7 @@ func (x *WatchServiceLogsResponse) String() string {
 func (*WatchServiceLogsResponse) ProtoMessage() {}
 
 func (x *WatchServiceLogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_workspace_v1_workspace_proto_msgTypes[147]
+	mi := &file_workspace_v1_workspace_proto_msgTypes[151]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9151,7 +9342,7 @@ func (x *WatchServiceLogsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchServiceLogsResponse.ProtoReflect.Descriptor instead.
 func (*WatchServiceLogsResponse) Descriptor() ([]byte, []int) {
-	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{147}
+	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{151}
 }
 
 func (x *WatchServiceLogsResponse) GetOutput() string {
@@ -9195,7 +9386,7 @@ type BuildPreviewImageRequest struct {
 
 func (x *BuildPreviewImageRequest) Reset() {
 	*x = BuildPreviewImageRequest{}
-	mi := &file_workspace_v1_workspace_proto_msgTypes[148]
+	mi := &file_workspace_v1_workspace_proto_msgTypes[152]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9207,7 +9398,7 @@ func (x *BuildPreviewImageRequest) String() string {
 func (*BuildPreviewImageRequest) ProtoMessage() {}
 
 func (x *BuildPreviewImageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_workspace_v1_workspace_proto_msgTypes[148]
+	mi := &file_workspace_v1_workspace_proto_msgTypes[152]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9220,7 +9411,7 @@ func (x *BuildPreviewImageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuildPreviewImageRequest.ProtoReflect.Descriptor instead.
 func (*BuildPreviewImageRequest) Descriptor() ([]byte, []int) {
-	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{148}
+	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{152}
 }
 
 func (x *BuildPreviewImageRequest) GetOrg() string {
@@ -9283,7 +9474,7 @@ type BuildPreviewImageResponse struct {
 
 func (x *BuildPreviewImageResponse) Reset() {
 	*x = BuildPreviewImageResponse{}
-	mi := &file_workspace_v1_workspace_proto_msgTypes[149]
+	mi := &file_workspace_v1_workspace_proto_msgTypes[153]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9295,7 +9486,7 @@ func (x *BuildPreviewImageResponse) String() string {
 func (*BuildPreviewImageResponse) ProtoMessage() {}
 
 func (x *BuildPreviewImageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_workspace_v1_workspace_proto_msgTypes[149]
+	mi := &file_workspace_v1_workspace_proto_msgTypes[153]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9308,7 +9499,7 @@ func (x *BuildPreviewImageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuildPreviewImageResponse.ProtoReflect.Descriptor instead.
 func (*BuildPreviewImageResponse) Descriptor() ([]byte, []int) {
-	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{149}
+	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{153}
 }
 
 func (x *BuildPreviewImageResponse) GetImageRef() string {
@@ -9348,7 +9539,7 @@ type UpdateSettingsRequest struct {
 
 func (x *UpdateSettingsRequest) Reset() {
 	*x = UpdateSettingsRequest{}
-	mi := &file_workspace_v1_workspace_proto_msgTypes[150]
+	mi := &file_workspace_v1_workspace_proto_msgTypes[154]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9360,7 +9551,7 @@ func (x *UpdateSettingsRequest) String() string {
 func (*UpdateSettingsRequest) ProtoMessage() {}
 
 func (x *UpdateSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_workspace_v1_workspace_proto_msgTypes[150]
+	mi := &file_workspace_v1_workspace_proto_msgTypes[154]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9373,7 +9564,7 @@ func (x *UpdateSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateSettingsRequest.ProtoReflect.Descriptor instead.
 func (*UpdateSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{150}
+	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{154}
 }
 
 func (x *UpdateSettingsRequest) GetId() string {
@@ -9413,7 +9604,7 @@ type UpdateSettingsResponse struct {
 
 func (x *UpdateSettingsResponse) Reset() {
 	*x = UpdateSettingsResponse{}
-	mi := &file_workspace_v1_workspace_proto_msgTypes[151]
+	mi := &file_workspace_v1_workspace_proto_msgTypes[155]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9425,7 +9616,7 @@ func (x *UpdateSettingsResponse) String() string {
 func (*UpdateSettingsResponse) ProtoMessage() {}
 
 func (x *UpdateSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_workspace_v1_workspace_proto_msgTypes[151]
+	mi := &file_workspace_v1_workspace_proto_msgTypes[155]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9438,7 +9629,7 @@ func (x *UpdateSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateSettingsResponse.ProtoReflect.Descriptor instead.
 func (*UpdateSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{151}
+	return file_workspace_v1_workspace_proto_rawDescGZIP(), []int{155}
 }
 
 func (x *UpdateSettingsResponse) GetSession() *v1.Session {
@@ -10018,7 +10209,7 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\x04done\x18\x02 \x01(\bR\x04done\x12\x1b\n" +
 	"\texit_code\x18\x03 \x01(\x05R\bexitCode\x12\x16\n" +
 	"\x06stdout\x18\x04 \x01(\tR\x06stdout\x12\x16\n" +
-	"\x06stderr\x18\x05 \x01(\tR\x06stderr\"\xa1\x03\n" +
+	"\x06stderr\x18\x05 \x01(\tR\x06stderr\"\xb9\x03\n" +
 	"\vServiceInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05image\x18\x02 \x01(\tR\x05image\x12\x14\n" +
@@ -10037,7 +10228,8 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\brestarts\x18\r \x01(\x05R\brestarts\x12\x18\n" +
 	"\amessage\x18\x0e \x01(\tR\amessage\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x0f \x01(\x03R\texpiresAt\"\xad\x01\n" +
+	"expires_at\x18\x0f \x01(\x03R\texpiresAt\x12\x16\n" +
+	"\x06paused\x18\x10 \x01(\bR\x06paused\"\xad\x01\n" +
 	"\x0fServicePortInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06preset\x18\x02 \x01(\tR\x06preset\x12\x12\n" +
@@ -10096,7 +10288,15 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\x14DeleteServiceRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"'\n" +
 	"\x15DeleteServiceResponse\x12\x0e\n" +
-	"\x02ok\x18\x01 \x01(\bR\x02ok\"c\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\")\n" +
+	"\x13PauseServiceRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"K\n" +
+	"\x14PauseServiceResponse\x123\n" +
+	"\aservice\x18\x01 \x01(\v2\x19.workspace.v1.ServiceInfoR\aservice\"*\n" +
+	"\x14ResumeServiceRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"L\n" +
+	"\x15ResumeServiceResponse\x123\n" +
+	"\aservice\x18\x01 \x01(\v2\x19.workspace.v1.ServiceInfoR\aservice\"c\n" +
 	"\x12ServiceLogsRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
@@ -10136,7 +10336,7 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\avariant\x18\x03 \x01(\tR\avariant\x12\x16\n" +
 	"\x06locale\x18\x04 \x01(\tR\x06locale\"E\n" +
 	"\x16UpdateSettingsResponse\x12+\n" +
-	"\asession\x18\x01 \x01(\v2\x11.agent.v1.SessionR\asession2\xbd>\n" +
+	"\asession\x18\x01 \x01(\v2\x11.agent.v1.SessionR\asession2\xee?\n" +
 	"\x14BranchSessionService\x12j\n" +
 	"\x13EnsureBranchSession\x12(.workspace.v1.EnsureBranchSessionRequest\x1a).workspace.v1.EnsureBranchSessionResponse\x12d\n" +
 	"\x11ForkBranchSession\x12&.workspace.v1.ForkBranchSessionRequest\x1a'.workspace.v1.ForkBranchSessionResponse\x12g\n" +
@@ -10205,7 +10405,9 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\rDeployService\x12\".workspace.v1.DeployServiceRequest\x1a#.workspace.v1.DeployServiceResponse\x12[\n" +
 	"\x0ePreviewService\x12#.workspace.v1.PreviewServiceRequest\x1a$.workspace.v1.PreviewServiceResponse\x12U\n" +
 	"\fListServices\x12!.workspace.v1.ListServicesRequest\x1a\".workspace.v1.ListServicesResponse\x12X\n" +
-	"\rDeleteService\x12\".workspace.v1.DeleteServiceRequest\x1a#.workspace.v1.DeleteServiceResponse\x12R\n" +
+	"\rDeleteService\x12\".workspace.v1.DeleteServiceRequest\x1a#.workspace.v1.DeleteServiceResponse\x12U\n" +
+	"\fPauseService\x12!.workspace.v1.PauseServiceRequest\x1a\".workspace.v1.PauseServiceResponse\x12X\n" +
+	"\rResumeService\x12\".workspace.v1.ResumeServiceRequest\x1a#.workspace.v1.ResumeServiceResponse\x12R\n" +
 	"\vServiceLogs\x12 .workspace.v1.ServiceLogsRequest\x1a!.workspace.v1.ServiceLogsResponse\x12c\n" +
 	"\x10WatchServiceLogs\x12%.workspace.v1.WatchServiceLogsRequest\x1a&.workspace.v1.WatchServiceLogsResponse0\x01\x12d\n" +
 	"\x11BuildPreviewImage\x12&.workspace.v1.BuildPreviewImageRequest\x1a'.workspace.v1.BuildPreviewImageResponse\x12;\n" +
@@ -10260,7 +10462,7 @@ func file_workspace_v1_workspace_proto_rawDescGZIP() []byte {
 	return file_workspace_v1_workspace_proto_rawDescData
 }
 
-var file_workspace_v1_workspace_proto_msgTypes = make([]protoimpl.MessageInfo, 157)
+var file_workspace_v1_workspace_proto_msgTypes = make([]protoimpl.MessageInfo, 161)
 var file_workspace_v1_workspace_proto_goTypes = []any{
 	(*BranchSession)(nil),                   // 0: workspace.v1.BranchSession
 	(*EnsureBranchSessionRequest)(nil),      // 1: workspace.v1.EnsureBranchSessionRequest
@@ -10406,85 +10608,89 @@ var file_workspace_v1_workspace_proto_goTypes = []any{
 	(*ListServicesResponse)(nil),            // 141: workspace.v1.ListServicesResponse
 	(*DeleteServiceRequest)(nil),            // 142: workspace.v1.DeleteServiceRequest
 	(*DeleteServiceResponse)(nil),           // 143: workspace.v1.DeleteServiceResponse
-	(*ServiceLogsRequest)(nil),              // 144: workspace.v1.ServiceLogsRequest
-	(*ServiceLogsResponse)(nil),             // 145: workspace.v1.ServiceLogsResponse
-	(*WatchServiceLogsRequest)(nil),         // 146: workspace.v1.WatchServiceLogsRequest
-	(*WatchServiceLogsResponse)(nil),        // 147: workspace.v1.WatchServiceLogsResponse
-	(*BuildPreviewImageRequest)(nil),        // 148: workspace.v1.BuildPreviewImageRequest
-	(*BuildPreviewImageResponse)(nil),       // 149: workspace.v1.BuildPreviewImageResponse
-	(*UpdateSettingsRequest)(nil),           // 150: workspace.v1.UpdateSettingsRequest
-	(*UpdateSettingsResponse)(nil),          // 151: workspace.v1.UpdateSettingsResponse
-	nil,                                     // 152: workspace.v1.BuildSandboxImageRequest.BuildArgsEntry
-	nil,                                     // 153: workspace.v1.CreateSandboxRequest.EnvEntry
-	nil,                                     // 154: workspace.v1.DeployServiceRequest.EnvEntry
-	nil,                                     // 155: workspace.v1.PreviewServiceRequest.EnvEntry
-	nil,                                     // 156: workspace.v1.BuildPreviewImageRequest.BuildArgsEntry
-	(*v1.Session)(nil),                      // 157: agent.v1.Session
-	(*v1.HealthRequest)(nil),                // 158: agent.v1.HealthRequest
-	(*v1.GetIdentityRequest)(nil),           // 159: agent.v1.GetIdentityRequest
-	(*v1.ListSessionsRequest)(nil),          // 160: agent.v1.ListSessionsRequest
-	(*v1.GetSessionRequest)(nil),            // 161: agent.v1.GetSessionRequest
-	(*v1.ListMessagesRequest)(nil),          // 162: agent.v1.ListMessagesRequest
-	(*v1.PromptRequest)(nil),                // 163: agent.v1.PromptRequest
-	(*v1.WatchSessionRequest)(nil),          // 164: agent.v1.WatchSessionRequest
-	(*v1.WatchSessionsRequest)(nil),         // 165: agent.v1.WatchSessionsRequest
-	(*v1.SetModelRequest)(nil),              // 166: agent.v1.SetModelRequest
-	(*v1.UndoRequest)(nil),                  // 167: agent.v1.UndoRequest
-	(*v1.StateRequest)(nil),                 // 168: agent.v1.StateRequest
-	(*v1.MailboxRequest)(nil),               // 169: agent.v1.MailboxRequest
-	(*v1.InterruptRequest)(nil),             // 170: agent.v1.InterruptRequest
-	(*v1.CompactRequest)(nil),               // 171: agent.v1.CompactRequest
-	(*v1.ListProvidersRequest)(nil),         // 172: agent.v1.ListProvidersRequest
-	(*v1.ListProvidersCatalogRequest)(nil),  // 173: agent.v1.ListProvidersCatalogRequest
-	(*v1.RegisterProviderRequest)(nil),      // 174: agent.v1.RegisterProviderRequest
-	(*v1.DeleteProviderRequest)(nil),        // 175: agent.v1.DeleteProviderRequest
-	(*v1.TestProviderRequest)(nil),          // 176: agent.v1.TestProviderRequest
-	(*v1.ListModelsRequest)(nil),            // 177: agent.v1.ListModelsRequest
-	(*v1.ListPresetsRequest)(nil),           // 178: agent.v1.ListPresetsRequest
-	(*v1.PreviewPresetRequest)(nil),         // 179: agent.v1.PreviewPresetRequest
-	(*v1.GetConfigRequest)(nil),             // 180: agent.v1.GetConfigRequest
-	(*v1.SetConfigRequest)(nil),             // 181: agent.v1.SetConfigRequest
-	(*v1.ListToolsRequest)(nil),             // 182: agent.v1.ListToolsRequest
-	(*v1.GetToolConfigRequest)(nil),         // 183: agent.v1.GetToolConfigRequest
-	(*v1.SetToolConfigRequest)(nil),         // 184: agent.v1.SetToolConfigRequest
-	(*v1.SetExtensionConfigRequest)(nil),    // 185: agent.v1.SetExtensionConfigRequest
-	(*v1.UploadFileRequest)(nil),            // 186: agent.v1.UploadFileRequest
-	(*v1.IngestFileRequest)(nil),            // 187: agent.v1.IngestFileRequest
-	(*v1.GetFileRequest)(nil),               // 188: agent.v1.GetFileRequest
-	(*v1.GetFileMetaRequest)(nil),           // 189: agent.v1.GetFileMetaRequest
-	(*v1.HealthResponse)(nil),               // 190: agent.v1.HealthResponse
-	(*v1.GetIdentityResponse)(nil),          // 191: agent.v1.GetIdentityResponse
-	(*v1.ListSessionsResponse)(nil),         // 192: agent.v1.ListSessionsResponse
-	(*v1.GetSessionResponse)(nil),           // 193: agent.v1.GetSessionResponse
-	(*v1.ListMessagesResponse)(nil),         // 194: agent.v1.ListMessagesResponse
-	(*v1.PromptResponse)(nil),               // 195: agent.v1.PromptResponse
-	(*v1.WatchSessionResponse)(nil),         // 196: agent.v1.WatchSessionResponse
-	(*v1.WatchSessionsResponse)(nil),        // 197: agent.v1.WatchSessionsResponse
-	(*v1.SetModelResponse)(nil),             // 198: agent.v1.SetModelResponse
-	(*v1.UndoResponse)(nil),                 // 199: agent.v1.UndoResponse
-	(*v1.StateResponse)(nil),                // 200: agent.v1.StateResponse
-	(*v1.MailboxResponse)(nil),              // 201: agent.v1.MailboxResponse
-	(*v1.InterruptResponse)(nil),            // 202: agent.v1.InterruptResponse
-	(*v1.CompactResponse)(nil),              // 203: agent.v1.CompactResponse
-	(*v1.ListProvidersResponse)(nil),        // 204: agent.v1.ListProvidersResponse
-	(*v1.ListProvidersCatalogResponse)(nil), // 205: agent.v1.ListProvidersCatalogResponse
-	(*v1.RegisterProviderResponse)(nil),     // 206: agent.v1.RegisterProviderResponse
-	(*v1.DeleteProviderResponse)(nil),       // 207: agent.v1.DeleteProviderResponse
-	(*v1.TestProviderResponse)(nil),         // 208: agent.v1.TestProviderResponse
-	(*v1.ListModelsResponse)(nil),           // 209: agent.v1.ListModelsResponse
-	(*v1.ListPresetsResponse)(nil),          // 210: agent.v1.ListPresetsResponse
-	(*v1.PreviewPresetResponse)(nil),        // 211: agent.v1.PreviewPresetResponse
-	(*v1.GetConfigResponse)(nil),            // 212: agent.v1.GetConfigResponse
-	(*v1.SetConfigResponse)(nil),            // 213: agent.v1.SetConfigResponse
-	(*v1.ListToolsResponse)(nil),            // 214: agent.v1.ListToolsResponse
-	(*v1.GetToolConfigResponse)(nil),        // 215: agent.v1.GetToolConfigResponse
-	(*v1.SetToolConfigResponse)(nil),        // 216: agent.v1.SetToolConfigResponse
-	(*v1.SetExtensionConfigResponse)(nil),   // 217: agent.v1.SetExtensionConfigResponse
-	(*v1.UploadFileResponse)(nil),           // 218: agent.v1.UploadFileResponse
-	(*v1.IngestFileResponse)(nil),           // 219: agent.v1.IngestFileResponse
-	(*v1.GetFileResponse)(nil),              // 220: agent.v1.GetFileResponse
-	(*v1.GetFileMetaResponse)(nil),          // 221: agent.v1.GetFileMetaResponse
-	(*v1.FileChunk)(nil),                    // 222: agent.v1.FileChunk
+	(*PauseServiceRequest)(nil),             // 144: workspace.v1.PauseServiceRequest
+	(*PauseServiceResponse)(nil),            // 145: workspace.v1.PauseServiceResponse
+	(*ResumeServiceRequest)(nil),            // 146: workspace.v1.ResumeServiceRequest
+	(*ResumeServiceResponse)(nil),           // 147: workspace.v1.ResumeServiceResponse
+	(*ServiceLogsRequest)(nil),              // 148: workspace.v1.ServiceLogsRequest
+	(*ServiceLogsResponse)(nil),             // 149: workspace.v1.ServiceLogsResponse
+	(*WatchServiceLogsRequest)(nil),         // 150: workspace.v1.WatchServiceLogsRequest
+	(*WatchServiceLogsResponse)(nil),        // 151: workspace.v1.WatchServiceLogsResponse
+	(*BuildPreviewImageRequest)(nil),        // 152: workspace.v1.BuildPreviewImageRequest
+	(*BuildPreviewImageResponse)(nil),       // 153: workspace.v1.BuildPreviewImageResponse
+	(*UpdateSettingsRequest)(nil),           // 154: workspace.v1.UpdateSettingsRequest
+	(*UpdateSettingsResponse)(nil),          // 155: workspace.v1.UpdateSettingsResponse
+	nil,                                     // 156: workspace.v1.BuildSandboxImageRequest.BuildArgsEntry
+	nil,                                     // 157: workspace.v1.CreateSandboxRequest.EnvEntry
+	nil,                                     // 158: workspace.v1.DeployServiceRequest.EnvEntry
+	nil,                                     // 159: workspace.v1.PreviewServiceRequest.EnvEntry
+	nil,                                     // 160: workspace.v1.BuildPreviewImageRequest.BuildArgsEntry
+	(*v1.Session)(nil),                      // 161: agent.v1.Session
+	(*v1.HealthRequest)(nil),                // 162: agent.v1.HealthRequest
+	(*v1.GetIdentityRequest)(nil),           // 163: agent.v1.GetIdentityRequest
+	(*v1.ListSessionsRequest)(nil),          // 164: agent.v1.ListSessionsRequest
+	(*v1.GetSessionRequest)(nil),            // 165: agent.v1.GetSessionRequest
+	(*v1.ListMessagesRequest)(nil),          // 166: agent.v1.ListMessagesRequest
+	(*v1.PromptRequest)(nil),                // 167: agent.v1.PromptRequest
+	(*v1.WatchSessionRequest)(nil),          // 168: agent.v1.WatchSessionRequest
+	(*v1.WatchSessionsRequest)(nil),         // 169: agent.v1.WatchSessionsRequest
+	(*v1.SetModelRequest)(nil),              // 170: agent.v1.SetModelRequest
+	(*v1.UndoRequest)(nil),                  // 171: agent.v1.UndoRequest
+	(*v1.StateRequest)(nil),                 // 172: agent.v1.StateRequest
+	(*v1.MailboxRequest)(nil),               // 173: agent.v1.MailboxRequest
+	(*v1.InterruptRequest)(nil),             // 174: agent.v1.InterruptRequest
+	(*v1.CompactRequest)(nil),               // 175: agent.v1.CompactRequest
+	(*v1.ListProvidersRequest)(nil),         // 176: agent.v1.ListProvidersRequest
+	(*v1.ListProvidersCatalogRequest)(nil),  // 177: agent.v1.ListProvidersCatalogRequest
+	(*v1.RegisterProviderRequest)(nil),      // 178: agent.v1.RegisterProviderRequest
+	(*v1.DeleteProviderRequest)(nil),        // 179: agent.v1.DeleteProviderRequest
+	(*v1.TestProviderRequest)(nil),          // 180: agent.v1.TestProviderRequest
+	(*v1.ListModelsRequest)(nil),            // 181: agent.v1.ListModelsRequest
+	(*v1.ListPresetsRequest)(nil),           // 182: agent.v1.ListPresetsRequest
+	(*v1.PreviewPresetRequest)(nil),         // 183: agent.v1.PreviewPresetRequest
+	(*v1.GetConfigRequest)(nil),             // 184: agent.v1.GetConfigRequest
+	(*v1.SetConfigRequest)(nil),             // 185: agent.v1.SetConfigRequest
+	(*v1.ListToolsRequest)(nil),             // 186: agent.v1.ListToolsRequest
+	(*v1.GetToolConfigRequest)(nil),         // 187: agent.v1.GetToolConfigRequest
+	(*v1.SetToolConfigRequest)(nil),         // 188: agent.v1.SetToolConfigRequest
+	(*v1.SetExtensionConfigRequest)(nil),    // 189: agent.v1.SetExtensionConfigRequest
+	(*v1.UploadFileRequest)(nil),            // 190: agent.v1.UploadFileRequest
+	(*v1.IngestFileRequest)(nil),            // 191: agent.v1.IngestFileRequest
+	(*v1.GetFileRequest)(nil),               // 192: agent.v1.GetFileRequest
+	(*v1.GetFileMetaRequest)(nil),           // 193: agent.v1.GetFileMetaRequest
+	(*v1.HealthResponse)(nil),               // 194: agent.v1.HealthResponse
+	(*v1.GetIdentityResponse)(nil),          // 195: agent.v1.GetIdentityResponse
+	(*v1.ListSessionsResponse)(nil),         // 196: agent.v1.ListSessionsResponse
+	(*v1.GetSessionResponse)(nil),           // 197: agent.v1.GetSessionResponse
+	(*v1.ListMessagesResponse)(nil),         // 198: agent.v1.ListMessagesResponse
+	(*v1.PromptResponse)(nil),               // 199: agent.v1.PromptResponse
+	(*v1.WatchSessionResponse)(nil),         // 200: agent.v1.WatchSessionResponse
+	(*v1.WatchSessionsResponse)(nil),        // 201: agent.v1.WatchSessionsResponse
+	(*v1.SetModelResponse)(nil),             // 202: agent.v1.SetModelResponse
+	(*v1.UndoResponse)(nil),                 // 203: agent.v1.UndoResponse
+	(*v1.StateResponse)(nil),                // 204: agent.v1.StateResponse
+	(*v1.MailboxResponse)(nil),              // 205: agent.v1.MailboxResponse
+	(*v1.InterruptResponse)(nil),            // 206: agent.v1.InterruptResponse
+	(*v1.CompactResponse)(nil),              // 207: agent.v1.CompactResponse
+	(*v1.ListProvidersResponse)(nil),        // 208: agent.v1.ListProvidersResponse
+	(*v1.ListProvidersCatalogResponse)(nil), // 209: agent.v1.ListProvidersCatalogResponse
+	(*v1.RegisterProviderResponse)(nil),     // 210: agent.v1.RegisterProviderResponse
+	(*v1.DeleteProviderResponse)(nil),       // 211: agent.v1.DeleteProviderResponse
+	(*v1.TestProviderResponse)(nil),         // 212: agent.v1.TestProviderResponse
+	(*v1.ListModelsResponse)(nil),           // 213: agent.v1.ListModelsResponse
+	(*v1.ListPresetsResponse)(nil),          // 214: agent.v1.ListPresetsResponse
+	(*v1.PreviewPresetResponse)(nil),        // 215: agent.v1.PreviewPresetResponse
+	(*v1.GetConfigResponse)(nil),            // 216: agent.v1.GetConfigResponse
+	(*v1.SetConfigResponse)(nil),            // 217: agent.v1.SetConfigResponse
+	(*v1.ListToolsResponse)(nil),            // 218: agent.v1.ListToolsResponse
+	(*v1.GetToolConfigResponse)(nil),        // 219: agent.v1.GetToolConfigResponse
+	(*v1.SetToolConfigResponse)(nil),        // 220: agent.v1.SetToolConfigResponse
+	(*v1.SetExtensionConfigResponse)(nil),   // 221: agent.v1.SetExtensionConfigResponse
+	(*v1.UploadFileResponse)(nil),           // 222: agent.v1.UploadFileResponse
+	(*v1.IngestFileResponse)(nil),           // 223: agent.v1.IngestFileResponse
+	(*v1.GetFileResponse)(nil),              // 224: agent.v1.GetFileResponse
+	(*v1.GetFileMetaResponse)(nil),          // 225: agent.v1.GetFileMetaResponse
+	(*v1.FileChunk)(nil),                    // 226: agent.v1.FileChunk
 }
 var file_workspace_v1_workspace_proto_depIdxs = []int32{
 	0,   // 0: workspace.v1.EnsureBranchSessionResponse.branch_session:type_name -> workspace.v1.BranchSession
@@ -10511,223 +10717,229 @@ var file_workspace_v1_workspace_proto_depIdxs = []int32{
 	91,  // 21: workspace.v1.GetMRResponse.mr:type_name -> workspace.v1.MRInfo
 	98,  // 22: workspace.v1.ListMRCommentsResponse.comments:type_name -> workspace.v1.MRCommentInfo
 	108, // 23: workspace.v1.ListOCIImagesResponse.images:type_name -> workspace.v1.OCIImage
-	152, // 24: workspace.v1.BuildSandboxImageRequest.build_args:type_name -> workspace.v1.BuildSandboxImageRequest.BuildArgsEntry
+	156, // 24: workspace.v1.BuildSandboxImageRequest.build_args:type_name -> workspace.v1.BuildSandboxImageRequest.BuildArgsEntry
 	116, // 25: workspace.v1.ListSandboxesResponse.sandboxes:type_name -> workspace.v1.SandboxInfo
-	153, // 26: workspace.v1.CreateSandboxRequest.env:type_name -> workspace.v1.CreateSandboxRequest.EnvEntry
+	157, // 26: workspace.v1.CreateSandboxRequest.env:type_name -> workspace.v1.CreateSandboxRequest.EnvEntry
 	116, // 27: workspace.v1.CreateSandboxResponse.sandbox:type_name -> workspace.v1.SandboxInfo
 	116, // 28: workspace.v1.GetSandboxResponse.sandbox:type_name -> workspace.v1.SandboxInfo
 	127, // 29: workspace.v1.ListSandboxJobsResponse.jobs:type_name -> workspace.v1.SandboxJob
 	134, // 30: workspace.v1.ServiceInfo.ports:type_name -> workspace.v1.ServicePortInfo
-	154, // 31: workspace.v1.DeployServiceRequest.env:type_name -> workspace.v1.DeployServiceRequest.EnvEntry
+	158, // 31: workspace.v1.DeployServiceRequest.env:type_name -> workspace.v1.DeployServiceRequest.EnvEntry
 	135, // 32: workspace.v1.DeployServiceRequest.services:type_name -> workspace.v1.ServicePortSpec
 	133, // 33: workspace.v1.DeployServiceResponse.service:type_name -> workspace.v1.ServiceInfo
-	155, // 34: workspace.v1.PreviewServiceRequest.env:type_name -> workspace.v1.PreviewServiceRequest.EnvEntry
+	159, // 34: workspace.v1.PreviewServiceRequest.env:type_name -> workspace.v1.PreviewServiceRequest.EnvEntry
 	135, // 35: workspace.v1.PreviewServiceRequest.services:type_name -> workspace.v1.ServicePortSpec
 	133, // 36: workspace.v1.PreviewServiceResponse.service:type_name -> workspace.v1.ServiceInfo
 	133, // 37: workspace.v1.ListServicesResponse.services:type_name -> workspace.v1.ServiceInfo
-	156, // 38: workspace.v1.BuildPreviewImageRequest.build_args:type_name -> workspace.v1.BuildPreviewImageRequest.BuildArgsEntry
-	157, // 39: workspace.v1.UpdateSettingsResponse.session:type_name -> agent.v1.Session
-	1,   // 40: workspace.v1.BranchSessionService.EnsureBranchSession:input_type -> workspace.v1.EnsureBranchSessionRequest
-	13,  // 41: workspace.v1.BranchSessionService.ForkBranchSession:input_type -> workspace.v1.ForkBranchSessionRequest
-	3,   // 42: workspace.v1.BranchSessionService.ListBranchSessions:input_type -> workspace.v1.ListBranchSessionsRequest
-	5,   // 43: workspace.v1.BranchSessionService.GetBranchSession:input_type -> workspace.v1.GetBranchSessionRequest
-	7,   // 44: workspace.v1.BranchSessionService.DeleteBranchSession:input_type -> workspace.v1.DeleteBranchSessionRequest
-	9,   // 45: workspace.v1.BranchSessionService.DeleteBranch:input_type -> workspace.v1.DeleteBranchRequest
-	11,  // 46: workspace.v1.BranchSessionService.DeleteRepo:input_type -> workspace.v1.DeleteRepoRequest
-	15,  // 47: workspace.v1.BranchSessionService.CreateFreeSession:input_type -> workspace.v1.CreateFreeSessionRequest
-	17,  // 48: workspace.v1.BranchSessionService.ListRepos:input_type -> workspace.v1.ListReposRequest
-	20,  // 49: workspace.v1.BranchSessionService.Tree:input_type -> workspace.v1.TreeRequest
-	23,  // 50: workspace.v1.BranchSessionService.ReadBlob:input_type -> workspace.v1.ReadBlobRequest
-	31,  // 51: workspace.v1.BranchSessionService.ReadRaw:input_type -> workspace.v1.ReadRawRequest
-	25,  // 52: workspace.v1.BranchSessionService.Log:input_type -> workspace.v1.LogRequest
-	28,  // 53: workspace.v1.BranchSessionService.Branches:input_type -> workspace.v1.BranchesRequest
-	33,  // 54: workspace.v1.BranchSessionService.Tags:input_type -> workspace.v1.TagsRequest
-	36,  // 55: workspace.v1.BranchSessionService.ListReleases:input_type -> workspace.v1.ReleasesRequest
-	40,  // 56: workspace.v1.BranchSessionService.GetReleaseAsset:input_type -> workspace.v1.ReleaseAssetRequest
-	42,  // 57: workspace.v1.BranchSessionService.GetCommit:input_type -> workspace.v1.GetCommitRequest
-	45,  // 58: workspace.v1.BranchSessionService.CommitDiff:input_type -> workspace.v1.CommitDiffRequest
-	47,  // 59: workspace.v1.BranchSessionService.EnsureRepo:input_type -> workspace.v1.EnsureRepoRequest
-	49,  // 60: workspace.v1.BranchSessionService.CreateOrg:input_type -> workspace.v1.CreateOrgRequest
-	51,  // 61: workspace.v1.BranchSessionService.ListOrgs:input_type -> workspace.v1.ListOrgsRequest
-	53,  // 62: workspace.v1.BranchSessionService.RepoMeta:input_type -> workspace.v1.RepoMetaRequest
-	55,  // 63: workspace.v1.BranchSessionService.Contents:input_type -> workspace.v1.ContentsRequest
-	59,  // 64: workspace.v1.BranchSessionService.CommitFiles:input_type -> workspace.v1.CommitFilesRequest
-	61,  // 65: workspace.v1.BranchSessionService.BranchStatus:input_type -> workspace.v1.BranchStatusRequest
-	63,  // 66: workspace.v1.BranchSessionService.CommitStaged:input_type -> workspace.v1.CommitStagedRequest
-	65,  // 67: workspace.v1.BranchSessionService.ApplyFiles:input_type -> workspace.v1.ApplyFilesRequest
-	67,  // 68: workspace.v1.BranchSessionService.Compare:input_type -> workspace.v1.CompareRequest
-	70,  // 69: workspace.v1.BranchSessionService.Blame:input_type -> workspace.v1.BlameRequest
-	73,  // 70: workspace.v1.BranchSessionService.FileDiff:input_type -> workspace.v1.FileDiffRequest
-	75,  // 71: workspace.v1.BranchSessionService.CreateTag:input_type -> workspace.v1.CreateTagRequest
-	77,  // 72: workspace.v1.BranchSessionService.CreateBranch:input_type -> workspace.v1.CreateBranchRequest
-	79,  // 73: workspace.v1.BranchSessionService.Archive:input_type -> workspace.v1.ArchiveRequest
-	81,  // 74: workspace.v1.BranchSessionService.ImportRepo:input_type -> workspace.v1.ImportRepoRequest
-	84,  // 75: workspace.v1.BranchSessionService.SetPushMirror:input_type -> workspace.v1.SetPushMirrorRequest
-	86,  // 76: workspace.v1.BranchSessionService.ListPushMirrors:input_type -> workspace.v1.ListPushMirrorsRequest
-	88,  // 77: workspace.v1.BranchSessionService.DeletePushMirror:input_type -> workspace.v1.DeletePushMirrorRequest
-	90,  // 78: workspace.v1.BranchSessionService.ListMRs:input_type -> workspace.v1.ListMRsRequest
-	93,  // 79: workspace.v1.BranchSessionService.GetMR:input_type -> workspace.v1.GetMRRequest
-	95,  // 80: workspace.v1.BranchSessionService.MRDiff:input_type -> workspace.v1.MRDiffRequest
-	97,  // 81: workspace.v1.BranchSessionService.ListMRComments:input_type -> workspace.v1.ListMRCommentsRequest
-	100, // 82: workspace.v1.BranchSessionService.CreateMR:input_type -> workspace.v1.CreateMRRequest
-	102, // 83: workspace.v1.BranchSessionService.CommentMR:input_type -> workspace.v1.CommentMRRequest
-	104, // 84: workspace.v1.BranchSessionService.MergeMR:input_type -> workspace.v1.MergeMRRequest
-	106, // 85: workspace.v1.BranchSessionService.SyncBranch:input_type -> workspace.v1.SyncBranchRequest
-	109, // 86: workspace.v1.BranchSessionService.ListOCIImages:input_type -> workspace.v1.ListOCIImagesRequest
-	111, // 87: workspace.v1.BranchSessionService.BuildSandboxImage:input_type -> workspace.v1.BuildSandboxImageRequest
-	113, // 88: workspace.v1.BranchSessionService.ImportImage:input_type -> workspace.v1.ImportImageRequest
-	115, // 89: workspace.v1.BranchSessionService.ListSandboxes:input_type -> workspace.v1.ListSandboxesRequest
-	118, // 90: workspace.v1.BranchSessionService.CreateSandbox:input_type -> workspace.v1.CreateSandboxRequest
-	122, // 91: workspace.v1.BranchSessionService.GetSandbox:input_type -> workspace.v1.GetSandboxRequest
-	120, // 92: workspace.v1.BranchSessionService.DeleteSandbox:input_type -> workspace.v1.DeleteSandboxRequest
-	124, // 93: workspace.v1.BranchSessionService.ResolveSandbox:input_type -> workspace.v1.ResolveSandboxRequest
-	126, // 94: workspace.v1.BranchSessionService.ListSandboxJobs:input_type -> workspace.v1.ListSandboxJobsRequest
-	129, // 95: workspace.v1.BranchSessionService.GetSandboxJobOutput:input_type -> workspace.v1.GetSandboxJobOutputRequest
-	131, // 96: workspace.v1.BranchSessionService.WatchSandboxJob:input_type -> workspace.v1.WatchSandboxJobRequest
-	136, // 97: workspace.v1.BranchSessionService.DeployService:input_type -> workspace.v1.DeployServiceRequest
-	138, // 98: workspace.v1.BranchSessionService.PreviewService:input_type -> workspace.v1.PreviewServiceRequest
-	140, // 99: workspace.v1.BranchSessionService.ListServices:input_type -> workspace.v1.ListServicesRequest
-	142, // 100: workspace.v1.BranchSessionService.DeleteService:input_type -> workspace.v1.DeleteServiceRequest
-	144, // 101: workspace.v1.BranchSessionService.ServiceLogs:input_type -> workspace.v1.ServiceLogsRequest
-	146, // 102: workspace.v1.BranchSessionService.WatchServiceLogs:input_type -> workspace.v1.WatchServiceLogsRequest
-	148, // 103: workspace.v1.BranchSessionService.BuildPreviewImage:input_type -> workspace.v1.BuildPreviewImageRequest
-	158, // 104: workspace.v1.BranchSessionService.Health:input_type -> agent.v1.HealthRequest
-	159, // 105: workspace.v1.BranchSessionService.GetIdentity:input_type -> agent.v1.GetIdentityRequest
-	160, // 106: workspace.v1.BranchSessionService.ListSessions:input_type -> agent.v1.ListSessionsRequest
-	161, // 107: workspace.v1.BranchSessionService.GetSession:input_type -> agent.v1.GetSessionRequest
-	162, // 108: workspace.v1.BranchSessionService.ListMessages:input_type -> agent.v1.ListMessagesRequest
-	163, // 109: workspace.v1.BranchSessionService.Prompt:input_type -> agent.v1.PromptRequest
-	164, // 110: workspace.v1.BranchSessionService.WatchSession:input_type -> agent.v1.WatchSessionRequest
-	165, // 111: workspace.v1.BranchSessionService.WatchSessions:input_type -> agent.v1.WatchSessionsRequest
-	166, // 112: workspace.v1.BranchSessionService.SetModel:input_type -> agent.v1.SetModelRequest
-	167, // 113: workspace.v1.BranchSessionService.Undo:input_type -> agent.v1.UndoRequest
-	168, // 114: workspace.v1.BranchSessionService.State:input_type -> agent.v1.StateRequest
-	169, // 115: workspace.v1.BranchSessionService.Mailbox:input_type -> agent.v1.MailboxRequest
-	170, // 116: workspace.v1.BranchSessionService.Interrupt:input_type -> agent.v1.InterruptRequest
-	171, // 117: workspace.v1.BranchSessionService.Compact:input_type -> agent.v1.CompactRequest
-	150, // 118: workspace.v1.BranchSessionService.UpdateSettings:input_type -> workspace.v1.UpdateSettingsRequest
-	172, // 119: workspace.v1.BranchSessionService.ListProviders:input_type -> agent.v1.ListProvidersRequest
-	173, // 120: workspace.v1.BranchSessionService.ListProvidersCatalog:input_type -> agent.v1.ListProvidersCatalogRequest
-	174, // 121: workspace.v1.BranchSessionService.RegisterProvider:input_type -> agent.v1.RegisterProviderRequest
-	175, // 122: workspace.v1.BranchSessionService.DeleteProvider:input_type -> agent.v1.DeleteProviderRequest
-	176, // 123: workspace.v1.BranchSessionService.TestProvider:input_type -> agent.v1.TestProviderRequest
-	177, // 124: workspace.v1.BranchSessionService.ListModels:input_type -> agent.v1.ListModelsRequest
-	178, // 125: workspace.v1.BranchSessionService.ListPresets:input_type -> agent.v1.ListPresetsRequest
-	179, // 126: workspace.v1.BranchSessionService.PreviewPreset:input_type -> agent.v1.PreviewPresetRequest
-	180, // 127: workspace.v1.BranchSessionService.GetConfig:input_type -> agent.v1.GetConfigRequest
-	181, // 128: workspace.v1.BranchSessionService.SetConfig:input_type -> agent.v1.SetConfigRequest
-	182, // 129: workspace.v1.BranchSessionService.ListTools:input_type -> agent.v1.ListToolsRequest
-	183, // 130: workspace.v1.BranchSessionService.GetToolConfig:input_type -> agent.v1.GetToolConfigRequest
-	184, // 131: workspace.v1.BranchSessionService.SetToolConfig:input_type -> agent.v1.SetToolConfigRequest
-	185, // 132: workspace.v1.BranchSessionService.SetExtensionConfig:input_type -> agent.v1.SetExtensionConfigRequest
-	186, // 133: workspace.v1.BranchSessionService.UploadFile:input_type -> agent.v1.UploadFileRequest
-	187, // 134: workspace.v1.BranchSessionService.IngestFile:input_type -> agent.v1.IngestFileRequest
-	188, // 135: workspace.v1.BranchSessionService.GetFile:input_type -> agent.v1.GetFileRequest
-	189, // 136: workspace.v1.BranchSessionService.GetFileMeta:input_type -> agent.v1.GetFileMetaRequest
-	188, // 137: workspace.v1.BranchSessionService.GetFileStream:input_type -> agent.v1.GetFileRequest
-	2,   // 138: workspace.v1.BranchSessionService.EnsureBranchSession:output_type -> workspace.v1.EnsureBranchSessionResponse
-	14,  // 139: workspace.v1.BranchSessionService.ForkBranchSession:output_type -> workspace.v1.ForkBranchSessionResponse
-	4,   // 140: workspace.v1.BranchSessionService.ListBranchSessions:output_type -> workspace.v1.ListBranchSessionsResponse
-	6,   // 141: workspace.v1.BranchSessionService.GetBranchSession:output_type -> workspace.v1.GetBranchSessionResponse
-	8,   // 142: workspace.v1.BranchSessionService.DeleteBranchSession:output_type -> workspace.v1.DeleteBranchSessionResponse
-	10,  // 143: workspace.v1.BranchSessionService.DeleteBranch:output_type -> workspace.v1.DeleteBranchResponse
-	12,  // 144: workspace.v1.BranchSessionService.DeleteRepo:output_type -> workspace.v1.DeleteRepoResponse
-	16,  // 145: workspace.v1.BranchSessionService.CreateFreeSession:output_type -> workspace.v1.CreateFreeSessionResponse
-	19,  // 146: workspace.v1.BranchSessionService.ListRepos:output_type -> workspace.v1.ListReposResponse
-	22,  // 147: workspace.v1.BranchSessionService.Tree:output_type -> workspace.v1.TreeResponse
-	24,  // 148: workspace.v1.BranchSessionService.ReadBlob:output_type -> workspace.v1.ReadBlobResponse
-	32,  // 149: workspace.v1.BranchSessionService.ReadRaw:output_type -> workspace.v1.ReadRawResponse
-	27,  // 150: workspace.v1.BranchSessionService.Log:output_type -> workspace.v1.LogResponse
-	30,  // 151: workspace.v1.BranchSessionService.Branches:output_type -> workspace.v1.BranchesResponse
-	35,  // 152: workspace.v1.BranchSessionService.Tags:output_type -> workspace.v1.TagsResponse
-	39,  // 153: workspace.v1.BranchSessionService.ListReleases:output_type -> workspace.v1.ReleasesResponse
-	41,  // 154: workspace.v1.BranchSessionService.GetReleaseAsset:output_type -> workspace.v1.ReleaseAssetResponse
-	44,  // 155: workspace.v1.BranchSessionService.GetCommit:output_type -> workspace.v1.GetCommitResponse
-	46,  // 156: workspace.v1.BranchSessionService.CommitDiff:output_type -> workspace.v1.DiffResponse
-	48,  // 157: workspace.v1.BranchSessionService.EnsureRepo:output_type -> workspace.v1.EnsureRepoResponse
-	50,  // 158: workspace.v1.BranchSessionService.CreateOrg:output_type -> workspace.v1.CreateOrgResponse
-	52,  // 159: workspace.v1.BranchSessionService.ListOrgs:output_type -> workspace.v1.ListOrgsResponse
-	54,  // 160: workspace.v1.BranchSessionService.RepoMeta:output_type -> workspace.v1.RepoMetaResponse
-	57,  // 161: workspace.v1.BranchSessionService.Contents:output_type -> workspace.v1.ContentsResponse
-	60,  // 162: workspace.v1.BranchSessionService.CommitFiles:output_type -> workspace.v1.CommitFilesResponse
-	62,  // 163: workspace.v1.BranchSessionService.BranchStatus:output_type -> workspace.v1.BranchStatusResponse
-	64,  // 164: workspace.v1.BranchSessionService.CommitStaged:output_type -> workspace.v1.CommitStagedResponse
-	66,  // 165: workspace.v1.BranchSessionService.ApplyFiles:output_type -> workspace.v1.ApplyFilesResponse
-	69,  // 166: workspace.v1.BranchSessionService.Compare:output_type -> workspace.v1.CompareResponse
-	72,  // 167: workspace.v1.BranchSessionService.Blame:output_type -> workspace.v1.BlameResponse
-	74,  // 168: workspace.v1.BranchSessionService.FileDiff:output_type -> workspace.v1.FileDiffResponse
-	76,  // 169: workspace.v1.BranchSessionService.CreateTag:output_type -> workspace.v1.CreateTagResponse
-	78,  // 170: workspace.v1.BranchSessionService.CreateBranch:output_type -> workspace.v1.CreateBranchResponse
-	80,  // 171: workspace.v1.BranchSessionService.Archive:output_type -> workspace.v1.ArchiveResponse
-	82,  // 172: workspace.v1.BranchSessionService.ImportRepo:output_type -> workspace.v1.ImportRepoResponse
-	85,  // 173: workspace.v1.BranchSessionService.SetPushMirror:output_type -> workspace.v1.SetPushMirrorResponse
-	87,  // 174: workspace.v1.BranchSessionService.ListPushMirrors:output_type -> workspace.v1.ListPushMirrorsResponse
-	89,  // 175: workspace.v1.BranchSessionService.DeletePushMirror:output_type -> workspace.v1.DeletePushMirrorResponse
-	92,  // 176: workspace.v1.BranchSessionService.ListMRs:output_type -> workspace.v1.ListMRsResponse
-	94,  // 177: workspace.v1.BranchSessionService.GetMR:output_type -> workspace.v1.GetMRResponse
-	96,  // 178: workspace.v1.BranchSessionService.MRDiff:output_type -> workspace.v1.MRDiffResponse
-	99,  // 179: workspace.v1.BranchSessionService.ListMRComments:output_type -> workspace.v1.ListMRCommentsResponse
-	101, // 180: workspace.v1.BranchSessionService.CreateMR:output_type -> workspace.v1.CreateMRResponse
-	103, // 181: workspace.v1.BranchSessionService.CommentMR:output_type -> workspace.v1.CommentMRResponse
-	105, // 182: workspace.v1.BranchSessionService.MergeMR:output_type -> workspace.v1.MergeMRResponse
-	107, // 183: workspace.v1.BranchSessionService.SyncBranch:output_type -> workspace.v1.SyncBranchResponse
-	110, // 184: workspace.v1.BranchSessionService.ListOCIImages:output_type -> workspace.v1.ListOCIImagesResponse
-	112, // 185: workspace.v1.BranchSessionService.BuildSandboxImage:output_type -> workspace.v1.BuildSandboxImageResponse
-	114, // 186: workspace.v1.BranchSessionService.ImportImage:output_type -> workspace.v1.ImportImageResponse
-	117, // 187: workspace.v1.BranchSessionService.ListSandboxes:output_type -> workspace.v1.ListSandboxesResponse
-	119, // 188: workspace.v1.BranchSessionService.CreateSandbox:output_type -> workspace.v1.CreateSandboxResponse
-	123, // 189: workspace.v1.BranchSessionService.GetSandbox:output_type -> workspace.v1.GetSandboxResponse
-	121, // 190: workspace.v1.BranchSessionService.DeleteSandbox:output_type -> workspace.v1.DeleteSandboxResponse
-	125, // 191: workspace.v1.BranchSessionService.ResolveSandbox:output_type -> workspace.v1.ResolveSandboxResponse
-	128, // 192: workspace.v1.BranchSessionService.ListSandboxJobs:output_type -> workspace.v1.ListSandboxJobsResponse
-	130, // 193: workspace.v1.BranchSessionService.GetSandboxJobOutput:output_type -> workspace.v1.GetSandboxJobOutputResponse
-	132, // 194: workspace.v1.BranchSessionService.WatchSandboxJob:output_type -> workspace.v1.WatchSandboxJobResponse
-	137, // 195: workspace.v1.BranchSessionService.DeployService:output_type -> workspace.v1.DeployServiceResponse
-	139, // 196: workspace.v1.BranchSessionService.PreviewService:output_type -> workspace.v1.PreviewServiceResponse
-	141, // 197: workspace.v1.BranchSessionService.ListServices:output_type -> workspace.v1.ListServicesResponse
-	143, // 198: workspace.v1.BranchSessionService.DeleteService:output_type -> workspace.v1.DeleteServiceResponse
-	145, // 199: workspace.v1.BranchSessionService.ServiceLogs:output_type -> workspace.v1.ServiceLogsResponse
-	147, // 200: workspace.v1.BranchSessionService.WatchServiceLogs:output_type -> workspace.v1.WatchServiceLogsResponse
-	149, // 201: workspace.v1.BranchSessionService.BuildPreviewImage:output_type -> workspace.v1.BuildPreviewImageResponse
-	190, // 202: workspace.v1.BranchSessionService.Health:output_type -> agent.v1.HealthResponse
-	191, // 203: workspace.v1.BranchSessionService.GetIdentity:output_type -> agent.v1.GetIdentityResponse
-	192, // 204: workspace.v1.BranchSessionService.ListSessions:output_type -> agent.v1.ListSessionsResponse
-	193, // 205: workspace.v1.BranchSessionService.GetSession:output_type -> agent.v1.GetSessionResponse
-	194, // 206: workspace.v1.BranchSessionService.ListMessages:output_type -> agent.v1.ListMessagesResponse
-	195, // 207: workspace.v1.BranchSessionService.Prompt:output_type -> agent.v1.PromptResponse
-	196, // 208: workspace.v1.BranchSessionService.WatchSession:output_type -> agent.v1.WatchSessionResponse
-	197, // 209: workspace.v1.BranchSessionService.WatchSessions:output_type -> agent.v1.WatchSessionsResponse
-	198, // 210: workspace.v1.BranchSessionService.SetModel:output_type -> agent.v1.SetModelResponse
-	199, // 211: workspace.v1.BranchSessionService.Undo:output_type -> agent.v1.UndoResponse
-	200, // 212: workspace.v1.BranchSessionService.State:output_type -> agent.v1.StateResponse
-	201, // 213: workspace.v1.BranchSessionService.Mailbox:output_type -> agent.v1.MailboxResponse
-	202, // 214: workspace.v1.BranchSessionService.Interrupt:output_type -> agent.v1.InterruptResponse
-	203, // 215: workspace.v1.BranchSessionService.Compact:output_type -> agent.v1.CompactResponse
-	151, // 216: workspace.v1.BranchSessionService.UpdateSettings:output_type -> workspace.v1.UpdateSettingsResponse
-	204, // 217: workspace.v1.BranchSessionService.ListProviders:output_type -> agent.v1.ListProvidersResponse
-	205, // 218: workspace.v1.BranchSessionService.ListProvidersCatalog:output_type -> agent.v1.ListProvidersCatalogResponse
-	206, // 219: workspace.v1.BranchSessionService.RegisterProvider:output_type -> agent.v1.RegisterProviderResponse
-	207, // 220: workspace.v1.BranchSessionService.DeleteProvider:output_type -> agent.v1.DeleteProviderResponse
-	208, // 221: workspace.v1.BranchSessionService.TestProvider:output_type -> agent.v1.TestProviderResponse
-	209, // 222: workspace.v1.BranchSessionService.ListModels:output_type -> agent.v1.ListModelsResponse
-	210, // 223: workspace.v1.BranchSessionService.ListPresets:output_type -> agent.v1.ListPresetsResponse
-	211, // 224: workspace.v1.BranchSessionService.PreviewPreset:output_type -> agent.v1.PreviewPresetResponse
-	212, // 225: workspace.v1.BranchSessionService.GetConfig:output_type -> agent.v1.GetConfigResponse
-	213, // 226: workspace.v1.BranchSessionService.SetConfig:output_type -> agent.v1.SetConfigResponse
-	214, // 227: workspace.v1.BranchSessionService.ListTools:output_type -> agent.v1.ListToolsResponse
-	215, // 228: workspace.v1.BranchSessionService.GetToolConfig:output_type -> agent.v1.GetToolConfigResponse
-	216, // 229: workspace.v1.BranchSessionService.SetToolConfig:output_type -> agent.v1.SetToolConfigResponse
-	217, // 230: workspace.v1.BranchSessionService.SetExtensionConfig:output_type -> agent.v1.SetExtensionConfigResponse
-	218, // 231: workspace.v1.BranchSessionService.UploadFile:output_type -> agent.v1.UploadFileResponse
-	219, // 232: workspace.v1.BranchSessionService.IngestFile:output_type -> agent.v1.IngestFileResponse
-	220, // 233: workspace.v1.BranchSessionService.GetFile:output_type -> agent.v1.GetFileResponse
-	221, // 234: workspace.v1.BranchSessionService.GetFileMeta:output_type -> agent.v1.GetFileMetaResponse
-	222, // 235: workspace.v1.BranchSessionService.GetFileStream:output_type -> agent.v1.FileChunk
-	138, // [138:236] is the sub-list for method output_type
-	40,  // [40:138] is the sub-list for method input_type
-	40,  // [40:40] is the sub-list for extension type_name
-	40,  // [40:40] is the sub-list for extension extendee
-	0,   // [0:40] is the sub-list for field type_name
+	133, // 38: workspace.v1.PauseServiceResponse.service:type_name -> workspace.v1.ServiceInfo
+	133, // 39: workspace.v1.ResumeServiceResponse.service:type_name -> workspace.v1.ServiceInfo
+	160, // 40: workspace.v1.BuildPreviewImageRequest.build_args:type_name -> workspace.v1.BuildPreviewImageRequest.BuildArgsEntry
+	161, // 41: workspace.v1.UpdateSettingsResponse.session:type_name -> agent.v1.Session
+	1,   // 42: workspace.v1.BranchSessionService.EnsureBranchSession:input_type -> workspace.v1.EnsureBranchSessionRequest
+	13,  // 43: workspace.v1.BranchSessionService.ForkBranchSession:input_type -> workspace.v1.ForkBranchSessionRequest
+	3,   // 44: workspace.v1.BranchSessionService.ListBranchSessions:input_type -> workspace.v1.ListBranchSessionsRequest
+	5,   // 45: workspace.v1.BranchSessionService.GetBranchSession:input_type -> workspace.v1.GetBranchSessionRequest
+	7,   // 46: workspace.v1.BranchSessionService.DeleteBranchSession:input_type -> workspace.v1.DeleteBranchSessionRequest
+	9,   // 47: workspace.v1.BranchSessionService.DeleteBranch:input_type -> workspace.v1.DeleteBranchRequest
+	11,  // 48: workspace.v1.BranchSessionService.DeleteRepo:input_type -> workspace.v1.DeleteRepoRequest
+	15,  // 49: workspace.v1.BranchSessionService.CreateFreeSession:input_type -> workspace.v1.CreateFreeSessionRequest
+	17,  // 50: workspace.v1.BranchSessionService.ListRepos:input_type -> workspace.v1.ListReposRequest
+	20,  // 51: workspace.v1.BranchSessionService.Tree:input_type -> workspace.v1.TreeRequest
+	23,  // 52: workspace.v1.BranchSessionService.ReadBlob:input_type -> workspace.v1.ReadBlobRequest
+	31,  // 53: workspace.v1.BranchSessionService.ReadRaw:input_type -> workspace.v1.ReadRawRequest
+	25,  // 54: workspace.v1.BranchSessionService.Log:input_type -> workspace.v1.LogRequest
+	28,  // 55: workspace.v1.BranchSessionService.Branches:input_type -> workspace.v1.BranchesRequest
+	33,  // 56: workspace.v1.BranchSessionService.Tags:input_type -> workspace.v1.TagsRequest
+	36,  // 57: workspace.v1.BranchSessionService.ListReleases:input_type -> workspace.v1.ReleasesRequest
+	40,  // 58: workspace.v1.BranchSessionService.GetReleaseAsset:input_type -> workspace.v1.ReleaseAssetRequest
+	42,  // 59: workspace.v1.BranchSessionService.GetCommit:input_type -> workspace.v1.GetCommitRequest
+	45,  // 60: workspace.v1.BranchSessionService.CommitDiff:input_type -> workspace.v1.CommitDiffRequest
+	47,  // 61: workspace.v1.BranchSessionService.EnsureRepo:input_type -> workspace.v1.EnsureRepoRequest
+	49,  // 62: workspace.v1.BranchSessionService.CreateOrg:input_type -> workspace.v1.CreateOrgRequest
+	51,  // 63: workspace.v1.BranchSessionService.ListOrgs:input_type -> workspace.v1.ListOrgsRequest
+	53,  // 64: workspace.v1.BranchSessionService.RepoMeta:input_type -> workspace.v1.RepoMetaRequest
+	55,  // 65: workspace.v1.BranchSessionService.Contents:input_type -> workspace.v1.ContentsRequest
+	59,  // 66: workspace.v1.BranchSessionService.CommitFiles:input_type -> workspace.v1.CommitFilesRequest
+	61,  // 67: workspace.v1.BranchSessionService.BranchStatus:input_type -> workspace.v1.BranchStatusRequest
+	63,  // 68: workspace.v1.BranchSessionService.CommitStaged:input_type -> workspace.v1.CommitStagedRequest
+	65,  // 69: workspace.v1.BranchSessionService.ApplyFiles:input_type -> workspace.v1.ApplyFilesRequest
+	67,  // 70: workspace.v1.BranchSessionService.Compare:input_type -> workspace.v1.CompareRequest
+	70,  // 71: workspace.v1.BranchSessionService.Blame:input_type -> workspace.v1.BlameRequest
+	73,  // 72: workspace.v1.BranchSessionService.FileDiff:input_type -> workspace.v1.FileDiffRequest
+	75,  // 73: workspace.v1.BranchSessionService.CreateTag:input_type -> workspace.v1.CreateTagRequest
+	77,  // 74: workspace.v1.BranchSessionService.CreateBranch:input_type -> workspace.v1.CreateBranchRequest
+	79,  // 75: workspace.v1.BranchSessionService.Archive:input_type -> workspace.v1.ArchiveRequest
+	81,  // 76: workspace.v1.BranchSessionService.ImportRepo:input_type -> workspace.v1.ImportRepoRequest
+	84,  // 77: workspace.v1.BranchSessionService.SetPushMirror:input_type -> workspace.v1.SetPushMirrorRequest
+	86,  // 78: workspace.v1.BranchSessionService.ListPushMirrors:input_type -> workspace.v1.ListPushMirrorsRequest
+	88,  // 79: workspace.v1.BranchSessionService.DeletePushMirror:input_type -> workspace.v1.DeletePushMirrorRequest
+	90,  // 80: workspace.v1.BranchSessionService.ListMRs:input_type -> workspace.v1.ListMRsRequest
+	93,  // 81: workspace.v1.BranchSessionService.GetMR:input_type -> workspace.v1.GetMRRequest
+	95,  // 82: workspace.v1.BranchSessionService.MRDiff:input_type -> workspace.v1.MRDiffRequest
+	97,  // 83: workspace.v1.BranchSessionService.ListMRComments:input_type -> workspace.v1.ListMRCommentsRequest
+	100, // 84: workspace.v1.BranchSessionService.CreateMR:input_type -> workspace.v1.CreateMRRequest
+	102, // 85: workspace.v1.BranchSessionService.CommentMR:input_type -> workspace.v1.CommentMRRequest
+	104, // 86: workspace.v1.BranchSessionService.MergeMR:input_type -> workspace.v1.MergeMRRequest
+	106, // 87: workspace.v1.BranchSessionService.SyncBranch:input_type -> workspace.v1.SyncBranchRequest
+	109, // 88: workspace.v1.BranchSessionService.ListOCIImages:input_type -> workspace.v1.ListOCIImagesRequest
+	111, // 89: workspace.v1.BranchSessionService.BuildSandboxImage:input_type -> workspace.v1.BuildSandboxImageRequest
+	113, // 90: workspace.v1.BranchSessionService.ImportImage:input_type -> workspace.v1.ImportImageRequest
+	115, // 91: workspace.v1.BranchSessionService.ListSandboxes:input_type -> workspace.v1.ListSandboxesRequest
+	118, // 92: workspace.v1.BranchSessionService.CreateSandbox:input_type -> workspace.v1.CreateSandboxRequest
+	122, // 93: workspace.v1.BranchSessionService.GetSandbox:input_type -> workspace.v1.GetSandboxRequest
+	120, // 94: workspace.v1.BranchSessionService.DeleteSandbox:input_type -> workspace.v1.DeleteSandboxRequest
+	124, // 95: workspace.v1.BranchSessionService.ResolveSandbox:input_type -> workspace.v1.ResolveSandboxRequest
+	126, // 96: workspace.v1.BranchSessionService.ListSandboxJobs:input_type -> workspace.v1.ListSandboxJobsRequest
+	129, // 97: workspace.v1.BranchSessionService.GetSandboxJobOutput:input_type -> workspace.v1.GetSandboxJobOutputRequest
+	131, // 98: workspace.v1.BranchSessionService.WatchSandboxJob:input_type -> workspace.v1.WatchSandboxJobRequest
+	136, // 99: workspace.v1.BranchSessionService.DeployService:input_type -> workspace.v1.DeployServiceRequest
+	138, // 100: workspace.v1.BranchSessionService.PreviewService:input_type -> workspace.v1.PreviewServiceRequest
+	140, // 101: workspace.v1.BranchSessionService.ListServices:input_type -> workspace.v1.ListServicesRequest
+	142, // 102: workspace.v1.BranchSessionService.DeleteService:input_type -> workspace.v1.DeleteServiceRequest
+	144, // 103: workspace.v1.BranchSessionService.PauseService:input_type -> workspace.v1.PauseServiceRequest
+	146, // 104: workspace.v1.BranchSessionService.ResumeService:input_type -> workspace.v1.ResumeServiceRequest
+	148, // 105: workspace.v1.BranchSessionService.ServiceLogs:input_type -> workspace.v1.ServiceLogsRequest
+	150, // 106: workspace.v1.BranchSessionService.WatchServiceLogs:input_type -> workspace.v1.WatchServiceLogsRequest
+	152, // 107: workspace.v1.BranchSessionService.BuildPreviewImage:input_type -> workspace.v1.BuildPreviewImageRequest
+	162, // 108: workspace.v1.BranchSessionService.Health:input_type -> agent.v1.HealthRequest
+	163, // 109: workspace.v1.BranchSessionService.GetIdentity:input_type -> agent.v1.GetIdentityRequest
+	164, // 110: workspace.v1.BranchSessionService.ListSessions:input_type -> agent.v1.ListSessionsRequest
+	165, // 111: workspace.v1.BranchSessionService.GetSession:input_type -> agent.v1.GetSessionRequest
+	166, // 112: workspace.v1.BranchSessionService.ListMessages:input_type -> agent.v1.ListMessagesRequest
+	167, // 113: workspace.v1.BranchSessionService.Prompt:input_type -> agent.v1.PromptRequest
+	168, // 114: workspace.v1.BranchSessionService.WatchSession:input_type -> agent.v1.WatchSessionRequest
+	169, // 115: workspace.v1.BranchSessionService.WatchSessions:input_type -> agent.v1.WatchSessionsRequest
+	170, // 116: workspace.v1.BranchSessionService.SetModel:input_type -> agent.v1.SetModelRequest
+	171, // 117: workspace.v1.BranchSessionService.Undo:input_type -> agent.v1.UndoRequest
+	172, // 118: workspace.v1.BranchSessionService.State:input_type -> agent.v1.StateRequest
+	173, // 119: workspace.v1.BranchSessionService.Mailbox:input_type -> agent.v1.MailboxRequest
+	174, // 120: workspace.v1.BranchSessionService.Interrupt:input_type -> agent.v1.InterruptRequest
+	175, // 121: workspace.v1.BranchSessionService.Compact:input_type -> agent.v1.CompactRequest
+	154, // 122: workspace.v1.BranchSessionService.UpdateSettings:input_type -> workspace.v1.UpdateSettingsRequest
+	176, // 123: workspace.v1.BranchSessionService.ListProviders:input_type -> agent.v1.ListProvidersRequest
+	177, // 124: workspace.v1.BranchSessionService.ListProvidersCatalog:input_type -> agent.v1.ListProvidersCatalogRequest
+	178, // 125: workspace.v1.BranchSessionService.RegisterProvider:input_type -> agent.v1.RegisterProviderRequest
+	179, // 126: workspace.v1.BranchSessionService.DeleteProvider:input_type -> agent.v1.DeleteProviderRequest
+	180, // 127: workspace.v1.BranchSessionService.TestProvider:input_type -> agent.v1.TestProviderRequest
+	181, // 128: workspace.v1.BranchSessionService.ListModels:input_type -> agent.v1.ListModelsRequest
+	182, // 129: workspace.v1.BranchSessionService.ListPresets:input_type -> agent.v1.ListPresetsRequest
+	183, // 130: workspace.v1.BranchSessionService.PreviewPreset:input_type -> agent.v1.PreviewPresetRequest
+	184, // 131: workspace.v1.BranchSessionService.GetConfig:input_type -> agent.v1.GetConfigRequest
+	185, // 132: workspace.v1.BranchSessionService.SetConfig:input_type -> agent.v1.SetConfigRequest
+	186, // 133: workspace.v1.BranchSessionService.ListTools:input_type -> agent.v1.ListToolsRequest
+	187, // 134: workspace.v1.BranchSessionService.GetToolConfig:input_type -> agent.v1.GetToolConfigRequest
+	188, // 135: workspace.v1.BranchSessionService.SetToolConfig:input_type -> agent.v1.SetToolConfigRequest
+	189, // 136: workspace.v1.BranchSessionService.SetExtensionConfig:input_type -> agent.v1.SetExtensionConfigRequest
+	190, // 137: workspace.v1.BranchSessionService.UploadFile:input_type -> agent.v1.UploadFileRequest
+	191, // 138: workspace.v1.BranchSessionService.IngestFile:input_type -> agent.v1.IngestFileRequest
+	192, // 139: workspace.v1.BranchSessionService.GetFile:input_type -> agent.v1.GetFileRequest
+	193, // 140: workspace.v1.BranchSessionService.GetFileMeta:input_type -> agent.v1.GetFileMetaRequest
+	192, // 141: workspace.v1.BranchSessionService.GetFileStream:input_type -> agent.v1.GetFileRequest
+	2,   // 142: workspace.v1.BranchSessionService.EnsureBranchSession:output_type -> workspace.v1.EnsureBranchSessionResponse
+	14,  // 143: workspace.v1.BranchSessionService.ForkBranchSession:output_type -> workspace.v1.ForkBranchSessionResponse
+	4,   // 144: workspace.v1.BranchSessionService.ListBranchSessions:output_type -> workspace.v1.ListBranchSessionsResponse
+	6,   // 145: workspace.v1.BranchSessionService.GetBranchSession:output_type -> workspace.v1.GetBranchSessionResponse
+	8,   // 146: workspace.v1.BranchSessionService.DeleteBranchSession:output_type -> workspace.v1.DeleteBranchSessionResponse
+	10,  // 147: workspace.v1.BranchSessionService.DeleteBranch:output_type -> workspace.v1.DeleteBranchResponse
+	12,  // 148: workspace.v1.BranchSessionService.DeleteRepo:output_type -> workspace.v1.DeleteRepoResponse
+	16,  // 149: workspace.v1.BranchSessionService.CreateFreeSession:output_type -> workspace.v1.CreateFreeSessionResponse
+	19,  // 150: workspace.v1.BranchSessionService.ListRepos:output_type -> workspace.v1.ListReposResponse
+	22,  // 151: workspace.v1.BranchSessionService.Tree:output_type -> workspace.v1.TreeResponse
+	24,  // 152: workspace.v1.BranchSessionService.ReadBlob:output_type -> workspace.v1.ReadBlobResponse
+	32,  // 153: workspace.v1.BranchSessionService.ReadRaw:output_type -> workspace.v1.ReadRawResponse
+	27,  // 154: workspace.v1.BranchSessionService.Log:output_type -> workspace.v1.LogResponse
+	30,  // 155: workspace.v1.BranchSessionService.Branches:output_type -> workspace.v1.BranchesResponse
+	35,  // 156: workspace.v1.BranchSessionService.Tags:output_type -> workspace.v1.TagsResponse
+	39,  // 157: workspace.v1.BranchSessionService.ListReleases:output_type -> workspace.v1.ReleasesResponse
+	41,  // 158: workspace.v1.BranchSessionService.GetReleaseAsset:output_type -> workspace.v1.ReleaseAssetResponse
+	44,  // 159: workspace.v1.BranchSessionService.GetCommit:output_type -> workspace.v1.GetCommitResponse
+	46,  // 160: workspace.v1.BranchSessionService.CommitDiff:output_type -> workspace.v1.DiffResponse
+	48,  // 161: workspace.v1.BranchSessionService.EnsureRepo:output_type -> workspace.v1.EnsureRepoResponse
+	50,  // 162: workspace.v1.BranchSessionService.CreateOrg:output_type -> workspace.v1.CreateOrgResponse
+	52,  // 163: workspace.v1.BranchSessionService.ListOrgs:output_type -> workspace.v1.ListOrgsResponse
+	54,  // 164: workspace.v1.BranchSessionService.RepoMeta:output_type -> workspace.v1.RepoMetaResponse
+	57,  // 165: workspace.v1.BranchSessionService.Contents:output_type -> workspace.v1.ContentsResponse
+	60,  // 166: workspace.v1.BranchSessionService.CommitFiles:output_type -> workspace.v1.CommitFilesResponse
+	62,  // 167: workspace.v1.BranchSessionService.BranchStatus:output_type -> workspace.v1.BranchStatusResponse
+	64,  // 168: workspace.v1.BranchSessionService.CommitStaged:output_type -> workspace.v1.CommitStagedResponse
+	66,  // 169: workspace.v1.BranchSessionService.ApplyFiles:output_type -> workspace.v1.ApplyFilesResponse
+	69,  // 170: workspace.v1.BranchSessionService.Compare:output_type -> workspace.v1.CompareResponse
+	72,  // 171: workspace.v1.BranchSessionService.Blame:output_type -> workspace.v1.BlameResponse
+	74,  // 172: workspace.v1.BranchSessionService.FileDiff:output_type -> workspace.v1.FileDiffResponse
+	76,  // 173: workspace.v1.BranchSessionService.CreateTag:output_type -> workspace.v1.CreateTagResponse
+	78,  // 174: workspace.v1.BranchSessionService.CreateBranch:output_type -> workspace.v1.CreateBranchResponse
+	80,  // 175: workspace.v1.BranchSessionService.Archive:output_type -> workspace.v1.ArchiveResponse
+	82,  // 176: workspace.v1.BranchSessionService.ImportRepo:output_type -> workspace.v1.ImportRepoResponse
+	85,  // 177: workspace.v1.BranchSessionService.SetPushMirror:output_type -> workspace.v1.SetPushMirrorResponse
+	87,  // 178: workspace.v1.BranchSessionService.ListPushMirrors:output_type -> workspace.v1.ListPushMirrorsResponse
+	89,  // 179: workspace.v1.BranchSessionService.DeletePushMirror:output_type -> workspace.v1.DeletePushMirrorResponse
+	92,  // 180: workspace.v1.BranchSessionService.ListMRs:output_type -> workspace.v1.ListMRsResponse
+	94,  // 181: workspace.v1.BranchSessionService.GetMR:output_type -> workspace.v1.GetMRResponse
+	96,  // 182: workspace.v1.BranchSessionService.MRDiff:output_type -> workspace.v1.MRDiffResponse
+	99,  // 183: workspace.v1.BranchSessionService.ListMRComments:output_type -> workspace.v1.ListMRCommentsResponse
+	101, // 184: workspace.v1.BranchSessionService.CreateMR:output_type -> workspace.v1.CreateMRResponse
+	103, // 185: workspace.v1.BranchSessionService.CommentMR:output_type -> workspace.v1.CommentMRResponse
+	105, // 186: workspace.v1.BranchSessionService.MergeMR:output_type -> workspace.v1.MergeMRResponse
+	107, // 187: workspace.v1.BranchSessionService.SyncBranch:output_type -> workspace.v1.SyncBranchResponse
+	110, // 188: workspace.v1.BranchSessionService.ListOCIImages:output_type -> workspace.v1.ListOCIImagesResponse
+	112, // 189: workspace.v1.BranchSessionService.BuildSandboxImage:output_type -> workspace.v1.BuildSandboxImageResponse
+	114, // 190: workspace.v1.BranchSessionService.ImportImage:output_type -> workspace.v1.ImportImageResponse
+	117, // 191: workspace.v1.BranchSessionService.ListSandboxes:output_type -> workspace.v1.ListSandboxesResponse
+	119, // 192: workspace.v1.BranchSessionService.CreateSandbox:output_type -> workspace.v1.CreateSandboxResponse
+	123, // 193: workspace.v1.BranchSessionService.GetSandbox:output_type -> workspace.v1.GetSandboxResponse
+	121, // 194: workspace.v1.BranchSessionService.DeleteSandbox:output_type -> workspace.v1.DeleteSandboxResponse
+	125, // 195: workspace.v1.BranchSessionService.ResolveSandbox:output_type -> workspace.v1.ResolveSandboxResponse
+	128, // 196: workspace.v1.BranchSessionService.ListSandboxJobs:output_type -> workspace.v1.ListSandboxJobsResponse
+	130, // 197: workspace.v1.BranchSessionService.GetSandboxJobOutput:output_type -> workspace.v1.GetSandboxJobOutputResponse
+	132, // 198: workspace.v1.BranchSessionService.WatchSandboxJob:output_type -> workspace.v1.WatchSandboxJobResponse
+	137, // 199: workspace.v1.BranchSessionService.DeployService:output_type -> workspace.v1.DeployServiceResponse
+	139, // 200: workspace.v1.BranchSessionService.PreviewService:output_type -> workspace.v1.PreviewServiceResponse
+	141, // 201: workspace.v1.BranchSessionService.ListServices:output_type -> workspace.v1.ListServicesResponse
+	143, // 202: workspace.v1.BranchSessionService.DeleteService:output_type -> workspace.v1.DeleteServiceResponse
+	145, // 203: workspace.v1.BranchSessionService.PauseService:output_type -> workspace.v1.PauseServiceResponse
+	147, // 204: workspace.v1.BranchSessionService.ResumeService:output_type -> workspace.v1.ResumeServiceResponse
+	149, // 205: workspace.v1.BranchSessionService.ServiceLogs:output_type -> workspace.v1.ServiceLogsResponse
+	151, // 206: workspace.v1.BranchSessionService.WatchServiceLogs:output_type -> workspace.v1.WatchServiceLogsResponse
+	153, // 207: workspace.v1.BranchSessionService.BuildPreviewImage:output_type -> workspace.v1.BuildPreviewImageResponse
+	194, // 208: workspace.v1.BranchSessionService.Health:output_type -> agent.v1.HealthResponse
+	195, // 209: workspace.v1.BranchSessionService.GetIdentity:output_type -> agent.v1.GetIdentityResponse
+	196, // 210: workspace.v1.BranchSessionService.ListSessions:output_type -> agent.v1.ListSessionsResponse
+	197, // 211: workspace.v1.BranchSessionService.GetSession:output_type -> agent.v1.GetSessionResponse
+	198, // 212: workspace.v1.BranchSessionService.ListMessages:output_type -> agent.v1.ListMessagesResponse
+	199, // 213: workspace.v1.BranchSessionService.Prompt:output_type -> agent.v1.PromptResponse
+	200, // 214: workspace.v1.BranchSessionService.WatchSession:output_type -> agent.v1.WatchSessionResponse
+	201, // 215: workspace.v1.BranchSessionService.WatchSessions:output_type -> agent.v1.WatchSessionsResponse
+	202, // 216: workspace.v1.BranchSessionService.SetModel:output_type -> agent.v1.SetModelResponse
+	203, // 217: workspace.v1.BranchSessionService.Undo:output_type -> agent.v1.UndoResponse
+	204, // 218: workspace.v1.BranchSessionService.State:output_type -> agent.v1.StateResponse
+	205, // 219: workspace.v1.BranchSessionService.Mailbox:output_type -> agent.v1.MailboxResponse
+	206, // 220: workspace.v1.BranchSessionService.Interrupt:output_type -> agent.v1.InterruptResponse
+	207, // 221: workspace.v1.BranchSessionService.Compact:output_type -> agent.v1.CompactResponse
+	155, // 222: workspace.v1.BranchSessionService.UpdateSettings:output_type -> workspace.v1.UpdateSettingsResponse
+	208, // 223: workspace.v1.BranchSessionService.ListProviders:output_type -> agent.v1.ListProvidersResponse
+	209, // 224: workspace.v1.BranchSessionService.ListProvidersCatalog:output_type -> agent.v1.ListProvidersCatalogResponse
+	210, // 225: workspace.v1.BranchSessionService.RegisterProvider:output_type -> agent.v1.RegisterProviderResponse
+	211, // 226: workspace.v1.BranchSessionService.DeleteProvider:output_type -> agent.v1.DeleteProviderResponse
+	212, // 227: workspace.v1.BranchSessionService.TestProvider:output_type -> agent.v1.TestProviderResponse
+	213, // 228: workspace.v1.BranchSessionService.ListModels:output_type -> agent.v1.ListModelsResponse
+	214, // 229: workspace.v1.BranchSessionService.ListPresets:output_type -> agent.v1.ListPresetsResponse
+	215, // 230: workspace.v1.BranchSessionService.PreviewPreset:output_type -> agent.v1.PreviewPresetResponse
+	216, // 231: workspace.v1.BranchSessionService.GetConfig:output_type -> agent.v1.GetConfigResponse
+	217, // 232: workspace.v1.BranchSessionService.SetConfig:output_type -> agent.v1.SetConfigResponse
+	218, // 233: workspace.v1.BranchSessionService.ListTools:output_type -> agent.v1.ListToolsResponse
+	219, // 234: workspace.v1.BranchSessionService.GetToolConfig:output_type -> agent.v1.GetToolConfigResponse
+	220, // 235: workspace.v1.BranchSessionService.SetToolConfig:output_type -> agent.v1.SetToolConfigResponse
+	221, // 236: workspace.v1.BranchSessionService.SetExtensionConfig:output_type -> agent.v1.SetExtensionConfigResponse
+	222, // 237: workspace.v1.BranchSessionService.UploadFile:output_type -> agent.v1.UploadFileResponse
+	223, // 238: workspace.v1.BranchSessionService.IngestFile:output_type -> agent.v1.IngestFileResponse
+	224, // 239: workspace.v1.BranchSessionService.GetFile:output_type -> agent.v1.GetFileResponse
+	225, // 240: workspace.v1.BranchSessionService.GetFileMeta:output_type -> agent.v1.GetFileMetaResponse
+	226, // 241: workspace.v1.BranchSessionService.GetFileStream:output_type -> agent.v1.FileChunk
+	142, // [142:242] is the sub-list for method output_type
+	42,  // [42:142] is the sub-list for method input_type
+	42,  // [42:42] is the sub-list for extension type_name
+	42,  // [42:42] is the sub-list for extension extendee
+	0,   // [0:42] is the sub-list for field type_name
 }
 
 func init() { file_workspace_v1_workspace_proto_init() }
@@ -10741,7 +10953,7 @@ func file_workspace_v1_workspace_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_workspace_v1_workspace_proto_rawDesc), len(file_workspace_v1_workspace_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   157,
+			NumMessages:   161,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

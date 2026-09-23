@@ -1,4 +1,4 @@
-// Package client is the reusable easyworker client: it performs the one-time
+// Package client is the reusable agent-worker client: it performs the one-time
 // exclusive enrollment handshake and builds a bearer-authenticated
 // WorkerService client. Any service (easylab, a controller, an operator CLI)
 // can import it without depending on easylab.
@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	workerv1 "github.com/easylab-platform/easyworker/gen/worker/v1"
-	"github.com/easylab-platform/easyworker/gen/worker/v1/workerv1connect"
+	workerv1 "github.com/abcp-sdk/agent-worker/gen/worker/v1"
+	"github.com/abcp-sdk/agent-worker/gen/worker/v1/workerv1connect"
 )
 
 // Enroll performs the one-time exclusive claim against an unclaimed worker and
