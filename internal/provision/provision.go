@@ -103,7 +103,11 @@ const (
 	dev004Base = "https://ai-gateway-dev004.develop.fenjin.org/v4/ai"
 	dev004Key  = "Hzfsls978665#"
 
-	textCtx = int64(262144)
+	// Hosted tal-coding text models advertise a 1M context window (the gateway
+	// `/config` reports context_window=1000000); the local llama.cpp
+	// `local-text` model is a real 262144.
+	textCtx      = int64(1000000)
+	localTextCtx = int64(262144)
 
 	apiType = "vercel-compatible-gateway"
 )
@@ -153,7 +157,7 @@ var ProfileFull = func() Profile {
 	for i := range ps {
 		switch ps[i].ID {
 		case "gateway-text":
-			ps[i].Models = append(ps[i].Models, Model{"local/local-text", "Local Text", textCtx})
+			ps[i].Models = append(ps[i].Models, Model{"local/local-text", "Local Text", localTextCtx})
 		case "gateway-image":
 			ps[i].Models = append(ps[i].Models,
 				Model{"local/local-image", "Local Image", 0},
