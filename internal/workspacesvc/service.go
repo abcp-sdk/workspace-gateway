@@ -1052,13 +1052,18 @@ func (s *Service) Compare(ctx context.Context, req *connect.Request[wsv1.Compare
 	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
-	files, err := s.git.Compare(ctx, m.GetOrg(), m.GetRepo(), m.GetBase(), m.GetHead())
+	// Compute the compare with go-git: Forgejo's compare API returns an EMPTY
+	// `patch` field on 1.22, so the gateway produces the full per-file diff.
+	files, err := gitcommit.Compare(ctx, s.git.GitURL(m.GetOrg(), m.GetRepo()), "root", s.git.Token(), m.GetBase(), m.GetHead(), 0)
 	if err != nil {
-		return nil, mrError(err)
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	out := make([]*wsv1.CompareFile, 0, len(files))
 	for _, f := range files {
-		out = append(out, &wsv1.CompareFile{Path: f.Path, Status: f.Status, Additions: f.Additions, Deletions: f.Deletions, Patch: f.Patch})
+		out = append(out, &wsv1.CompareFile{
+			Path: f.Path, Status: f.Status,
+			Additions: int32(f.Additions), Deletions: int32(f.Deletions), Patch: f.Patch,
+		})
 	}
 	return connect.NewResponse(&wsv1.CompareResponse{Files: out}), nil
 }

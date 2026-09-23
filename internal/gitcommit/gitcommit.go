@@ -37,6 +37,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/format/diff"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 )
@@ -522,6 +523,126 @@ func ChangedPaths(ctx context.Context, repoURL, user, token, from, to string, ti
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+// FileChange is one file that differs between two refs.
+type FileChange struct {
+	Path      string
+	Status    string // added | modified | deleted | renamed
+	Additions int
+	Deletions int
+	Patch     string
+}
+
+// Compare returns the per-file changes between `base` and `head` (a `base..head`
+// tree diff) with unified patches, computed with go-git. Forgejo's compare API
+// returns an EMPTY `patch` field (1.22), so the gateway produces the whole
+// comparison itself in ONE clone.
+func Compare(ctx context.Context, repoURL, user, token, base, head string, timeout time.Duration) ([]FileChange, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeoutOf(timeout))
+	defer cancel()
+	dir, err := os.MkdirTemp("", "gitcompare-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+	auth := &http.BasicAuth{Username: user, Password: token}
+	repo, err := git.PlainCloneContext(ctx, dir, false, &git.CloneOptions{URL: repoURL, Auth: auth, NoCheckout: true})
+	if err != nil {
+		return nil, err
+	}
+	baseHash, err := resolveCommit(repo, base)
+	if err != nil {
+		return nil, fmt.Errorf("resolve %s: %w", base, err)
+	}
+	headHash, err := resolveCommit(repo, head)
+	if err != nil {
+		return nil, fmt.Errorf("resolve %s: %w", head, err)
+	}
+	baseCommit, err := repo.CommitObject(baseHash)
+	if err != nil {
+		return nil, err
+	}
+	headCommit, err := repo.CommitObject(headHash)
+	if err != nil {
+		return nil, err
+	}
+	baseTree, err := baseCommit.Tree()
+	if err != nil {
+		return nil, err
+	}
+	headTree, err := headCommit.Tree()
+	if err != nil {
+		return nil, err
+	}
+	changes, err := object.DiffTree(baseTree, headTree)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]FileChange, 0, len(changes))
+	for i := range changes {
+		ch := changes[i]
+		patch, perr := ch.Patch()
+		if perr != nil {
+			return nil, perr
+		}
+		fc := FileChange{
+			Path:   changePath(ch),
+			Status: changeStatus(ch),
+			Patch:  patch.String(),
+		}
+		for _, fp := range patch.FilePatches() {
+			_, to := fp.Files()
+			_ = to
+			add, del := patchStats(fp)
+			fc.Additions += add
+			fc.Deletions += del
+		}
+		out = append(out, fc)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out, nil
+}
+
+// changePath picks the destination path (falling back to the source on delete).
+func changePath(ch *object.Change) string {
+	if ch.To.Name != "" {
+		return ch.To.Name
+	}
+	return ch.From.Name
+}
+
+// changeStatus maps a go-git change onto added/modified/deleted/renamed.
+func changeStatus(ch *object.Change) string {
+	switch {
+	case ch.From.Name == "":
+		return "added"
+	case ch.To.Name == "":
+		return "deleted"
+	case ch.From.Name != ch.To.Name:
+		return "renamed"
+	default:
+		return "modified"
+	}
+}
+
+// patchStats counts added/deleted lines in a file patch.
+func patchStats(fp diff.FilePatch) (add, del int) {
+	for _, c := range fp.Chunks() {
+		switch c.Type() {
+		case diff.Add:
+			add += strings.Count(c.Content(), "\n")
+			if !strings.HasSuffix(c.Content(), "\n") && c.Content() != "" {
+				add++
+			}
+		case diff.Delete:
+			del += strings.Count(c.Content(), "\n")
+			if !strings.HasSuffix(c.Content(), "\n") && c.Content() != "" {
+				del++
+			}
+		}
+	}
+	return add, del
 }
 
 // FileDiff returns a unified diff of one file between `base` and `head` refs,
