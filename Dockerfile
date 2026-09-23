@@ -22,7 +22,9 @@ FROM ${BUILDKIT_IMAGE} AS buildkit
 
 # easyworker binary, injected into every sandbox base image at launch time
 # (derive-on-launch). Built from the vendored copy under images/worker-src, so
-# the gateway image is self-contained (no dependency on the easyworker repo).
+# the gateway image is self-contained. That copy mirrors abcp-sdk/worker (the
+# abcp-sdk-owned fork of easylab-platform/easyworker carrying this gateway's
+# worker modifications); keep the two in sync.
 FROM ${REGISTRY}/golang:1.26-alpine AS worker
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
