@@ -10,7 +10,7 @@
 //	<free> role=explorer -> explorer   (read all visible repos only)
 //
 // RULE: the `main` branch can ONLY change by merging an MR. A maintainer
-// session therefore has NO tool that writes to main (no repo-write/edit/commit,
+// session therefore has NO tool that writes to main (no repo-file-write/edit/commit,
 // no sandbox-port); it reviews and merges change requests and creates branch
 // sessions. Branch protection (apply_to_admins) is the enforcement backstop.
 package roles
@@ -57,24 +57,24 @@ var sandboxBase = []string{
 	"sandbox-info", "sandbox-exec",
 	"sandbox-job-start", "sandbox-job-output", "sandbox-job-wait",
 	"sandbox-job-kill", "sandbox-job-stdin", "sandbox-job-list",
-	"sandbox-read", "sandbox-write", "sandbox-edit", "sandbox-ls",
-	"sandbox-download", "sandbox-upload", "sandbox-checkout",
+	"sandbox-file-read", "sandbox-file-write", "sandbox-file-edit", "sandbox-file-ls", "sandbox-file-rm",
+	"sandbox-file-download", "sandbox-file-upload", "sandbox-checkout",
 }
 
 // Repo read-only browse tools.
 var repoReadTools = []string{
-	"repo-explore", "repo-read", "repo-list", "repo-log", "repo-show",
+	"repo-explore", "repo-file-read", "repo-file-list", "repo-log", "repo-show",
 	"repo-diff", "repo-branches", "repo-tags",
 }
 
 // Repo propose tools: write to a NON-main branch and open/comment MRs. Includes
 // syncing the branch with main (`repo-branch-sync`) and restoring a file
-// (`repo-restore`) so a developer can resolve conflicts in place. A developer
+// (`repo-file-restore`) so a developer can resolve conflicts in place. A developer
 // can also build a PREVIEW image of its branch and run a PREVIEW service to
 // verify it, and read that service's logs.
 var repoProposeTools = []string{
-	"repo-write", "repo-edit", "repo-delete", "repo-commit",
-	"repo-branch-create", "repo-branch-sync", "repo-restore",
+	"repo-file-write", "repo-file-edit", "repo-file-delete", "repo-commit",
+	"repo-branch-create", "repo-branch-sync", "repo-file-restore",
 	"repo-mr-create", "repo-mr-list", "repo-mr-comment",
 	"repo-mail-send",
 	"repo-build-preview", "service-preview", "service-logs",
@@ -111,14 +111,14 @@ func ToolsFor(r Role) []string {
 		return concat(generalTools, repoReadTools, adminTools)
 	case Maintainer:
 		// Read, review/merge MRs, create+dispatch branches, sandbox. NOT
-		// sandbox-port (would write main) and NOT repo-write/edit/commit.
+		// sandbox-port (would write main) and NOT repo-file-write/edit/commit.
 		return concat(generalTools, repoReadTools, repoReviewTools, sandboxBase)
 	case Developer:
 		// Work on its branch (incl. sandbox-port), propose MRs, sandbox.
 		return concat(generalTools, repoReadTools, repoProposeTools, sandboxBase, []string{"sandbox-port"})
 	case Explorer:
 		// Read every visible repo; may run a sandbox for analysis, but has NO
-		// tool that writes back to a repo (no repo-write/edit/commit, no
+		// tool that writes back to a repo (no repo-file-write/edit/commit, no
 		// sandbox-port). May read services + their logs (observability only).
 		return concat(generalTools, repoReadTools, sandboxBase, []string{"service-list", "service-logs"})
 	}

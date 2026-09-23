@@ -18,7 +18,7 @@ func toolPart(data string) *agentv1.Part {
 func TestLatestTodosPicksNewestTodoWrite(t *testing.T) {
 	msgs := []*agentv1.Message{
 		msgWith(toolPart(`{"name":"todo-write","input":{"todos":[{"content":"a","status":"pending","priority":"high"}]}}`)),
-		msgWith(toolPart(`{"name":"repo-read","input":{"path":"x"}}`)),
+		msgWith(toolPart(`{"name":"repo-file-read","input":{"path":"x"}}`)),
 		msgWith(toolPart(`{"name":"todo-write","input":{"todos":[{"content":"a","status":"completed","priority":"high"},{"content":"b","status":"in_progress","priority":"high"}]}}`)),
 	}
 	todos := latestTodos(msgs)
@@ -43,7 +43,7 @@ func TestLatestTodosQualifiedAndBare(t *testing.T) {
 
 func TestLatestTodosNone(t *testing.T) {
 	msgs := []*agentv1.Message{
-		msgWith(toolPart(`{"name":"repo-read","input":{}}`)),
+		msgWith(toolPart(`{"name":"repo-file-read","input":{}}`)),
 		msgWith(&agentv1.Part{Type: "reasoning", Data: `{"text":"hi"}`}),
 	}
 	if got := latestTodos(msgs); got != nil {

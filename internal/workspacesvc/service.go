@@ -1559,7 +1559,7 @@ func (s *Service) CommitStaged(ctx context.Context, req *connect.Request[wsv1.Co
 }
 
 // ApplyFiles applies file operations to a branch's staging commit (amending the
-// placeholder when open). It is the write path for repo-write/edit/delete/port.
+// placeholder when open). It is the write path for repo-file-write/edit/delete/port.
 func (s *Service) ApplyFiles(ctx context.Context, req *connect.Request[wsv1.ApplyFilesRequest]) (*connect.Response[wsv1.ApplyFilesResponse], error) {
 	m := req.Msg
 	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {

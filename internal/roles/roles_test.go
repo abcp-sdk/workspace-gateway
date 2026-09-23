@@ -27,7 +27,7 @@ func TestMaintainerCannotWriteMain(t *testing.T) {
 	tools := ToolsFor(Maintainer)
 	// Maintainer must NOT have any tool that writes git, and no sandbox-port.
 	for _, forbidden := range []string{
-		"repo-write", "repo-edit", "repo-delete", "repo-commit", "sandbox-port",
+		"repo-file-write", "repo-file-edit", "repo-file-delete", "repo-commit", "sandbox-port",
 	} {
 		if has(tools, forbidden) {
 			t.Fatalf("maintainer must not have %q", forbidden)
@@ -35,7 +35,7 @@ func TestMaintainerCannotWriteMain(t *testing.T) {
 	}
 	// But it DOES need read, review/merge, branch+dispatch, sandbox.
 	for _, want := range []string{
-		"repo-read", "repo-list", "repo-mr-list", "repo-mr-merge",
+		"repo-file-read", "repo-file-list", "repo-mr-list", "repo-mr-merge",
 		"repo-branch-create", "sandbox-exec", "sandbox-create",
 	} {
 		if !has(tools, want) {
@@ -50,7 +50,7 @@ func TestMaintainerCannotWriteMain(t *testing.T) {
 
 func TestDeveloperProposesNotMerges(t *testing.T) {
 	tools := ToolsFor(Developer)
-	if !has(tools, "repo-write") || !has(tools, "repo-mr-create") || !has(tools, "sandbox-port") {
+	if !has(tools, "repo-file-write") || !has(tools, "repo-mr-create") || !has(tools, "sandbox-port") {
 		t.Fatal("developer must write its branch + propose + port")
 	}
 	if has(tools, "repo-mr-merge") {
@@ -65,10 +65,10 @@ func TestExplorer(t *testing.T) {
 		t.Fatal("explorer: sandbox analysis tools missing")
 	}
 	// ...but has NO path back into a repository.
-	if has(e, "sandbox-port") || has(e, "repo-write") || has(e, "repo-edit") || has(e, "repo-commit") {
+	if has(e, "sandbox-port") || has(e, "repo-file-write") || has(e, "repo-file-edit") || has(e, "repo-commit") {
 		t.Fatal("explorer: must have no repo write path")
 	}
-	if !has(e, "repo-read") {
+	if !has(e, "repo-file-read") {
 		t.Fatal("explorer must read")
 	}
 }
@@ -88,7 +88,7 @@ func TestAdminCreatesRepoNoSandbox(t *testing.T) {
 	if !has(a, "repo-set-push-mirror") || !has(a, "repo-list-push-mirrors") || !has(a, "repo-delete-push-mirror") {
 		t.Fatal("admin must manage push mirrors")
 	}
-	if has(a, "sandbox-exec") || has(a, "repo-write") {
+	if has(a, "sandbox-exec") || has(a, "repo-file-write") {
 		t.Fatal("admin: no sandbox, no writes")
 	}
 }
