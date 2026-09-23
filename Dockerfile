@@ -21,8 +21,8 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/workspace-gateway 
 FROM ${BUILDKIT_IMAGE} AS buildkit
 
 # easyworker binary, injected into every sandbox base image at launch time
-# (derive-on-launch). Built from the vendored copy under images/worker-src, so
-# the gateway image is self-contained. That copy mirrors abcp-sdk/worker (the
+# (derive-on-launch). Built from the vendored copy under worker-src/, so the
+# gateway image is self-contained. That copy mirrors abcp-sdk/worker (the
 # abcp-sdk-owned fork of easylab-platform/easyworker carrying this gateway's
 # worker modifications); keep the two in sync.
 FROM ${REGISTRY}/golang:1.26-alpine AS worker
@@ -30,9 +30,9 @@ ARG HTTP_PROXY
 ARG HTTPS_PROXY
 ENV HTTP_PROXY=${HTTP_PROXY} HTTPS_PROXY=${HTTPS_PROXY} GOWORK=off CGO_ENABLED=0
 WORKDIR /src
-COPY images/worker-src/go.mod images/worker-src/go.sum ./
+COPY worker-src/go.mod worker-src/go.sum ./
 RUN go mod download
-COPY images/worker-src/ ./
+COPY worker-src/ ./
 RUN GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o /out/easyworker ./cmd/easyworker
 
 FROM ${REGISTRY}/alpine:3.24
