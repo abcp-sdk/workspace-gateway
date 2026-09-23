@@ -162,3 +162,43 @@ func TestServicePortsResolve(t *testing.T) {
 		t.Fatal("duplicate tcp80 must error")
 	}
 }
+
+// stubAgentLocale records the CreateSession it receives and answers GetConfig
+// with a configured locale.
+type stubAgentLocale struct {
+	agentv1connect.AgentServiceClient
+	configLocale  string
+	lastCreate    *agentv1.CreateSessionRequest
+}
+
+func (a *stubAgentLocale) GetConfig(context.Context, *connect.Request[agentv1.GetConfigRequest]) (*connect.Response[agentv1.GetConfigResponse], error) {
+	return connect.NewResponse(&agentv1.GetConfigResponse{Key: "locale", Value: a.configLocale}), nil
+}
+
+func (a *stubAgentLocale) CreateSession(_ context.Context, r *connect.Request[agentv1.CreateSessionRequest]) (*connect.Response[agentv1.CreateSessionResponse], error) {
+	a.lastCreate = r.Msg
+	return connect.NewResponse(&agentv1.CreateSessionResponse{Ok: true, SessionName: r.Msg.GetName()}), nil
+}
+
+// An EMPTY requested locale must be resolved to the tenant's configured locale
+// BEFORE pinning — otherwise the agent pins the session to English.
+func TestCreateSessionResolvesTenantLocale(t *testing.T) {
+	a := &stubAgentLocale{configLocale: "zh"}
+	s := &Service{agent: a}
+	hdr := map[string][]string{"Authorization": {"Bearer t"}}
+
+	if err := s.createSession(context.Background(), hdr, "sess", "maintainer", "", ""); err != nil {
+		t.Fatalf("createSession: %v", err)
+	}
+	if got := a.lastCreate.GetLocale(); got != "zh" {
+		t.Fatalf("pinned locale = %q, want zh (from tenant config)", got)
+	}
+
+	// An explicit request locale still wins over the tenant config.
+	if err := s.createSession(context.Background(), hdr, "sess2", "maintainer", "", "en"); err != nil {
+		t.Fatalf("createSession: %v", err)
+	}
+	if got := a.lastCreate.GetLocale(); got != "en" {
+		t.Fatalf("pinned locale = %q, want en (explicit)", got)
+	}
+}

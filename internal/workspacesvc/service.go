@@ -401,12 +401,33 @@ func (s *Service) CreateFreeSession(ctx context.Context, req *connect.Request[ws
 
 // createSession forwards a trusted CreateSession to the agent. `locale`, when
 // non-empty ("zh"/"en"), pins the session's agent language for its lifetime.
+//
+// An EMPTY locale means "follow the tenant default". We resolve the tenant's
+// configured `locale` HERE and pass it explicitly, because the agent stores a
+// pinned locale and would otherwise pin an empty request to English (the
+// agent's normalizeLocale('') == 'en'), ignoring the tenant's zh config.
 func (s *Service) createSession(ctx context.Context, hdr map[string][]string, name, preset, model, locale string) error {
+	if strings.TrimSpace(locale) == "" {
+		locale = s.tenantLocale(ctx, hdr)
+	}
 	msg := &agentv1.CreateSessionRequest{Name: name, Preset: preset, Model: model, Locale: normalizeLocale(locale)}
 	r := connect.NewRequest(msg)
 	copyHeaders(r, hdr)
 	_, err := s.agent.CreateSession(ctx, r)
 	return err
+}
+
+// tenantLocale reads the tenant's configured agent language (`locale` KV),
+// forwarding the caller's credential. Empty on any error (the agent then falls
+// back to its own default).
+func (s *Service) tenantLocale(ctx context.Context, hdr map[string][]string) string {
+	r := connect.NewRequest(&agentv1.GetConfigRequest{Key: "locale"})
+	copyHeaders(r, hdr)
+	res, err := s.agent.GetConfig(ctx, r)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(res.Msg.GetValue())
 }
 
 // normalizeLocale keeps only a valid pinned language ("zh"/"en"); anything else
