@@ -93,12 +93,16 @@ const retentionHours = 24
 
 // Execute starts a job: spawn the interpreted run in the background and
 // return immediately with the job id (everything is a job — the legacy
-// fast/slow split is gone, matching worker-go).
-func (m *Manager) Execute(ctx context.Context, command, workdir string, env map[string]string) (string, error) {
+// fast/slow split is gone, matching worker-go). timeoutMs > 0 arms a
+// wall-clock deadline: the job's process tree is killed and it ends `killed`.
+func (m *Manager) Execute(ctx context.Context, command, workdir string, env map[string]string, timeoutMs int32) (string, error) {
 	id := newID()
 	r, w := io.Pipe()
 
 	jobCtx, cancel := context.WithCancel(context.Background())
+	if timeoutMs > 0 {
+		jobCtx, cancel = context.WithTimeout(jobCtx, time.Duration(timeoutMs)*time.Millisecond)
+	}
 
 	job := &Job{
 		ID:        id,
@@ -227,6 +231,9 @@ func (m *Manager) Prune(maxAge time.Duration) {
 
 // readMerged returns the full (or stream-filtered) line history for a job:
 // persisted lines plus the in-memory suffix not yet flushed (<=200ms lag).
+//
+// DEPRECATED for pagination paths (materializes everything); kept for
+// whole-history consumers (tail computation, small jobs).
 func (m *Manager) readMerged(id string, stream int) ([]shellh.LineRec, error) {
 	persisted, _, err := m.store.QueryLines(id, stream)
 	if err != nil {
@@ -268,14 +275,54 @@ func (m *Manager) MergedRecs(id string, stream int) ([]shellh.LineRec, error) {
 	return m.readMerged(id, stream)
 }
 
+// memSuffix returns the job's in-memory ring lines with seq > afterSeq
+// (stream -1 = both), in seq order. Empty when the job is out of memory.
+func (m *Manager) memSuffix(id string, stream int, afterSeq int64) []shellh.LineRec {
+	j, err := m.Get(id)
+	if err != nil {
+		return nil
+	}
+	var mem []shellh.LineRec
+	appendStream := func(recs []shellh.LineRec) {
+		for _, r := range recs {
+			if r.Seq > afterSeq {
+				mem = append(mem, r)
+			}
+		}
+	}
+	if stream == StreamStdout || stream < 0 {
+		appendStream(j.Stdout.Recs())
+	}
+	if stream == StreamStderr || stream < 0 {
+		appendStream(j.Stderr.Recs())
+	}
+	sort.Slice(mem, func(a, b int) bool { return mem[a].Seq < mem[b].Seq })
+	return mem
+}
+
 // OutputLines paginates the (optionally stream-filtered) history. start may
 // be negative (from the end). end is exclusive, <=0 means through the end.
+//
+// Pagination is pushed into SQL: only the requested page's persisted rows are
+// materialized (plus the small in-memory tail), never the whole history.
 func (m *Manager) OutputLines(id string, stream int, start, end int32) (lines []string, total int32, startLine int32, endLine int32, done bool, err error) {
-	recs, err := m.readMerged(id, stream)
+	persistedCount, err := m.store.CountLines(id, stream)
 	if err != nil {
 		return nil, 0, 0, 0, false, err
 	}
-	n := int32(len(recs))
+	maxSeq := int64(-1)
+	if persistedCount > 0 {
+		// The memory suffix starts after the newest persisted line. When
+		// nothing is persisted yet the whole ring is the suffix.
+		if ms, err := m.store.MaxSeq(id, stream); err == nil {
+			maxSeq = ms
+		}
+	} else {
+		maxSeq = 0
+	}
+	mem := m.memSuffix(id, stream, maxSeq)
+	n := int32(persistedCount) + int32(len(mem))
+
 	s := start
 	if s < 0 {
 		s = n + s
@@ -293,10 +340,34 @@ func (m *Manager) OutputLines(id string, stream int, start, end int32) (lines []
 	if e < s {
 		e = s
 	}
+
 	out := make([]string, 0, e-s)
-	for _, r := range recs[s:e] {
-		out = append(out, r.Line)
+	// Persisted part of the window [s, min(e, pc)).
+	pc := int32(persistedCount)
+	if s < pc {
+		hi := e
+		if hi > pc {
+			hi = pc
+		}
+		recs, rerr := m.store.QueryLinesRange(id, stream, int(s), int(hi-s))
+		if rerr != nil {
+			return nil, 0, 0, 0, false, rerr
+		}
+		for _, r := range recs {
+			out = append(out, r.Line)
+		}
 	}
+	// In-memory suffix part of the window [max(s,pc), e).
+	if e > pc {
+		lo := int(s - pc)
+		if lo < 0 {
+			lo = 0
+		}
+		for _, r := range mem[lo:min(int(e-pc), len(mem))] {
+			out = append(out, r.Line)
+		}
+	}
+
 	if j, gerr := m.Get(id); gerr == nil {
 		done = j.State != StateRunning
 	} else if row, ok, _ := m.jobState(id); ok {
@@ -314,20 +385,82 @@ func (m *Manager) jobState(id string) (JobRow, bool, error) {
 	return row, ok, err
 }
 
-// ReplayTail returns the last n merged lines (WatchJob replay).
+// ReplayTail returns the last n merged lines (WatchJob replay). stream -1 =
+// both. Reads the persisted tail backwards in SQL and stitches on the
+// in-memory suffix — never materializes the whole history.
 func (m *Manager) ReplayTail(id string, n int) []string {
-	recs, err := m.readMerged(id, -1)
-	if err != nil {
+	return m.ReplayTailStream(id, -1, n)
+}
+
+// ReplayTailStream is ReplayTail with a stream filter (0=stdout, 1=stderr).
+func (m *Manager) ReplayTailStream(id string, stream, n int) []string {
+	if n <= 0 {
 		return nil
 	}
-	if len(recs) > n {
-		recs = recs[len(recs)-n:]
+	maxSeq := int64(0)
+	if ms, err := m.store.MaxSeq(id, stream); err == nil {
+		maxSeq = ms
 	}
-	out := make([]string, 0, len(recs))
-	for _, r := range recs {
+	mem := m.memSuffix(id, stream, maxSeq)
+	need := n - len(mem)
+	var recs []shellh.LineRec
+	if need > 0 {
+		persisted, err := m.store.QueryTail(id, stream, need)
+		if err == nil {
+			recs = persisted
+		}
+	}
+	all := append(recs, mem...)
+	if len(all) > n {
+		all = all[len(all)-n:]
+	}
+	out := make([]string, 0, len(all))
+	for _, r := range all {
 		out = append(out, r.Line)
 	}
 	return out
+}
+
+// Dropped reports output lines lost to backpressure since process start:
+// store-channel overflow (writer slower than producers) plus ring overflow
+// on live jobs. 0 in healthy operation.
+func (m *Manager) Dropped() int64 {
+	n := m.store.Dropped()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, j := range m.jobs {
+		n += int64(j.Stdout.Dropped())
+		n += int64(j.Stderr.Dropped())
+	}
+	return n
+}
+
+// Close shuts the manager down for a graceful stop: kill every running job's
+// process tree (their finish records still commit), stop retention, and
+// drain+close the store so the last ≤200ms batch is not lost.
+func (m *Manager) Close() error {
+	m.mu.Lock()
+	jobs := make([]*Job, 0, len(m.jobs))
+	for _, j := range m.jobs {
+		jobs = append(jobs, j)
+	}
+	m.mu.Unlock()
+	for _, j := range jobs {
+		if j.State == StateRunning {
+			j.Kill()
+		}
+	}
+	// Give the killed jobs a moment to record their terminal state so the
+	// finish commits before the store drains.
+	deadline := time.Now().Add(3 * time.Second)
+	for _, j := range jobs {
+		select {
+		case <-j.Done():
+		case <-time.After(time.Until(deadline)):
+			return m.store.Close()
+		}
+	}
+	return m.store.Close()
 }
 
 // Subscribe returns the buffered live window (replay) plus a channel for

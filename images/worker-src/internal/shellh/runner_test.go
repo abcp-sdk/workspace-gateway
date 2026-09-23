@@ -149,3 +149,35 @@ func TestLineBufferCRLFAndRing(t *testing.T) {
 		}
 	}
 }
+
+func TestLineBufferLoneCRTerminates(t *testing.T) {
+	var seq atomic.Int64
+	lb := NewLineBuffer(10, func() int64 { return seq.Add(1) }, nil)
+
+	// A progress bar rewrites the same line with lone CRs: each frame is its
+	// own line (the old behavior concatenated them into one growing line).
+	if _, err := lb.Write([]byte(" 10%\r 50%\r 99%\n")); err != nil {
+		t.Fatal(err)
+	}
+	got := lb.Recs()
+	if len(got) != 3 || got[0].Line != " 10%" || got[1].Line != " 50%" || got[2].Line != " 99%" {
+		t.Fatalf("lone CR recs = %v", got)
+	}
+}
+
+func TestLineBufferSplitCRLF(t *testing.T) {
+	var seq atomic.Int64
+	lb := NewLineBuffer(10, func() int64 { return seq.Add(1) }, nil)
+
+	// CRLF split across two Write calls is still ONE terminator.
+	if _, err := lb.Write([]byte("x\r")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lb.Write([]byte("\ny\n")); err != nil {
+		t.Fatal(err)
+	}
+	got := lb.Recs()
+	if len(got) != 2 || got[0].Line != "x" || got[1].Line != "y" {
+		t.Fatalf("split CRLF recs = %v", got)
+	}
+}

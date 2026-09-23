@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"os"
 	"time"
 
 	"connectrpc.com/connect"
@@ -14,10 +15,18 @@ import (
 	"github.com/easylab-platform/easyworker/internal/shellh"
 )
 
-// jobWaitMax caps JobWait (legacy contract: 60s; ext-ops reads with a 65s
-// budget). NB: must be a typed time.Duration — an untyped 60_000 would
-// compare as 60µs (ns units) and clamp every wait to a hair trigger.
-const jobWaitMax = 60 * time.Second
+// jobWaitMax caps JobWait. Configurable via WORKER_WAIT_MAX (go duration or
+// bare seconds); the 600s default lets the common "wait for the build" call
+// block in ONE rpc instead of client-side polling slices.
+var jobWaitMax = waitMaxFromEnv()
+
+func waitMaxFromEnv() time.Duration {
+	d, err := time.ParseDuration(os.Getenv("WORKER_WAIT_MAX"))
+	if err != nil || d <= 0 {
+		return 600 * time.Second
+	}
+	return d
+}
 
 // WorkerService implements workerv1connect.WorkerServiceHandler.
 type WorkerService struct {
@@ -35,11 +44,12 @@ func NewService(jobs *jobsvc.Manager, files *filesvc.Service, shell *shellh.Runn
 
 func (s *WorkerService) Info(ctx context.Context, req *connect.Request[workerv1.InfoRequest]) (*connect.Response[workerv1.InfoResponse], error) {
 	return connect.NewResponse(&workerv1.InfoResponse{
-		Os:        goos(),
-		Arch:      goarch(),
-		Shell:     "builtin(mvdan-sh)",
-		Workspace: s.files.Root(),
-		BootId:    s.bootID,
+		Os:           goos(),
+		Arch:         goarch(),
+		Shell:        "builtin(mvdan-sh)",
+		Workspace:    s.files.Root(),
+		BootId:       s.bootID,
+		DroppedLines: s.jobs.Dropped(),
 	}), nil
 }
 
@@ -47,7 +57,7 @@ func (s *WorkerService) Execute(ctx context.Context, req *connect.Request[worker
 	if req.Msg.Command == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("command required"))
 	}
-	id, err := s.jobs.Execute(ctx, req.Msg.Command, req.Msg.Workdir, req.Msg.Env)
+	id, err := s.jobs.Execute(ctx, req.Msg.Command, req.Msg.Workdir, req.Msg.Env, req.Msg.TimeoutMs)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -55,8 +65,9 @@ func (s *WorkerService) Execute(ctx context.Context, req *connect.Request[worker
 }
 
 func (s *WorkerService) ListJobs(ctx context.Context, req *connect.Request[workerv1.ListJobsRequest]) (*connect.Response[workerv1.ListJobsResponse], error) {
+	limit := int(req.Msg.Limit)
 	var out []*workerv1.JobEntry
-	for _, r := range s.jobs.List(500) {
+	for _, r := range s.jobs.List(limit) {
 		out = append(out, &workerv1.JobEntry{
 			Id:         r.ID,
 			Command:    r.Command,
@@ -88,12 +99,12 @@ func (s *WorkerService) WatchJob(ctx context.Context, req *connect.Request[worke
 				return err
 			}
 		}
-		stdout := tailOf(s.jobs, req.Msg.JobId, jobsvc.StreamStdout)
-		stderr := tailOf(s.jobs, req.Msg.JobId, jobsvc.StreamStderr)
+		stdout := s.jobs.ReplayTailStream(req.Msg.JobId, jobsvc.StreamStdout, doneTailLines)
+		stderr := s.jobs.ReplayTailStream(req.Msg.JobId, jobsvc.StreamStderr, doneTailLines)
 		return stream.Send(&workerv1.WatchJobResponse{Event: &workerv1.WatchJobResponse_Done_{Done: &workerv1.WatchJobResponse_Done{
 			ExitCode: row.ExitCode,
-			Stdout:   stdout,
-			Stderr:   stderr,
+			Stdout:   joinLines(stdout),
+			Stderr:   joinLines(stderr),
 		}}})
 	}
 
@@ -125,21 +136,16 @@ func (s *WorkerService) WatchJob(ctx context.Context, req *connect.Request[worke
 // replayCap bounds WatchJob's replay from history (live window is separate).
 const replayCap = 1000
 
-func tailOf(m *jobsvc.Manager, id string, stream int) string {
-	recs, err := m.MergedRecs(id, stream)
-	if err != nil {
-		return ""
-	}
-	n := 50
-	if len(recs) > n {
-		recs = recs[len(recs)-n:]
-	}
+// doneTailLines is the tail size carried in the terminal Done event.
+const doneTailLines = 50
+
+func joinLines(lines []string) string {
 	out := ""
-	for i, r := range recs {
+	for i, l := range lines {
 		if i > 0 {
 			out += "\n"
 		}
-		out += r.Line
+		out += l
 	}
 	return out
 }
@@ -188,32 +194,20 @@ func (s *WorkerService) JobWait(ctx context.Context, req *connect.Request[worker
 	if timeout <= 0 || timeout > jobWaitMax {
 		timeout = jobWaitMax
 	}
-	// Poll loop with a done-first check: the happy path (job already
-	// finished) answers instantly, and the deadline is enforced by
-	// iteration count rather than a single long timer.
-	const tick = 25 * time.Millisecond
-	iters := int(timeout / tick)
-	if iters < 1 {
-		iters = 1
-	}
-	for i := 0; ; i++ {
-		select {
-		case <-job.Done():
-			shellh.Debugf("JobWait rpc: job %s -> done branch", req.Msg.JobId)
-			res := job.Result()
-			return connect.NewResponse(&workerv1.JobWaitResponse{State: job.State, ExitCode: res.ExitCode}), nil
-		default:
-		}
-		if i >= iters {
-			shellh.Debugf("JobWait rpc: job %s -> TIMEOUT branch (state=%s)", req.Msg.JobId, job.State)
-			return connect.NewResponse(&workerv1.JobWaitResponse{State: job.State, ExitCode: job.ExitCode}), nil
-		}
-		select {
-		case <-job.Done():
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(tick):
-		}
+	// BLOCKING wait — no poll loop: the goroutine parks until the job
+	// completes, the caller disconnects or the deadline fires.
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-job.Done():
+		shellh.Debugf("JobWait rpc: job %s -> done branch", req.Msg.JobId)
+		res := job.Result()
+		return connect.NewResponse(&workerv1.JobWaitResponse{State: job.State, ExitCode: res.ExitCode}), nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-timer.C:
+		shellh.Debugf("JobWait rpc: job %s -> TIMEOUT branch (state=%s)", req.Msg.JobId, job.State)
+		return connect.NewResponse(&workerv1.JobWaitResponse{State: job.State, ExitCode: job.ExitCode}), nil
 	}
 }
 
@@ -243,11 +237,24 @@ func (s *WorkerService) FileRead(ctx context.Context, req *connect.Request[worke
 	if req.Msg.Path == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("path required"))
 	}
-	data, err := s.files.Read(req.Msg.Path)
+	if req.Msg.StartLine == 0 && req.Msg.EndLine == 0 {
+		// Whole file (backward-compatible no-window call).
+		data, err := s.files.Read(req.Msg.Path)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
+		return connect.NewResponse(&workerv1.FileReadResponse{Content: data}), nil
+	}
+	data, total, start, end, err := s.files.ReadWindow(req.Msg.Path, req.Msg.StartLine, req.Msg.EndLine)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	return connect.NewResponse(&workerv1.FileReadResponse{Content: data}), nil
+	return connect.NewResponse(&workerv1.FileReadResponse{
+		Content:    data,
+		TotalLines: total,
+		StartLine:  start,
+		EndLine:    end,
+	}), nil
 }
 
 func (s *WorkerService) FileWrite(ctx context.Context, req *connect.Request[workerv1.FileWriteRequest]) (*connect.Response[workerv1.FileWriteResponse], error) {
@@ -260,8 +267,38 @@ func (s *WorkerService) FileWrite(ctx context.Context, req *connect.Request[work
 	return connect.NewResponse(&workerv1.FileWriteResponse{Ok: true}), nil
 }
 
+func (s *WorkerService) FileDelete(ctx context.Context, req *connect.Request[workerv1.FileDeleteRequest]) (*connect.Response[workerv1.FileDeleteResponse], error) {
+	if req.Msg.Path == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("path required"))
+	}
+	if err := s.files.Delete(req.Msg.Path); err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	return connect.NewResponse(&workerv1.FileDeleteResponse{Ok: true}), nil
+}
+
+func (s *WorkerService) FileMove(ctx context.Context, req *connect.Request[workerv1.FileMoveRequest]) (*connect.Response[workerv1.FileMoveResponse], error) {
+	if req.Msg.From == "" || req.Msg.To == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("from and to required"))
+	}
+	if err := s.files.Move(req.Msg.From, req.Msg.To); err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	return connect.NewResponse(&workerv1.FileMoveResponse{Ok: true}), nil
+}
+
+func (s *WorkerService) FileCopy(ctx context.Context, req *connect.Request[workerv1.FileCopyRequest]) (*connect.Response[workerv1.FileCopyResponse], error) {
+	if req.Msg.From == "" || req.Msg.To == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("from and to required"))
+	}
+	if err := s.files.Copy(req.Msg.From, req.Msg.To); err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	return connect.NewResponse(&workerv1.FileCopyResponse{Ok: true}), nil
+}
+
 func (s *WorkerService) FileList(ctx context.Context, req *connect.Request[workerv1.FileListRequest]) (*connect.Response[workerv1.FileListResponse], error) {
-	isDir, entries, err := s.files.List(req.Msg.Path)
+	isDir, entries, _, err := s.files.List(req.Msg.Path, int(req.Msg.Depth), int(req.Msg.Limit))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}

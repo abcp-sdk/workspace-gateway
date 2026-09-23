@@ -10,14 +10,18 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
+	"time"
 
 	"connectrpc.com/connect"
 	workerv1connect "github.com/easylab-platform/easyworker/gen/worker/v1/workerv1connect"
@@ -124,6 +128,27 @@ func main() {
 	}
 	log.Printf("easyworker listening on %s (os=%s arch=%s workspace=%s shell=builtin)",
 		listen, runtime.GOOS, runtime.GOARCH, ws)
+
+	// Graceful shutdown on SIGINT/SIGTERM (k8s sends SIGTERM before killing
+	// the pod): stop accepting, let in-flight RPCs finish, kill running jobs
+	// (their finish records commit) and DRAIN the store writer so the last
+	// ≤200ms output batch is not lost.
+	go func() {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+		<-sig
+		log.Printf("easyworker shutting down (signal received)")
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			log.Printf("shutdown: %v", err)
+		}
+		if err := jobs.Close(); err != nil {
+			log.Printf("jobs close: %v", err)
+		}
+		os.Exit(0)
+	}()
+
 	log.Fatal(server.Serve(ln))
 }
 
@@ -185,6 +210,7 @@ func jobEnv() []string {
 		// default compiler and standard library; CMake seeds its compiler and
 		// flags from these, so a job must see them too).
 		"CC", "CXX", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS", "CMAKE_GENERATOR",
+		"LANG", "LC_ALL", // locale: toolchains localize output/messages
 		"PATH", // toolchains need PATH; the host PATH is acceptable (no secrets)
 		"HOME", "TMPDIR", "USER",
 	}

@@ -24,7 +24,7 @@ func newTestManager(t *testing.T) (*Manager, string) {
 func TestExecuteLifecycle(t *testing.T) {
 	m, _ := newTestManager(t)
 
-	id, err := m.Execute(context.Background(), "echo hi && sleep 0.2 && echo bye", "", nil)
+	id, err := m.Execute(context.Background(), "echo hi && sleep 0.2 && echo bye", "", nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestExecuteLifecycle(t *testing.T) {
 func TestExecuteNoTrailingNewline(t *testing.T) {
 	m, _ := newTestManager(t)
 
-	id, _ := m.Execute(context.Background(), "printf no-newline-here", "", nil)
+	id, _ := m.Execute(context.Background(), "printf no-newline-here", "", nil, 0)
 	job, _ := m.Get(id)
 	<-job.Done()
 
@@ -81,7 +81,7 @@ func TestExecuteNoTrailingNewline(t *testing.T) {
 func TestStreamFilter(t *testing.T) {
 	m, _ := newTestManager(t)
 
-	id, _ := m.Execute(context.Background(), "echo to-out && echo to-err >&2", "", nil)
+	id, _ := m.Execute(context.Background(), "echo to-out && echo to-err >&2", "", nil, 0)
 	job, _ := m.Get(id)
 	<-job.Done()
 
@@ -108,7 +108,7 @@ func TestPersistenceAcrossReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	m1 := NewManager(shellh.New(ws, []string{"PATH=/usr/bin:/bin"}), store1, 1000, 200)
-	id, _ := m1.Execute(context.Background(), "echo persist-me", "", nil)
+	id, _ := m1.Execute(context.Background(), "echo persist-me", "", nil, 0)
 	job, _ := m1.Get(id)
 	<-job.Done()
 
@@ -162,7 +162,7 @@ func TestBootRecovery(t *testing.T) {
 func TestRetention(t *testing.T) {
 	m, dbPath := newTestManager(t)
 
-	id, _ := m.Execute(context.Background(), "echo old-job", "", nil)
+	id, _ := m.Execute(context.Background(), "echo old-job", "", nil, 0)
 	job, _ := m.Get(id)
 	<-job.Done()
 	time.Sleep(400 * time.Millisecond)
@@ -186,7 +186,7 @@ func TestKillAndStdin(t *testing.T) {
 	m, _ := newTestManager(t)
 
 	// stdin round-trip
-	id, _ := m.Execute(context.Background(), "cat", "", nil)
+	id, _ := m.Execute(context.Background(), "cat", "", nil, 0)
 	job, _ := m.Get(id)
 	if err := job.Stdin([]byte("hello\n"), true); err != nil {
 		t.Fatal(err)
@@ -202,7 +202,7 @@ func TestKillAndStdin(t *testing.T) {
 	}
 
 	// kill a sleeping job
-	id2, _ := m.Execute(context.Background(), "sleep 60", "", nil)
+	id2, _ := m.Execute(context.Background(), "sleep 60", "", nil, 0)
 	job2, _ := m.Get(id2)
 	time.Sleep(100 * time.Millisecond)
 	job2.Kill()

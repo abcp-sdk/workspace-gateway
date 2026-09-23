@@ -161,6 +161,9 @@ type LineBuffer struct {
 	recs    []LineRec
 	cur     strings.Builder
 	dropped int
+	// pendingCR: the previous Write ended with CR — it may be the first half
+	// of a CRLF split across writes.
+	pendingCR bool
 }
 
 func NewLineBuffer(max int, nextSeq func() int64, onLine func(LineRec)) *LineBuffer {
@@ -173,21 +176,40 @@ func NewLineBuffer(max int, nextSeq func() int64, onLine func(LineRec)) *LineBuf
 func (lb *LineBuffer) Write(p []byte) (int, error) {
 	var completed []LineRec
 	lb.mu.Lock()
-	for _, b := range p {
-		switch b {
+	complete := func() {
+		rec := LineRec{Seq: lb.nextSeq(), Line: lb.cur.String()}
+		lb.cur.Reset()
+		lb.recs = append(lb.recs, rec)
+		if len(lb.recs) > lb.max {
+			lb.recs = lb.recs[1:]
+			lb.dropped++
+		}
+		completed = append(completed, rec)
+	}
+	// A CR at the very end of the previous chunk may be the first half of a
+	// CRLF split across writes: swallow a leading LF when it was.
+	i := 0
+	if lb.pendingCR && len(p) > 0 && p[0] == '\n' {
+		i = 1
+	}
+	lb.pendingCR = false
+	for ; i < len(p); i++ {
+		switch p[i] {
 		case '\r':
-			continue // CRLF collapses; lone CR dropped (terminal-like)
-		case '\n':
-			rec := LineRec{Seq: lb.nextSeq(), Line: lb.cur.String()}
-			lb.cur.Reset()
-			lb.recs = append(lb.recs, rec)
-			if len(lb.recs) > lb.max {
-				lb.recs = lb.recs[1:]
-				lb.dropped++
+			// CRLF is ONE terminator; a LONE CR also terminates the line,
+			// with terminal semantics: progress bars rewrite the same line
+			// via CR, and dropping it (the old behavior) concatenated every
+			// frame into ONE ever-growing line persisted to sqlite.
+			complete()
+			if i+1 < len(p) && p[i+1] == '\n' {
+				i++
+			} else if i+1 == len(p) {
+				lb.pendingCR = true
 			}
-			completed = append(completed, rec)
+		case '\n':
+			complete()
 		default:
-			lb.cur.WriteByte(b)
+			lb.cur.WriteByte(p[i])
 		}
 	}
 	lb.mu.Unlock()

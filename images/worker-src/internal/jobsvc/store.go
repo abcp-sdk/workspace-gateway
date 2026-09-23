@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite" // pure-Go driver (CGO_ENABLED=0 discipline)
@@ -23,7 +24,9 @@ type Store struct {
 	ch      chan interface{}
 	done    chan struct{}
 	stopped chan struct{}
-	dropped int64
+
+	droppedMu sync.Mutex
+	dropped   int64
 }
 
 const (
@@ -185,7 +188,9 @@ func (s *Store) TryEnqueueLine(jobID string, seq int64, stream int, line string)
 	select {
 	case s.ch <- storeLine{jobID: jobID, seq: seq, stream: stream, line: line}:
 	default:
+		s.droppedMu.Lock()
 		s.dropped++
+		s.droppedMu.Unlock()
 	}
 }
 
@@ -242,6 +247,9 @@ func (s *Store) QueryJobs(limit int) ([]JobRow, error) {
 
 // QueryLines returns persisted lines for a job, optionally filtered by
 // stream (-1 = all), ordered by seq.
+//
+// DEPRECATED for pagination paths: it materializes the whole history. Use
+// CountLines + QueryLinesRange / QueryTail instead.
 func (s *Store) QueryLines(jobID string, stream int) ([]shellh.LineRec, int, error) {
 	q := `SELECT seq, line FROM job_lines WHERE job_id=?`
 	args := []interface{}{jobID}
@@ -256,16 +264,105 @@ func (s *Store) QueryLines(jobID string, stream int) ([]shellh.LineRec, int, err
 	}
 	defer rows.Close()
 	var out []shellh.LineRec
-	var streamCol int
 	for rows.Next() {
 		var r shellh.LineRec
 		if err := rows.Scan(&r.Seq, &r.Line); err != nil {
 			return nil, 0, err
 		}
-		_ = streamCol
 		out = append(out, r)
 	}
 	return out, len(out), rows.Err()
+}
+
+// CountLines returns the number of persisted lines for a job/stream
+// (-1 = any stream). Served from the covering index — no row materialization.
+func (s *Store) CountLines(jobID string, stream int) (int, error) {
+	q := `SELECT COUNT(*) FROM job_lines WHERE job_id=?`
+	args := []interface{}{jobID}
+	if stream >= 0 {
+		q += ` AND stream=?`
+		args = append(args, stream)
+	}
+	var n int
+	err := s.db.QueryRow(q, args...).Scan(&n)
+	return n, err
+}
+
+// QueryLinesRange returns persisted lines [offset, offset+limit) in seq order
+// (stream -1 = any). Pagination is pushed into SQL so a page costs only its
+// own rows, not the whole history.
+func (s *Store) QueryLinesRange(jobID string, stream, offset, limit int) ([]shellh.LineRec, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	q := `SELECT seq, line FROM job_lines WHERE job_id=?`
+	args := []interface{}{jobID}
+	if stream >= 0 {
+		q += ` AND stream=?`
+		args = append(args, stream)
+	}
+	q += ` ORDER BY seq LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []shellh.LineRec
+	for rows.Next() {
+		var r shellh.LineRec
+		if err := rows.Scan(&r.Seq, &r.Line); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// QueryTail returns the LAST n persisted lines in seq order (stream -1 = any).
+// Reads backwards via the index and reverses — no full scan.
+func (s *Store) QueryTail(jobID string, stream, n int) ([]shellh.LineRec, error) {
+	if n <= 0 {
+		return nil, nil
+	}
+	q := `SELECT seq, line FROM job_lines WHERE job_id=?`
+	args := []interface{}{jobID}
+	if stream >= 0 {
+		q += ` AND stream=?`
+		args = append(args, stream)
+	}
+	q += ` ORDER BY seq DESC LIMIT ?`
+	args = append(args, n)
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var rev []shellh.LineRec
+	for rows.Next() {
+		var r shellh.LineRec
+		if err := rows.Scan(&r.Seq, &r.Line); err != nil {
+			return nil, err
+		}
+		rev = append(rev, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// reverse into seq order
+	out := make([]shellh.LineRec, len(rev))
+	for i, r := range rev {
+		out[len(rev)-1-i] = r
+	}
+	return out, nil
+}
+
+// Dropped reports how many lines were lost to a full store channel (output
+// produced faster than the batch writer drains). 0 in healthy operation.
+func (s *Store) Dropped() int64 {
+	s.droppedMu.Lock()
+	defer s.droppedMu.Unlock()
+	return s.dropped
 }
 
 // MaxSeq returns the highest persisted seq for a job/stream (-1 = any), 0

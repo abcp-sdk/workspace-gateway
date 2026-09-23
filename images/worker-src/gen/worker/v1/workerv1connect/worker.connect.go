@@ -81,6 +81,13 @@ const (
 	WorkerServiceFileReadProcedure = "/worker.v1.WorkerService/FileRead"
 	// WorkerServiceFileWriteProcedure is the fully-qualified name of the WorkerService's FileWrite RPC.
 	WorkerServiceFileWriteProcedure = "/worker.v1.WorkerService/FileWrite"
+	// WorkerServiceFileDeleteProcedure is the fully-qualified name of the WorkerService's FileDelete
+	// RPC.
+	WorkerServiceFileDeleteProcedure = "/worker.v1.WorkerService/FileDelete"
+	// WorkerServiceFileMoveProcedure is the fully-qualified name of the WorkerService's FileMove RPC.
+	WorkerServiceFileMoveProcedure = "/worker.v1.WorkerService/FileMove"
+	// WorkerServiceFileCopyProcedure is the fully-qualified name of the WorkerService's FileCopy RPC.
+	WorkerServiceFileCopyProcedure = "/worker.v1.WorkerService/FileCopy"
 	// WorkerServiceFileListProcedure is the fully-qualified name of the WorkerService's FileList RPC.
 	WorkerServiceFileListProcedure = "/worker.v1.WorkerService/FileList"
 	// WorkerServiceSyncFolderProcedure is the fully-qualified name of the WorkerService's SyncFolder
@@ -106,6 +113,9 @@ type WorkerServiceClient interface {
 	JobKill(context.Context, *connect.Request[v1.JobKillRequest]) (*connect.Response[v1.JobKillResponse], error)
 	FileRead(context.Context, *connect.Request[v1.FileReadRequest]) (*connect.Response[v1.FileReadResponse], error)
 	FileWrite(context.Context, *connect.Request[v1.FileWriteRequest]) (*connect.Response[v1.FileWriteResponse], error)
+	FileDelete(context.Context, *connect.Request[v1.FileDeleteRequest]) (*connect.Response[v1.FileDeleteResponse], error)
+	FileMove(context.Context, *connect.Request[v1.FileMoveRequest]) (*connect.Response[v1.FileMoveResponse], error)
+	FileCopy(context.Context, *connect.Request[v1.FileCopyRequest]) (*connect.Response[v1.FileCopyResponse], error)
 	FileList(context.Context, *connect.Request[v1.FileListRequest]) (*connect.Response[v1.FileListResponse], error)
 	SyncFolder(context.Context, *connect.Request[v1.SyncFolderRequest]) (*connect.Response[v1.SyncFolderResponse], error)
 }
@@ -181,6 +191,24 @@ func NewWorkerServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(workerServiceMethods.ByName("FileWrite")),
 			connect.WithClientOptions(opts...),
 		),
+		fileDelete: connect.NewClient[v1.FileDeleteRequest, v1.FileDeleteResponse](
+			httpClient,
+			baseURL+WorkerServiceFileDeleteProcedure,
+			connect.WithSchema(workerServiceMethods.ByName("FileDelete")),
+			connect.WithClientOptions(opts...),
+		),
+		fileMove: connect.NewClient[v1.FileMoveRequest, v1.FileMoveResponse](
+			httpClient,
+			baseURL+WorkerServiceFileMoveProcedure,
+			connect.WithSchema(workerServiceMethods.ByName("FileMove")),
+			connect.WithClientOptions(opts...),
+		),
+		fileCopy: connect.NewClient[v1.FileCopyRequest, v1.FileCopyResponse](
+			httpClient,
+			baseURL+WorkerServiceFileCopyProcedure,
+			connect.WithSchema(workerServiceMethods.ByName("FileCopy")),
+			connect.WithClientOptions(opts...),
+		),
 		fileList: connect.NewClient[v1.FileListRequest, v1.FileListResponse](
 			httpClient,
 			baseURL+WorkerServiceFileListProcedure,
@@ -208,6 +236,9 @@ type workerServiceClient struct {
 	jobKill    *connect.Client[v1.JobKillRequest, v1.JobKillResponse]
 	fileRead   *connect.Client[v1.FileReadRequest, v1.FileReadResponse]
 	fileWrite  *connect.Client[v1.FileWriteRequest, v1.FileWriteResponse]
+	fileDelete *connect.Client[v1.FileDeleteRequest, v1.FileDeleteResponse]
+	fileMove   *connect.Client[v1.FileMoveRequest, v1.FileMoveResponse]
+	fileCopy   *connect.Client[v1.FileCopyRequest, v1.FileCopyResponse]
 	fileList   *connect.Client[v1.FileListRequest, v1.FileListResponse]
 	syncFolder *connect.Client[v1.SyncFolderRequest, v1.SyncFolderResponse]
 }
@@ -262,6 +293,21 @@ func (c *workerServiceClient) FileWrite(ctx context.Context, req *connect.Reques
 	return c.fileWrite.CallUnary(ctx, req)
 }
 
+// FileDelete calls worker.v1.WorkerService.FileDelete.
+func (c *workerServiceClient) FileDelete(ctx context.Context, req *connect.Request[v1.FileDeleteRequest]) (*connect.Response[v1.FileDeleteResponse], error) {
+	return c.fileDelete.CallUnary(ctx, req)
+}
+
+// FileMove calls worker.v1.WorkerService.FileMove.
+func (c *workerServiceClient) FileMove(ctx context.Context, req *connect.Request[v1.FileMoveRequest]) (*connect.Response[v1.FileMoveResponse], error) {
+	return c.fileMove.CallUnary(ctx, req)
+}
+
+// FileCopy calls worker.v1.WorkerService.FileCopy.
+func (c *workerServiceClient) FileCopy(ctx context.Context, req *connect.Request[v1.FileCopyRequest]) (*connect.Response[v1.FileCopyResponse], error) {
+	return c.fileCopy.CallUnary(ctx, req)
+}
+
 // FileList calls worker.v1.WorkerService.FileList.
 func (c *workerServiceClient) FileList(ctx context.Context, req *connect.Request[v1.FileListRequest]) (*connect.Response[v1.FileListResponse], error) {
 	return c.fileList.CallUnary(ctx, req)
@@ -284,6 +330,9 @@ type WorkerServiceHandler interface {
 	JobKill(context.Context, *connect.Request[v1.JobKillRequest]) (*connect.Response[v1.JobKillResponse], error)
 	FileRead(context.Context, *connect.Request[v1.FileReadRequest]) (*connect.Response[v1.FileReadResponse], error)
 	FileWrite(context.Context, *connect.Request[v1.FileWriteRequest]) (*connect.Response[v1.FileWriteResponse], error)
+	FileDelete(context.Context, *connect.Request[v1.FileDeleteRequest]) (*connect.Response[v1.FileDeleteResponse], error)
+	FileMove(context.Context, *connect.Request[v1.FileMoveRequest]) (*connect.Response[v1.FileMoveResponse], error)
+	FileCopy(context.Context, *connect.Request[v1.FileCopyRequest]) (*connect.Response[v1.FileCopyResponse], error)
 	FileList(context.Context, *connect.Request[v1.FileListRequest]) (*connect.Response[v1.FileListResponse], error)
 	SyncFolder(context.Context, *connect.Request[v1.SyncFolderRequest]) (*connect.Response[v1.SyncFolderResponse], error)
 }
@@ -355,6 +404,24 @@ func NewWorkerServiceHandler(svc WorkerServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(workerServiceMethods.ByName("FileWrite")),
 		connect.WithHandlerOptions(opts...),
 	)
+	workerServiceFileDeleteHandler := connect.NewUnaryHandler(
+		WorkerServiceFileDeleteProcedure,
+		svc.FileDelete,
+		connect.WithSchema(workerServiceMethods.ByName("FileDelete")),
+		connect.WithHandlerOptions(opts...),
+	)
+	workerServiceFileMoveHandler := connect.NewUnaryHandler(
+		WorkerServiceFileMoveProcedure,
+		svc.FileMove,
+		connect.WithSchema(workerServiceMethods.ByName("FileMove")),
+		connect.WithHandlerOptions(opts...),
+	)
+	workerServiceFileCopyHandler := connect.NewUnaryHandler(
+		WorkerServiceFileCopyProcedure,
+		svc.FileCopy,
+		connect.WithSchema(workerServiceMethods.ByName("FileCopy")),
+		connect.WithHandlerOptions(opts...),
+	)
 	workerServiceFileListHandler := connect.NewUnaryHandler(
 		WorkerServiceFileListProcedure,
 		svc.FileList,
@@ -389,6 +456,12 @@ func NewWorkerServiceHandler(svc WorkerServiceHandler, opts ...connect.HandlerOp
 			workerServiceFileReadHandler.ServeHTTP(w, r)
 		case WorkerServiceFileWriteProcedure:
 			workerServiceFileWriteHandler.ServeHTTP(w, r)
+		case WorkerServiceFileDeleteProcedure:
+			workerServiceFileDeleteHandler.ServeHTTP(w, r)
+		case WorkerServiceFileMoveProcedure:
+			workerServiceFileMoveHandler.ServeHTTP(w, r)
+		case WorkerServiceFileCopyProcedure:
+			workerServiceFileCopyHandler.ServeHTTP(w, r)
 		case WorkerServiceFileListProcedure:
 			workerServiceFileListHandler.ServeHTTP(w, r)
 		case WorkerServiceSyncFolderProcedure:
@@ -440,6 +513,18 @@ func (UnimplementedWorkerServiceHandler) FileRead(context.Context, *connect.Requ
 
 func (UnimplementedWorkerServiceHandler) FileWrite(context.Context, *connect.Request[v1.FileWriteRequest]) (*connect.Response[v1.FileWriteResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("worker.v1.WorkerService.FileWrite is not implemented"))
+}
+
+func (UnimplementedWorkerServiceHandler) FileDelete(context.Context, *connect.Request[v1.FileDeleteRequest]) (*connect.Response[v1.FileDeleteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("worker.v1.WorkerService.FileDelete is not implemented"))
+}
+
+func (UnimplementedWorkerServiceHandler) FileMove(context.Context, *connect.Request[v1.FileMoveRequest]) (*connect.Response[v1.FileMoveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("worker.v1.WorkerService.FileMove is not implemented"))
+}
+
+func (UnimplementedWorkerServiceHandler) FileCopy(context.Context, *connect.Request[v1.FileCopyRequest]) (*connect.Response[v1.FileCopyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("worker.v1.WorkerService.FileCopy is not implemented"))
 }
 
 func (UnimplementedWorkerServiceHandler) FileList(context.Context, *connect.Request[v1.FileListRequest]) (*connect.Response[v1.FileListResponse], error) {
