@@ -57,6 +57,11 @@ type Service struct {
 	// publicServiceDomain, when set, forces the domain services are published
 	// under (`<name>.<ns>.<domain>`). Empty = infer from the request Host.
 	publicServiceDomain string
+	// pvcStorageClass is the StorageClass for CreatePVC; "" = the cluster
+	// default. Only the self-hosted local-path class is supported today.
+	pvcStorageClass string
+	// pvcDefaultSize is used when CreatePVC omits a size.
+	pvcDefaultSize string
 }
 
 // Deps configures the service.
@@ -92,6 +97,11 @@ type Deps struct {
 	PreviewTTL time.Duration
 	// ServiceLogTail is the default number of service-log lines returned.
 	ServiceLogTail int64
+	// PVCStorageClass is the StorageClass CreatePVC uses ("" = cluster default).
+	// Only the self-hosted local-path class is supported.
+	PVCStorageClass string
+	// PVCDefaultSize is used when CreatePVC omits a size (e.g. "1Gi").
+	PVCDefaultSize string
 }
 
 // New builds the service.
@@ -108,6 +118,8 @@ func New(d Deps) *Service {
 		publicServiceDomain: d.PublicServiceDomain,
 		previewTTL:          d.PreviewTTL,
 		serviceLogTail:      d.ServiceLogTail,
+		pvcStorageClass:     d.PVCStorageClass,
+		pvcDefaultSize:      d.PVCDefaultSize,
 	}
 }
 
@@ -405,7 +417,7 @@ func (s *Service) CreateFreeSession(ctx context.Context, req *connect.Request[ws
 // An EMPTY locale means "follow the tenant default". We resolve the tenant's
 // configured `locale` HERE and pass it explicitly, because the agent stores a
 // pinned locale and would otherwise pin an empty request to English (the
-// agent's normalizeLocale('') == 'en'), ignoring the tenant's zh config.
+// agent's normalizeLocale(”) == 'en'), ignoring the tenant's zh config.
 func (s *Service) createSession(ctx context.Context, hdr map[string][]string, name, preset, model, locale string) error {
 	if strings.TrimSpace(locale) == "" {
 		locale = s.tenantLocale(ctx, hdr)
@@ -1965,6 +1977,10 @@ func (s *Service) DeployService(ctx context.Context, req *connect.Request[wsv1.D
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
+	vols, err := s.resolveVolumes(ctx, tenant, m.GetVolumes())
+	if err != nil {
+		return nil, err
+	}
 	spec := servicesmgr.Spec{
 		Name: name, Image: m.GetImage(), Command: m.GetCommand(),
 		Env: m.GetEnv(), CPU: m.GetCpu(), Memory: m.GetMemory(),
@@ -1973,6 +1989,7 @@ func (s *Service) DeployService(ctx context.Context, req *connect.Request[wsv1.D
 		Session: sessionFromHeaders(req.Header()),
 		Ports:   ports,
 		Runtime: s.renderRuntime(m.GetKvm(), m.GetGpuCount()),
+		Volumes: vols,
 	}
 	if spec.Image == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("image is required"))
@@ -2024,6 +2041,120 @@ func servicePorts(specs []*wsv1.ServicePortSpec, containerPort int32) ([]service
 		out = append(out, servicesmgr.Port{Suffix: suffix, Port: port, Protocol: proto, TargetPort: target})
 	}
 	return out, nil
+}
+
+// resolveVolumes validates each requested PVC mount: the claim must exist and
+// belong to the caller's tenant. Returns the servicesmgr volume specs.
+func (s *Service) resolveVolumes(ctx context.Context, tenant string, mounts []*wsv1.VolumeMountSpec) ([]servicesmgr.VolumeMount, error) {
+	if len(mounts) == 0 {
+		return nil, nil
+	}
+	out := make([]servicesmgr.VolumeMount, 0, len(mounts))
+	for i, m := range mounts {
+		if !roles.ValidServiceName(m.GetPvc()) {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("volumes[%d]: pvc must be a DNS-1123 label", i))
+		}
+		if m.GetMountPath() == "" || !strings.HasPrefix(m.GetMountPath(), "/") {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("volumes[%d]: mount_path must be an absolute path", i))
+		}
+		pvc, err := s.services.GetPVC(ctx, m.GetPvc())
+		if err != nil {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("volumes[%d]: pvc %q not found", i, m.GetPvc()))
+		}
+		if pvc.Creator != "" && pvc.Creator != tenant {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("volumes[%d]: pvc %q not found", i, m.GetPvc()))
+		}
+		out = append(out, servicesmgr.VolumeMount{
+			PVC: pvc.Name, MountPath: m.GetMountPath(),
+			ReadOnly: m.GetReadOnly(), SubPath: m.GetSubPath(),
+		})
+	}
+	return out, nil
+}
+
+// ---- persistent volume claims ----
+
+// CreatePVC creates a named, tenant-owned claim with the deployment's storage
+// class (self-hosted local-path). Admin action; the tenant owns the claim.
+func (s *Service) CreatePVC(ctx context.Context, req *connect.Request[wsv1.CreatePVCRequest]) (*connect.Response[wsv1.CreatePVCResponse], error) {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	if s.services == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+	}
+	m := req.Msg
+	if !roles.ValidServiceName(m.GetName()) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name must be a DNS-1123 label (lowercase letters, digits, '-')"))
+	}
+	// Only the deployment's configured class is supported today.
+	if sc := m.GetStorageClass(); sc != "" && sc != s.pvcStorageClass {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("storage_class must be %q", s.pvcStorageClass))
+	}
+	size := m.GetSize()
+	if size == "" {
+		size = s.pvcDefaultSize
+	}
+	pvc, err := s.services.CreatePVC(ctx, m.GetName(), size, s.pvcStorageClass, tenant)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.CreatePVCResponse{Pvc: toPVCInfo(pvc)}), nil
+}
+
+// ListPVCs lists the tenant's claims.
+func (s *Service) ListPVCs(ctx context.Context, req *connect.Request[wsv1.ListPVCsRequest]) (*connect.Response[wsv1.ListPVCsResponse], error) {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	if s.services == nil {
+		return connect.NewResponse(&wsv1.ListPVCsResponse{}), nil
+	}
+	pvcs, err := s.services.ListPVCs(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	out := make([]*wsv1.PVCInfo, 0, len(pvcs))
+	for _, p := range pvcs {
+		if p.Creator != "" && p.Creator != tenant {
+			continue
+		}
+		out = append(out, toPVCInfo(p))
+	}
+	return connect.NewResponse(&wsv1.ListPVCsResponse{Pvcs: out}), nil
+}
+
+// DeletePVC removes a claim the tenant owns. Refused while a service mounts it.
+func (s *Service) DeletePVC(ctx context.Context, req *connect.Request[wsv1.DeletePVCRequest]) (*connect.Response[wsv1.DeletePVCResponse], error) {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	if s.services == nil {
+		return connect.NewResponse(&wsv1.DeletePVCResponse{Ok: false}), nil
+	}
+	cur, gerr := s.services.GetPVC(ctx, req.Msg.GetName())
+	if gerr != nil {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("pvc not found"))
+	}
+	if cur.Creator != "" && cur.Creator != tenant {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("pvc not found"))
+	}
+	ok, err := s.services.DeletePVC(ctx, req.Msg.GetName())
+	if err != nil {
+		// Mounted-by is the common refusal: surface it as FailedPrecondition.
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return connect.NewResponse(&wsv1.DeletePVCResponse{Ok: ok}), nil
+}
+
+func toPVCInfo(p servicesmgr.PVC) *wsv1.PVCInfo {
+	return &wsv1.PVCInfo{
+		Name: p.Name, Size: p.Size, StorageClass: p.StorageClass, Phase: p.Phase,
+		Creator: p.Creator, CreatedAt: p.CreatedAt, MountedBy: p.MountedBy,
+	}
 }
 
 // ListServices lists the tenant's services.
@@ -2160,6 +2291,10 @@ func (s *Service) PreviewService(ctx context.Context, req *connect.Request[wsv1.
 	if ttl > 0 {
 		expires = time.Now().Add(ttl).UnixMilli()
 	}
+	vols, err := s.resolveVolumes(ctx, tenant, m.GetVolumes())
+	if err != nil {
+		return nil, err
+	}
 	svc, err := s.services.Deploy(ctx, servicesmgr.Spec{
 		Name: name, Image: m.GetImage(), Command: m.GetCommand(),
 		Env: m.GetEnv(), CPU: m.GetCpu(), Memory: m.GetMemory(),
@@ -2168,6 +2303,7 @@ func (s *Service) PreviewService(ctx context.Context, req *connect.Request[wsv1.
 		Stage:     servicesmgr.StagePreview,
 		ExpiresAt: expires,
 		Runtime:   s.renderRuntime(m.GetKvm(), m.GetGpuCount()),
+		Volumes:   vols,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)

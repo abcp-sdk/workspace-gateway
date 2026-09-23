@@ -42,7 +42,32 @@ const (
 	// service was paused (scaled to 0), so Resume can restore it. Presence of
 	// this annotation is what marks a service as PAUSED.
 	AnnoReplicasBeforePause = "workspace/service-replicas-before-pause"
+	// PVC labels/annotations stamped on every claim this manager creates.
+	LabelPVC       = "workspace/pvc"
+	LabelPVCName   = "workspace/pvc-name"
+	AnnoPVCCreator = "workspace/pvc-creator"
 )
+
+// VolumeMount binds a named PVC into a service container.
+type VolumeMount struct {
+	PVC       string
+	MountPath string
+	ReadOnly  bool
+	SubPath   string
+}
+
+// PVC is a live PersistentVolumeClaim view.
+type PVC struct {
+	Name         string
+	Size         string
+	StorageClass string
+	Phase        string
+	Creator      string
+	CreatedAt    int64
+	// MountedBy lists the managed Deployments in the namespace that mount this
+	// claim (best effort).
+	MountedBy []string
+}
 
 // Stage values for AnnoStage.
 const (
@@ -150,6 +175,8 @@ type Spec struct {
 	// Runtime is the rendered runtime profile (device limits, security context,
 	// tun mount, node selector, ...). Zero value = a plain service.
 	Runtime runtimeprofiles.Rendered
+	// Volumes are named PVCs to mount into the container.
+	Volumes []VolumeMount
 }
 
 // Client wraps the typed clientset plus the target namespace.
@@ -322,6 +349,25 @@ func (c *Client) Deploy(ctx context.Context, s Spec) (Service, error) {
 		})
 		podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, corev1.VolumeMount{
 			Name: "devtun", MountPath: "/dev/net/tun",
+		})
+	}
+	// Named PVC mounts. A claim is referenced by name in the managed namespace.
+	for i, vm := range s.Volumes {
+		if vm.PVC == "" || vm.MountPath == "" {
+			return Service{}, fmt.Errorf("volumes[%d]: pvc and mount_path are required", i)
+		}
+		volName := fmt.Sprintf("pvc-%d", i)
+		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+			Name: volName,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: vm.PVC,
+					ReadOnly:  vm.ReadOnly,
+				},
+			},
+		})
+		podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, corev1.VolumeMount{
+			Name: volName, MountPath: vm.MountPath, ReadOnly: vm.ReadOnly, SubPath: vm.SubPath,
 		})
 	}
 	dep := &appsv1.Deployment{
@@ -530,6 +576,125 @@ func (c *Client) ReapExpired(ctx context.Context, now int64) ([]string, error) {
 		}
 	}
 	return deleted, nil
+}
+
+// ---- persistent volume claims ----
+
+// CreatePVC creates a named claim in the managed namespace with the given
+// storage class (idempotent: an existing claim of the same name is returned
+// unchanged, and its creator must match).
+func (c *Client) CreatePVC(ctx context.Context, name, size, storageClass, creator string) (PVC, error) {
+	if name == "" {
+		return PVC{}, fmt.Errorf("name required")
+	}
+	if size == "" {
+		size = "1Gi"
+	}
+	q, err := resource.ParseQuantity(size)
+	if err != nil {
+		return PVC{}, fmt.Errorf("invalid size %q: %w", size, err)
+	}
+	if existing, gerr := c.GetPVC(ctx, name); gerr == nil {
+		if existing.Creator != "" && creator != "" && existing.Creator != creator {
+			return PVC{}, fmt.Errorf("pvc %q belongs to another tenant", name)
+		}
+		return existing, nil
+	} else if !apierrors.IsNotFound(gerr) {
+		return PVC{}, gerr
+	}
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        name,
+			Namespace:   c.namespace,
+			Labels:      map[string]string{LabelPVC: "1", LabelPVCName: name},
+			Annotations: map[string]string{AnnoPVCCreator: creator},
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources:   corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: q}},
+		},
+	}
+	if storageClass != "" {
+		sc := storageClass
+		pvc.Spec.StorageClassName = &sc
+	}
+	if _, err := c.cs.CoreV1().PersistentVolumeClaims(c.namespace).Create(ctx, pvc, metav1.CreateOptions{}); err != nil {
+		return PVC{}, fmt.Errorf("create pvc: %w", err)
+	}
+	return c.GetPVC(ctx, name)
+}
+
+// GetPVC returns one claim by name.
+func (c *Client) GetPVC(ctx context.Context, name string) (PVC, error) {
+	p, err := c.cs.CoreV1().PersistentVolumeClaims(c.namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return PVC{}, err
+	}
+	return toPVC(p, c.mountedBy(ctx, name)), nil
+}
+
+// ListPVCs returns every managed claim.
+func (c *Client) ListPVCs(ctx context.Context) ([]PVC, error) {
+	list, err := c.cs.CoreV1().PersistentVolumeClaims(c.namespace).List(ctx, metav1.ListOptions{LabelSelector: LabelPVC + "=1"})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PVC, 0, len(list.Items))
+	for i := range list.Items {
+		out = append(out, toPVC(&list.Items[i], c.mountedBy(ctx, list.Items[i].Name)))
+	}
+	return out, nil
+}
+
+// DeletePVC removes a claim. It REFUSES when any managed Deployment still mounts
+// it, so a running service never loses its volume under it.
+func (c *Client) DeletePVC(ctx context.Context, name string) (bool, error) {
+	mounted := c.mountedBy(ctx, name)
+	if len(mounted) > 0 {
+		return false, fmt.Errorf("pvc %q is mounted by: %s", name, strings.Join(mounted, ", "))
+	}
+	err := c.cs.CoreV1().PersistentVolumeClaims(c.namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	if apierrors.IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// mountedBy returns the names of managed Deployments that mount the claim.
+func (c *Client) mountedBy(ctx context.Context, name string) []string {
+	deps, err := c.cs.AppsV1().Deployments(c.namespace).List(ctx, metav1.ListOptions{LabelSelector: LabelManaged + "=1"})
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for i := range deps.Items {
+		for _, v := range deps.Items[i].Spec.Template.Spec.Volumes {
+			if v.PersistentVolumeClaim != nil && v.PersistentVolumeClaim.ClaimName == name {
+				out = append(out, deps.Items[i].Name)
+				break
+			}
+		}
+	}
+	return out
+}
+
+func toPVC(p *corev1.PersistentVolumeClaim, mountedBy []string) PVC {
+	size := ""
+	if q, ok := p.Spec.Resources.Requests[corev1.ResourceStorage]; ok {
+		size = q.String()
+	}
+	sc := ""
+	if p.Spec.StorageClassName != nil {
+		sc = *p.Spec.StorageClassName
+	}
+	return PVC{
+		Name: p.Name, Size: size, StorageClass: sc, Phase: string(p.Status.Phase),
+		Creator: p.Annotations[AnnoPVCCreator], CreatedAt: p.CreationTimestamp.UnixMilli(),
+		MountedBy: mountedBy,
+	}
 }
 
 // Pause scales a service's Deployment to zero replicas, remembering the count

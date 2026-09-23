@@ -900,6 +900,20 @@ message ServicePortSpec {
   int32 target_port = 3;
 }
 
+// VolumeMountSpec mounts a named PersistentVolumeClaim (created via CreatePVC)
+// into a service container. The claim MUST exist and belong to the caller's
+// tenant.
+message VolumeMountSpec {
+  // PVC name (in the managed namespace).
+  string pvc = 1;
+  // Absolute mount path inside the container.
+  string mount_path = 2;
+  // Mount read-only.
+  bool read_only = 3;
+  // Optional sub-path within the volume.
+  string sub_path = 4;
+}
+
 message DeployServiceRequest {
   // Service name. Empty = derived from the session (org-repo-branch slug).
   string name = 1;
@@ -924,6 +938,8 @@ message DeployServiceRequest {
   // container_port). Entries sharing a `name` merge into ONE k8s Service
   // (multi-port); a second public endpoint (tcp80) needs a distinct `name`.
   repeated ServicePortSpec services = 12;
+  // PVCs to mount into the container.
+  repeated VolumeMountSpec volumes = 13;
 }
 message DeployServiceResponse { ServiceInfo service = 1; }
 
@@ -945,6 +961,8 @@ message PreviewServiceRequest {
   repeated ServicePortSpec services = 11;
   // TTL in seconds (0 = the deployment default).
   int32 ttl_seconds = 12;
+  // PVCs to mount into the container.
+  repeated VolumeMountSpec volumes = 13;
 }
 message PreviewServiceResponse { ServiceInfo service = 1; }
 
@@ -953,6 +971,43 @@ message ListServicesResponse { repeated ServiceInfo services = 1; }
 
 message DeleteServiceRequest { string name = 1; }
 message DeleteServiceResponse { bool ok = 1; }
+
+// ---- persistent volume claims (admin-managed storage for services) ----
+//
+// A PVC is a NAMED, tenant-owned volume created with the deployment's storage
+// class (self-hosted local-path). Services mount it by name via VolumeMountSpec.
+// Deleting a service does NOT delete its PVCs; DeletePVC refuses while any
+// service still mounts the claim.
+
+message PVCInfo {
+  string name = 1;
+  string size = 2;          // requested storage, e.g. "1Gi"
+  string storage_class = 3;
+  // k8s phase: Pending (unbound; local-path binds on first consumer) | Bound |
+  // Lost. A freshly created local-path PVC stays Pending until a pod mounts it.
+  string phase = 4;
+  string creator = 5;       // owning tenant
+  int64 created_at = 6;     // unix millis
+  // Names of the tenant's services currently mounting this PVC.
+  repeated string mounted_by = 7;
+}
+message CreatePVCRequest {
+  // DNS-1123 label (the claim name).
+  string name = 1;
+  // Requested size (k8s quantity, e.g. "1Gi"). Empty = the deployment default.
+  // NOTE: local-path does NOT enforce the size; it only records the request.
+  string size = 2;
+  // StorageClass. Empty = the deployment's configured class; a non-empty value
+  // must equal that class (only the self-hosted local-path is supported).
+  string storage_class = 3;
+}
+message CreatePVCResponse { PVCInfo pvc = 1; }
+
+message ListPVCsRequest {}
+message ListPVCsResponse { repeated PVCInfo pvcs = 1; }
+
+message DeletePVCRequest { string name = 1; }
+message DeletePVCResponse { bool ok = 1; }
 
 // PauseService scales a service to zero replicas (without deleting it). The
 // replica count in effect at pause time is remembered so ResumeService can
@@ -1110,6 +1165,10 @@ service BranchSessionService {
   rpc DeleteService(DeleteServiceRequest) returns (DeleteServiceResponse);
   rpc PauseService(PauseServiceRequest) returns (PauseServiceResponse);
   rpc ResumeService(ResumeServiceRequest) returns (ResumeServiceResponse);
+  // Persistent volume claims (admin-managed storage for services).
+  rpc CreatePVC(CreatePVCRequest) returns (CreatePVCResponse);
+  rpc ListPVCs(ListPVCsRequest) returns (ListPVCsResponse);
+  rpc DeletePVC(DeletePVCRequest) returns (DeletePVCResponse);
   // service logs (read a service's container logs; seam for a log backend)
   rpc ServiceLogs(ServiceLogsRequest) returns (ServiceLogsResponse);
   rpc WatchServiceLogs(WatchServiceLogsRequest) returns (stream WatchServiceLogsResponse);

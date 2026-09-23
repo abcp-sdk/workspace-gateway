@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"k8s.io/client-go/kubernetes/fake"
 
 	agentv1 "github.com/abcp-sdk/workspace-gateway/gen/agent/v1"
 	"github.com/abcp-sdk/workspace-gateway/gen/agent/v1/agentv1connect"
@@ -167,8 +168,8 @@ func TestServicePortsResolve(t *testing.T) {
 // with a configured locale.
 type stubAgentLocale struct {
 	agentv1connect.AgentServiceClient
-	configLocale  string
-	lastCreate    *agentv1.CreateSessionRequest
+	configLocale string
+	lastCreate   *agentv1.CreateSessionRequest
 }
 
 func (a *stubAgentLocale) GetConfig(context.Context, *connect.Request[agentv1.GetConfigRequest]) (*connect.Response[agentv1.GetConfigResponse], error) {
@@ -200,5 +201,40 @@ func TestCreateSessionResolvesTenantLocale(t *testing.T) {
 	}
 	if got := a.lastCreate.GetLocale(); got != "en" {
 		t.Fatalf("pinned locale = %q, want en (explicit)", got)
+	}
+}
+
+// resolveVolumes must reject an unknown / foreign claim and accept the tenant's
+// own, mapping it to a servicesmgr.VolumeMount.
+func TestResolveVolumesOwnership(t *testing.T) {
+	fc := fake.NewSimpleClientset()
+	sm := servicesmgr.NewWithClientset(fc, servicesmgr.Config{Namespace: "worker"})
+	s := &Service{services: sm}
+	ctx := context.Background()
+
+	if _, err := sm.CreatePVC(ctx, "data", "1Gi", "workspace-local", "myuser"); err != nil {
+		t.Fatal(err)
+	}
+
+	// The owning tenant resolves it.
+	vols, err := s.resolveVolumes(ctx, "myuser", []*wsv1.VolumeMountSpec{{Pvc: "data", MountPath: "/data"}})
+	if err != nil {
+		t.Fatalf("resolveVolumes: %v", err)
+	}
+	if len(vols) != 1 || vols[0].PVC != "data" || vols[0].MountPath != "/data" {
+		t.Fatalf("vols = %+v", vols)
+	}
+
+	// Another tenant gets NotFound (never leaks the claim).
+	if _, err := s.resolveVolumes(ctx, "other", []*wsv1.VolumeMountSpec{{Pvc: "data", MountPath: "/data"}}); err == nil {
+		t.Fatal("expected foreign-tenant refusal")
+	}
+	// An unknown claim is NotFound.
+	if _, err := s.resolveVolumes(ctx, "myuser", []*wsv1.VolumeMountSpec{{Pvc: "nope", MountPath: "/data"}}); err == nil {
+		t.Fatal("expected not-found refusal")
+	}
+	// A relative mount path is InvalidArgument.
+	if _, err := s.resolveVolumes(ctx, "myuser", []*wsv1.VolumeMountSpec{{Pvc: "data", MountPath: "data"}}); err == nil {
+		t.Fatal("expected bad mount_path refusal")
 	}
 }

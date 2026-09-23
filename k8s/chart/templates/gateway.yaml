@@ -56,6 +56,10 @@ spec:
             - { name: SERVICE_PREVIEW_TTL, value: {{ .Values.gateway.preview.ttl | quote }} }
             - { name: SERVICE_PREVIEW_REAP_INTERVAL, value: {{ .Values.gateway.preview.reapInterval | quote }} }
             - { name: SERVICE_LOG_TAIL, value: {{ .Values.gateway.serviceLogTail | quote }} }
+            # PVCs (admin-managed service storage). Only the self-hosted
+            # local-path class is supported.
+            - { name: PVC_STORAGE_CLASS, value: {{ .Values.gateway.pvc.storageClass | quote }} }
+            - { name: PVC_DEFAULT_SIZE, value: {{ .Values.gateway.pvc.defaultSize | quote }} }
             # Convergence (idempotent): seed per-tenant providers + force-set
             # the deployment-owned extension config so a stale value cannot win.
             {{- if .Values.gateway.provision.enabled }}

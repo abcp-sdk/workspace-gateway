@@ -17,6 +17,10 @@ rules:
   - apiGroups: [""]
     resources: ["pods/log"]
     verbs: ["get"]
+  # Named PVCs (admin-managed storage for services).
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["create", "get", "list", "watch", "delete"]
   # Long-lived services (Deployment + Service).
   - apiGroups: ["apps"]
     resources: ["deployments"]

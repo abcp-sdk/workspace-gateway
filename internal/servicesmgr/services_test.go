@@ -217,6 +217,87 @@ func TestResumeDefaultsToOne(t *testing.T) {
 	}
 }
 
+func TestPVCreateListDelete(t *testing.T) {
+	c := newTestClient()
+	ctx := context.Background()
+
+	p, err := c.CreatePVC(ctx, "data", "2Gi", "workspace-local", "t/s")
+	if err != nil {
+		t.Fatalf("create pvc: %v", err)
+	}
+	if p.Name != "data" || p.Size != "2Gi" || p.StorageClass != "workspace-local" || p.Creator != "t/s" {
+		t.Fatalf("bad pvc: %+v", p)
+	}
+	// Idempotent re-create (same creator) returns the existing claim.
+	if _, err := c.CreatePVC(ctx, "data", "9Gi", "workspace-local", "t/s"); err != nil {
+		t.Fatalf("recreate: %v", err)
+	}
+	if got, _ := c.GetPVC(ctx, "data"); got.Size != "2Gi" {
+		t.Fatalf("size changed on recreate: %+v", got)
+	}
+	// A different creator is refused.
+	if _, err := c.CreatePVC(ctx, "data", "1Gi", "workspace-local", "other"); err == nil {
+		t.Fatal("expected foreign-creator refusal")
+	}
+	if list, _ := c.ListPVCs(ctx); len(list) != 1 {
+		t.Fatalf("list = %+v", list)
+	}
+	if ok, err := c.DeletePVC(ctx, "data"); err != nil || !ok {
+		t.Fatalf("delete = %v %v", ok, err)
+	}
+}
+
+func TestDeletePVCRefusedWhileMounted(t *testing.T) {
+	c := newTestClient()
+	ctx := context.Background()
+	if _, err := c.CreatePVC(ctx, "data", "1Gi", "workspace-local", "t"); err != nil {
+		t.Fatal(err)
+	}
+	// A service mounting the claim.
+	if _, err := c.Deploy(ctx, Spec{Name: "app", Image: "img:1", Creator: "t", Volumes: []VolumeMount{
+		{PVC: "data", MountPath: "/var/lib/data"},
+	}}); err != nil {
+		t.Fatalf("deploy: %v", err)
+	}
+	// The claim reports its mounter and delete is refused.
+	got, _ := c.GetPVC(ctx, "data")
+	if len(got.MountedBy) != 1 || got.MountedBy[0] != "app" {
+		t.Fatalf("mountedBy = %+v", got.MountedBy)
+	}
+	if ok, err := c.DeletePVC(ctx, "data"); err == nil || ok {
+		t.Fatalf("expected refusal, got ok=%v err=%v", ok, err)
+	}
+	// After the service is gone the delete succeeds.
+	if _, err := c.Delete(ctx, "app"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := c.DeletePVC(ctx, "data"); err != nil || !ok {
+		t.Fatalf("delete after unmount = %v %v", ok, err)
+	}
+}
+
+func TestDeployMountsPVC(t *testing.T) {
+	c := newTestClient()
+	ctx := context.Background()
+	if _, err := c.Deploy(ctx, Spec{Name: "app", Image: "img:1", Creator: "t", Volumes: []VolumeMount{
+		{PVC: "data", MountPath: "/data", ReadOnly: true, SubPath: "sub"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	d, err := c.cs.AppsV1().Deployments("worker").Get(ctx, "app", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	vols := d.Spec.Template.Spec.Volumes
+	if len(vols) != 1 || vols[0].PersistentVolumeClaim == nil || vols[0].PersistentVolumeClaim.ClaimName != "data" {
+		t.Fatalf("volumes = %+v", vols)
+	}
+	mounts := d.Spec.Template.Spec.Containers[0].VolumeMounts
+	if len(mounts) != 1 || mounts[0].MountPath != "/data" || !mounts[0].ReadOnly || mounts[0].SubPath != "sub" {
+		t.Fatalf("mounts = %+v", mounts)
+	}
+}
+
 func TestDeployRefusesForeignService(t *testing.T) {
 	c := newTestClient()
 	ctx := context.Background()

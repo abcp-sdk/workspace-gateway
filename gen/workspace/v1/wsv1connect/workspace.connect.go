@@ -241,6 +241,15 @@ const (
 	// BranchSessionServiceResumeServiceProcedure is the fully-qualified name of the
 	// BranchSessionService's ResumeService RPC.
 	BranchSessionServiceResumeServiceProcedure = "/workspace.v1.BranchSessionService/ResumeService"
+	// BranchSessionServiceCreatePVCProcedure is the fully-qualified name of the BranchSessionService's
+	// CreatePVC RPC.
+	BranchSessionServiceCreatePVCProcedure = "/workspace.v1.BranchSessionService/CreatePVC"
+	// BranchSessionServiceListPVCsProcedure is the fully-qualified name of the BranchSessionService's
+	// ListPVCs RPC.
+	BranchSessionServiceListPVCsProcedure = "/workspace.v1.BranchSessionService/ListPVCs"
+	// BranchSessionServiceDeletePVCProcedure is the fully-qualified name of the BranchSessionService's
+	// DeletePVC RPC.
+	BranchSessionServiceDeletePVCProcedure = "/workspace.v1.BranchSessionService/DeletePVC"
 	// BranchSessionServiceServiceLogsProcedure is the fully-qualified name of the
 	// BranchSessionService's ServiceLogs RPC.
 	BranchSessionServiceServiceLogsProcedure = "/workspace.v1.BranchSessionService/ServiceLogs"
@@ -443,6 +452,10 @@ type BranchSessionServiceClient interface {
 	DeleteService(context.Context, *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error)
 	PauseService(context.Context, *connect.Request[v1.PauseServiceRequest]) (*connect.Response[v1.PauseServiceResponse], error)
 	ResumeService(context.Context, *connect.Request[v1.ResumeServiceRequest]) (*connect.Response[v1.ResumeServiceResponse], error)
+	// Persistent volume claims (admin-managed storage for services).
+	CreatePVC(context.Context, *connect.Request[v1.CreatePVCRequest]) (*connect.Response[v1.CreatePVCResponse], error)
+	ListPVCs(context.Context, *connect.Request[v1.ListPVCsRequest]) (*connect.Response[v1.ListPVCsResponse], error)
+	DeletePVC(context.Context, *connect.Request[v1.DeletePVCRequest]) (*connect.Response[v1.DeletePVCResponse], error)
 	// service logs (read a service's container logs; seam for a log backend)
 	ServiceLogs(context.Context, *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error)
 	WatchServiceLogs(context.Context, *connect.Request[v1.WatchServiceLogsRequest]) (*connect.ServerStreamForClient[v1.WatchServiceLogsResponse], error)
@@ -894,6 +907,24 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(branchSessionServiceMethods.ByName("ResumeService")),
 			connect.WithClientOptions(opts...),
 		),
+		createPVC: connect.NewClient[v1.CreatePVCRequest, v1.CreatePVCResponse](
+			httpClient,
+			baseURL+BranchSessionServiceCreatePVCProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("CreatePVC")),
+			connect.WithClientOptions(opts...),
+		),
+		listPVCs: connect.NewClient[v1.ListPVCsRequest, v1.ListPVCsResponse](
+			httpClient,
+			baseURL+BranchSessionServiceListPVCsProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListPVCs")),
+			connect.WithClientOptions(opts...),
+		),
+		deletePVC: connect.NewClient[v1.DeletePVCRequest, v1.DeletePVCResponse](
+			httpClient,
+			baseURL+BranchSessionServiceDeletePVCProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("DeletePVC")),
+			connect.WithClientOptions(opts...),
+		),
 		serviceLogs: connect.NewClient[v1.ServiceLogsRequest, v1.ServiceLogsResponse](
 			httpClient,
 			baseURL+BranchSessionServiceServiceLogsProcedure,
@@ -1186,6 +1217,9 @@ type branchSessionServiceClient struct {
 	deleteService        *connect.Client[v1.DeleteServiceRequest, v1.DeleteServiceResponse]
 	pauseService         *connect.Client[v1.PauseServiceRequest, v1.PauseServiceResponse]
 	resumeService        *connect.Client[v1.ResumeServiceRequest, v1.ResumeServiceResponse]
+	createPVC            *connect.Client[v1.CreatePVCRequest, v1.CreatePVCResponse]
+	listPVCs             *connect.Client[v1.ListPVCsRequest, v1.ListPVCsResponse]
+	deletePVC            *connect.Client[v1.DeletePVCRequest, v1.DeletePVCResponse]
 	serviceLogs          *connect.Client[v1.ServiceLogsRequest, v1.ServiceLogsResponse]
 	watchServiceLogs     *connect.Client[v1.WatchServiceLogsRequest, v1.WatchServiceLogsResponse]
 	buildPreviewImage    *connect.Client[v1.BuildPreviewImageRequest, v1.BuildPreviewImageResponse]
@@ -1550,6 +1584,21 @@ func (c *branchSessionServiceClient) ResumeService(ctx context.Context, req *con
 	return c.resumeService.CallUnary(ctx, req)
 }
 
+// CreatePVC calls workspace.v1.BranchSessionService.CreatePVC.
+func (c *branchSessionServiceClient) CreatePVC(ctx context.Context, req *connect.Request[v1.CreatePVCRequest]) (*connect.Response[v1.CreatePVCResponse], error) {
+	return c.createPVC.CallUnary(ctx, req)
+}
+
+// ListPVCs calls workspace.v1.BranchSessionService.ListPVCs.
+func (c *branchSessionServiceClient) ListPVCs(ctx context.Context, req *connect.Request[v1.ListPVCsRequest]) (*connect.Response[v1.ListPVCsResponse], error) {
+	return c.listPVCs.CallUnary(ctx, req)
+}
+
+// DeletePVC calls workspace.v1.BranchSessionService.DeletePVC.
+func (c *branchSessionServiceClient) DeletePVC(ctx context.Context, req *connect.Request[v1.DeletePVCRequest]) (*connect.Response[v1.DeletePVCResponse], error) {
+	return c.deletePVC.CallUnary(ctx, req)
+}
+
 // ServiceLogs calls workspace.v1.BranchSessionService.ServiceLogs.
 func (c *branchSessionServiceClient) ServiceLogs(ctx context.Context, req *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error) {
 	return c.serviceLogs.CallUnary(ctx, req)
@@ -1825,6 +1874,10 @@ type BranchSessionServiceHandler interface {
 	DeleteService(context.Context, *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error)
 	PauseService(context.Context, *connect.Request[v1.PauseServiceRequest]) (*connect.Response[v1.PauseServiceResponse], error)
 	ResumeService(context.Context, *connect.Request[v1.ResumeServiceRequest]) (*connect.Response[v1.ResumeServiceResponse], error)
+	// Persistent volume claims (admin-managed storage for services).
+	CreatePVC(context.Context, *connect.Request[v1.CreatePVCRequest]) (*connect.Response[v1.CreatePVCResponse], error)
+	ListPVCs(context.Context, *connect.Request[v1.ListPVCsRequest]) (*connect.Response[v1.ListPVCsResponse], error)
+	DeletePVC(context.Context, *connect.Request[v1.DeletePVCRequest]) (*connect.Response[v1.DeletePVCResponse], error)
 	// service logs (read a service's container logs; seam for a log backend)
 	ServiceLogs(context.Context, *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error)
 	WatchServiceLogs(context.Context, *connect.Request[v1.WatchServiceLogsRequest], *connect.ServerStream[v1.WatchServiceLogsResponse]) error
@@ -2272,6 +2325,24 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		connect.WithSchema(branchSessionServiceMethods.ByName("ResumeService")),
 		connect.WithHandlerOptions(opts...),
 	)
+	branchSessionServiceCreatePVCHandler := connect.NewUnaryHandler(
+		BranchSessionServiceCreatePVCProcedure,
+		svc.CreatePVC,
+		connect.WithSchema(branchSessionServiceMethods.ByName("CreatePVC")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceListPVCsHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListPVCsProcedure,
+		svc.ListPVCs,
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListPVCs")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceDeletePVCHandler := connect.NewUnaryHandler(
+		BranchSessionServiceDeletePVCProcedure,
+		svc.DeletePVC,
+		connect.WithSchema(branchSessionServiceMethods.ByName("DeletePVC")),
+		connect.WithHandlerOptions(opts...),
+	)
 	branchSessionServiceServiceLogsHandler := connect.NewUnaryHandler(
 		BranchSessionServiceServiceLogsProcedure,
 		svc.ServiceLogs,
@@ -2626,6 +2697,12 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServicePauseServiceHandler.ServeHTTP(w, r)
 		case BranchSessionServiceResumeServiceProcedure:
 			branchSessionServiceResumeServiceHandler.ServeHTTP(w, r)
+		case BranchSessionServiceCreatePVCProcedure:
+			branchSessionServiceCreatePVCHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListPVCsProcedure:
+			branchSessionServiceListPVCsHandler.ServeHTTP(w, r)
+		case BranchSessionServiceDeletePVCProcedure:
+			branchSessionServiceDeletePVCHandler.ServeHTTP(w, r)
 		case BranchSessionServiceServiceLogsProcedure:
 			branchSessionServiceServiceLogsHandler.ServeHTTP(w, r)
 		case BranchSessionServiceWatchServiceLogsProcedure:
@@ -2967,6 +3044,18 @@ func (UnimplementedBranchSessionServiceHandler) PauseService(context.Context, *c
 
 func (UnimplementedBranchSessionServiceHandler) ResumeService(context.Context, *connect.Request[v1.ResumeServiceRequest]) (*connect.Response[v1.ResumeServiceResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ResumeService is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) CreatePVC(context.Context, *connect.Request[v1.CreatePVCRequest]) (*connect.Response[v1.CreatePVCResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CreatePVC is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) ListPVCs(context.Context, *connect.Request[v1.ListPVCsRequest]) (*connect.Response[v1.ListPVCsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListPVCs is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) DeletePVC(context.Context, *connect.Request[v1.DeletePVCRequest]) (*connect.Response[v1.DeletePVCResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeletePVC is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) ServiceLogs(context.Context, *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error) {

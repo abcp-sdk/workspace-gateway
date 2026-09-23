@@ -33,7 +33,10 @@
       "service-delete",
       "service-logs",
       "repo-build-preview",
-      "service-preview"
+      "service-preview",
+      "pvc-create",
+      "pvc-list",
+      "pvc-delete"
     ],
     "max_turns": 25
   },

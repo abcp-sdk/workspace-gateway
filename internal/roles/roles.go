@@ -100,6 +100,7 @@ var adminTools = []string{
 	"list-oci-images", "oci-import",
 	"service-deploy", "service-list", "service-delete", "service-logs",
 	"repo-build-preview", "service-preview",
+	"pvc-create", "pvc-list", "pvc-delete",
 }
 
 // ToolsFor returns a role's preset whitelist. The agent treats an EMPTY

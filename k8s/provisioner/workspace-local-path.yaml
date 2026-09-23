@@ -1,0 +1,186 @@
+# Workspace local-path provisioner — a SECOND rancher/local-path-provisioner
+# instance, independent of the cluster's built-in `local-path` one.
+#
+# Why a second instance: the workspace platform wants its PVCs on the HOST at
+# `/home/develop/PVC` (a stable, operator-visible path), while the cluster's
+# built-in local-path (k3s `local-storage.yaml`, SC `local-path`) writes to
+# `/var/lib/rancher/k3s/storage`. Rather than repoint the global provisioner
+# (which would move every PVC in the cluster), we run our own with a distinct
+# provisioner name (`workspace.io/local-path`) and StorageClass
+# (`workspace-local`) and its OWN ConfigMap pointing at `/home/develop/PVC`.
+#
+# This file is CLUSTER-SCOPED (Namespace/ClusterRole/ClusterRoleBinding/
+# StorageClass). On this k3s box the operator applies it by dropping it into
+# `/var/lib/rancher/k3s/server/manifests/` (k3s auto-applies + reconciles any
+# manifest there); apply it with `kubectl apply -f` on a cluster where you hold
+# cluster-admin.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: workspace-storage
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: workspace-local-path-provisioner
+  namespace: workspace-storage
+---
+# Namespaced: the provisioner creates the short-lived helper Pods (which do the
+# mkdir/rm on the host) in ITS OWN namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: workspace-local-path-provisioner-role
+  namespace: workspace-storage
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: workspace-local-path-provisioner-bind
+  namespace: workspace-storage
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: workspace-local-path-provisioner-role
+subjects:
+  - kind: ServiceAccount
+    name: workspace-local-path-provisioner
+    namespace: workspace-storage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: workspace-local-path-provisioner-role
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "persistentvolumeclaims", "configmaps", "pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: workspace-local-path-provisioner-bind
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: workspace-local-path-provisioner-role
+subjects:
+  - kind: ServiceAccount
+    name: workspace-local-path-provisioner
+    namespace: workspace-storage
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workspace-local-path-provisioner
+  namespace: workspace-storage
+  labels:
+    app: workspace-local-path-provisioner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: workspace-local-path-provisioner
+  template:
+    metadata:
+      labels:
+        app: workspace-local-path-provisioner
+    spec:
+      priorityClassName: system-node-critical
+      serviceAccountName: workspace-local-path-provisioner
+      nodeSelector:
+        kubernetes.io/os: linux
+      containers:
+        - name: provisioner
+          image: docker.io/rancher/local-path-provisioner:v0.0.36
+          imagePullPolicy: IfNotPresent
+          command:
+            - local-path-provisioner
+            - start
+            # A DISTINCT provisioner name so we never race the built-in one.
+            - --provisioner-name=workspace.io/local-path
+            - --configmap-name=workspace-local-path-config
+            - --service-account-name=workspace-local-path-provisioner
+            - --namespace=workspace-storage
+            - --config=/etc/config/config.json
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CONFIG_MOUNT_PATH
+              value: /etc/config/
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/config/
+      volumes:
+        - name: config-volume
+          configMap:
+            name: workspace-local-path-config
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: workspace-local
+provisioner: workspace.io/local-path
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workspace-local-path-config
+  namespace: workspace-storage
+data:
+  config.json: |-
+    {
+      "nodePathMap": [
+        {
+          "node": "DEFAULT_PATH_FOR_NON_LISTED_NODES",
+          "paths": ["/home/develop/PVC"]
+        }
+      ]
+    }
+  # The helper pod (busybox, run on the target node) creates/removes the volume
+  # directory. The provisioner auto-creates the PARENT (`/home/develop/PVC`)
+  # via a HostPathDirectoryOrCreate mount, so it need not pre-exist.
+  setup: |-
+    #!/bin/sh
+    set -eu
+    mkdir -m 0777 -p "$VOL_DIR"
+  teardown: |-
+    #!/bin/sh
+    set -eu
+    rm -rf "$VOL_DIR"
+  # The helper pod (run on the target node) only needs `/bin/sh` + the mounted
+  # setup/teardown scripts. This cluster cannot reach Docker Hub, so we use a
+  # small image ALREADY PRESENT on the node (`debian:trixie`, used by the
+  # toolchain base); `IfNotPresent` means no pull is attempted.
+  helperPod.yaml: |-
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: helper-pod
+    spec:
+      priorityClassName: system-node-critical
+      tolerations:
+        - key: node.kubernetes.io/disk-pressure
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: helper-pod
+          image: docker.io/library/debian:trixie
+          imagePullPolicy: IfNotPresent

@@ -152,6 +152,8 @@ func main() {
 		PublicServiceDomain: os.Getenv("PUBLIC_SERVICE_DOMAIN"),
 		PreviewTTL:          envOrDuration("SERVICE_PREVIEW_TTL", 2*time.Hour),
 		ServiceLogTail:      int64(envOrInt("SERVICE_LOG_TAIL", 500)),
+		PVCStorageClass:     envOr("PVC_STORAGE_CLASS", "workspace-local"),
+		PVCDefaultSize:      envOr("PVC_DEFAULT_SIZE", "1Gi"),
 	})
 
 	// Reclaim idle sandboxes: no worker jobs for SANDBOX_IDLE_TTL (default 24h).
