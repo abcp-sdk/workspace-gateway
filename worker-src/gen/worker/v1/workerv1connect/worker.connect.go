@@ -2,7 +2,7 @@
 //
 // Source: worker/v1/worker.proto
 
-// easyworker: the sandbox worker contract (Connect RPC).
+// agent-worker: the sandbox worker contract (Connect RPC).
 //
 // Replaces the legacy worker-go WebSocket JSON-RPC surface (/ws + /ws/job SSE)
 // with the platform's standard Connect stack — same RPC semantics as the rest
@@ -26,7 +26,7 @@
 // Job output history persists to sqlite (WORKER_DB; emptyDir in-cluster, so
 // everything is ephemeral to the pod) with a retention window (default 24h).
 //
-// Server: easyworker binary (also the binary injected into cluster sandboxes;
+// Server: agent-worker binary (also the binary injected into cluster sandboxes;
 // WORKER_PORT pins the listen port). Client: ext-ops (ops-extension).
 package workerv1connect
 

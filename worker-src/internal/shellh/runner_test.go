@@ -58,10 +58,10 @@ func TestRunBasics(t *testing.T) {
 // must stay invisible to jobs).
 func TestEnvIsolation(t *testing.T) {
 	r := newTestRunner(t)
-	t.Setenv("EASYWORKER_SECRET", "leak-me")
+	t.Setenv("WORKER_SECRET", "leak-me")
 
 	var stdout bytes.Buffer
-	res, err := r.Run(context.Background(), "echo secret=${EASYWORKER_SECRET:-unset}", "", strings.NewReader(""), &stdout, nil)
+	res, err := r.Run(context.Background(), "echo secret=${WORKER_SECRET:-unset}", "", strings.NewReader(""), &stdout, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

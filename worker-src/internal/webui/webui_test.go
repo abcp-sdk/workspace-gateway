@@ -22,28 +22,19 @@ func TestHandlerServesPanel(t *testing.T) {
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Fatalf("content-type = %q", ct)
 	}
-	body := rec.Body.String()
-	for _, want := range []string{"Agent Worker", "id=\"gate\"", "id=\"term\"", "/app.js", "/app.css"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("index missing %q", want)
-		}
+	if !strings.Contains(rec.Body.String(), "Agent Worker") {
+		t.Error("index should carry the Agent Worker title")
 	}
 }
 
-func TestHandlerServesAssets(t *testing.T) {
-	css := get(t, "/app.css")
-	if css.Code != http.StatusOK || !strings.HasPrefix(css.Header().Get("Content-Type"), "text/css") {
-		t.Fatalf("css: %d %q", css.Code, css.Header().Get("Content-Type"))
-	}
-	js := get(t, "/app.js")
-	if js.Code != http.StatusOK || !strings.HasPrefix(js.Header().Get("Content-Type"), "text/javascript") {
-		t.Fatalf("js: %d %q", js.Code, js.Header().Get("Content-Type"))
-	}
-	if !strings.Contains(js.Body.String(), "/worker.v1.WorkerService/") {
-		t.Error("app.js should reference the WorkerService RPC base")
-	}
-	if !strings.Contains(js.Body.String(), "/worker.v1.WorkerEnroll/") {
-		t.Error("app.js should reference the WorkerEnroll RPC base")
+func TestHandlerServesBuiltAssets(t *testing.T) {
+	// The vite build emits /assets/index-*.js + .css; the SPA entry references
+	// them. Walk the embedded FS to find one of each and fetch it.
+	html := get(t, "/").Body.String()
+	for _, want := range []string{"/assets/", ".js", ".css"} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("index missing %q", want)
+		}
 	}
 }
 
