@@ -7,8 +7,8 @@
   const CWD_KEY = 'agent-worker.cwd'
 
   let token = localStorage.getItem(TOKEN_KEY) || ''
-  let workspace = '/workspace'
-  let cwd = localStorage.getItem(CWD_KEY) || '' // workspace-relative ('' = root)
+  let workspace = '' // absolute workspace root (from Info); '' until known
+  let cwd = localStorage.getItem(CWD_KEY) || '' // ABSOLUTE working directory
   let watchAbort = null
 
   // ------------------------------------------------------------------ utils
@@ -36,6 +36,28 @@
       .replace(/\u001bP[\s\S]*?\u001b\\/g, '') // DCS
       .replace(/\u001b[@-Z\\-_]/g, '') // single-char escapes
       .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '') // CSI
+
+  // Normalize an ABSOLUTE path (collapse //, ., ..). The filesystem is
+  // unconfined, so `..` at "/" stays "/".
+  const normAbs = (p) => {
+    const parts = []
+    for (const seg of String(p).split('/')) {
+      if (seg === '' || seg === '.') continue
+      if (seg === '..') { if (parts.length) parts.pop(); continue }
+      parts.push(seg)
+    }
+    return '/' + parts.join('/')
+  }
+  // Resolve a `cd`/nav target against a base ABSOLUTE dir.
+  const resolveAbs = (base, target) => {
+    const t = String(target == null ? '' : target).trim()
+    if (t === '' || t === '~') return workspace || '/'
+    if (t.startsWith('/')) return normAbs(t)
+    return normAbs((base || '/') + '/' + t)
+  }
+  // A FileList entry's path is workspace-relative when inside the root and
+  // absolute when outside — make it always absolute for navigation.
+  const absOf = (p) => (String(p).startsWith('/') ? normAbs(p) : normAbs((workspace || '') + '/' + p))
 
   // ------------------------------------------------------------------ rpc
   async function rpc(method, body, base) {
@@ -70,9 +92,19 @@
     } catch { /* enroll optional */ }
   }
 
-  function enterApp() {
+  async function enterApp() {
     $('gate').classList.add('hidden')
     $('app').classList.remove('hidden')
+    // Validate a stored cwd (it may be stale after a workspace change); fall
+    // back to the workspace root when it no longer resolves to a directory.
+    if (cwd) {
+      try {
+        const r = await rpc('FileList', { path: cwd, depth: 1, limit: 1 })
+        if (!r.isDir) cwd = workspace || '/'
+      } catch { cwd = workspace || '/' }
+    }
+    if (!cwd) cwd = workspace || '/'
+    treeRoot = cwd
     refreshInfo()
     renderPrompt()
     $('prompt-input').focus()
@@ -86,7 +118,8 @@
     token = tok
     try {
       const i = await rpc('Info', {})
-      workspace = i.workspace || '/workspace'
+      workspace = i.workspace || '/'
+      if (!cwd) cwd = workspace
       localStorage.setItem(TOKEN_KEY, tok)
       enterApp()
     } catch (e) {
@@ -124,10 +157,10 @@
     const pill = $('info-pill')
     try {
       const i = await rpc('Info', {})
-      workspace = i.workspace || '/workspace'
-      pill.textContent = `${i.os}/${i.arch} · ${i.workspace}`
+      workspace = i.workspace || workspace
+      pill.textContent = `${i.os}/${i.arch}`
+      pill.title = 'workspace ' + i.workspace + ' · boot_id ' + i.bootId + (i.droppedLines ? ` · dropped ${i.droppedLines}` : '')
       pill.className = 'pill ok'
-      pill.title = 'boot_id ' + i.bootId + (i.droppedLines ? ` · dropped ${i.droppedLines}` : '')
     } catch (e) {
       if (e.code === 'unauthenticated') { showGate('Session expired — sign in again.'); return }
       pill.textContent = 'offline'
@@ -139,11 +172,8 @@
   // ------------------------------------------------------------------ shell
   const term = $('term')
 
-  function absCwd() {
-    return cwd ? workspace.replace(/\/+$/, '') + '/' + cwd : workspace
-  }
   function renderPrompt() {
-    $('prompt-cwd').textContent = absCwd()
+    $('prompt-cwd').textContent = cwd || workspace || '/'
     localStorage.setItem(CWD_KEY, cwd)
   }
   function write(text, cls) {
@@ -153,11 +183,10 @@
     term.appendChild(span)
   }
   function writeCmd(cmd) {
-    write(absCwd() + ' $ ', 'cmd cwd')
+    write((cwd || '/') + ' $ ', 'cmd cwd')
     write(cmd + '\n', 'cmd')
   }
   function writeOutput(line, isErr) {
-    // Each output line is one element so stderr can be tinted and long lines wrap.
     const div = document.createElement('div')
     if (isErr) div.className = 'err'
     div.textContent = stripAnsi(line)
@@ -171,8 +200,7 @@
   $('prompt-form').addEventListener('submit', (ev) => {
     ev.preventDefault()
     const input = $('prompt-input')
-    const raw = input.value
-    const cmd = raw.trim()
+    const cmd = input.value.trim()
     input.value = ''
     if (!cmd) return
     history.push(cmd); histIdx = history.length
@@ -187,16 +215,12 @@
   async function runCommand(cmd) {
     writeCmd(cmd)
     scrollBottom()
-    // Client-side shell builtins (the worker has no persistent session).
+    // Client-side builtins (the worker has no persistent shell session).
     if (cmd === 'clear') { term.textContent = ''; return }
     const cd = cmd.match(/^cd(?:\s+(.+))?$/)
-    if (cd) {
-      const target = (cd[1] || '').trim()
-      applyCd(target)
-      return
-    }
+    if (cd) { await applyCd(cd[1]); return }
     try {
-      const r = await rpc('Execute', { command: cmd, workdir: cwd })
+      const r = await rpc('Execute', { command: cmd, workdir: cwd || workspace })
       $('stop').disabled = false
       watchJob(r.jobId)
     } catch (e) {
@@ -205,16 +229,13 @@
     }
   }
 
+  // `cd` changes only the CLIENT-side prompt dir (the worker is stateless); the
+  // dir is passed as each command's workdir. Paths are unconfined, so any
+  // absolute dir the worker can stat is allowed.
   async function applyCd(target) {
-    // Resolve against the virtual cwd; verify with FileList (isDir).
-    let next = cwd
-    if (!target || target === '~' || target === '/') next = ''
-    else if (target === '..') next = cwd.split('/').slice(0, -1).join('/')
-    else if (target.startsWith('/')) next = target.replace(/^\/+/, '')
-    else next = (cwd ? cwd + '/' : '') + target
-    next = next.replace(/\/+/g, '/').replace(/^\/+|\/+$/g, '')
+    const next = resolveAbs(cwd || workspace || '/', target)
     try {
-      const r = await rpc('FileList', { path: next || '.', depth: 1, limit: 1 })
+      const r = await rpc('FileList', { path: next, depth: 1, limit: 1 })
       if (!r.isDir) { writeOutput('cd: not a directory: ' + (target || '/'), true); scrollBottom(); return }
       cwd = next
       renderPrompt()
@@ -224,7 +245,7 @@
     }
   }
 
-  $('stop').addEventListener('click', async () => {
+  $('stop').addEventListener('click', () => {
     if (watchAbort) { watchAbort.abort(); writeOutput('\n[stopped]', true) }
   })
 
@@ -293,58 +314,87 @@
   }
   function concat(a, b) { const o = new Uint8Array(a.length + b.length); o.set(a); o.set(b, a.length); return o }
 
+  // ------------------------------------------------------- drawers (exclusive)
+  function openDrawer(which) {
+    const files = $('files'), jobs = $('jobs')
+    if (which === 'files') {
+      jobs.classList.add('hidden')
+      files.classList.remove('hidden')
+      // Follow the shell's current directory each time the drawer opens.
+      treeRoot = cwd || workspace || '/'
+      renderTree()
+    } else if (which === 'jobs') {
+      files.classList.add('hidden')
+      jobs.classList.remove('hidden')
+      loadJobs()
+    } else {
+      files.classList.add('hidden')
+      jobs.classList.add('hidden')
+    }
+    syncDrawerButtons()
+  }
+  function syncDrawerButtons() {
+    $('toggle-files').classList.toggle('active', !$('files').classList.contains('hidden'))
+    $('toggle-jobs').classList.toggle('active', !$('jobs').classList.contains('hidden'))
+  }
+  $('toggle-files').addEventListener('click', () => openDrawer($('files').classList.contains('hidden') ? 'files' : null))
+  $('toggle-jobs').addEventListener('click', () => openDrawer($('jobs').classList.contains('hidden') ? 'jobs' : null))
+  $('f-close').addEventListener('click', () => openDrawer(null))
+  $('j-close').addEventListener('click', () => openDrawer(null))
+
   // ------------------------------------------------------------------ files
   let expanded = new Set()
-
-  $('toggle-files').addEventListener('click', () => { $('files').classList.toggle('hidden'); if (!$('files').classList.contains('hidden')) renderTree() })
-  $('f-close').addEventListener('click', () => $('files').classList.add('hidden'))
-  $('toggle-jobs').addEventListener('click', () => { $('jobs').classList.toggle('hidden'); if (!$('jobs').classList.contains('hidden')) loadJobs() })
-  $('j-close').addEventListener('click', () => $('jobs').classList.add('hidden'))
+  let treeRoot = null // absolute dir currently shown in the tree
 
   async function renderTree() {
     const box = $('f-tree')
     box.textContent = ''
-    $('f-crumb').textContent = absCwd()
-    await renderDir(cwd, box, 0)
+    if (treeRoot === null) treeRoot = cwd || workspace || '/'
+    $('f-crumb').textContent = treeRoot
+    $('f-tree').classList.remove('hidden')
+    $('f-editor').classList.add('hidden')
+    await renderDir(treeRoot, box, 0)
   }
 
-  async function renderDir(path, parent, depth) {
+  async function renderDir(dir, parent, depth) {
     try {
-      const r = await rpc('FileList', { path: path || '.', depth: 1, limit: 1000 })
+      const r = await rpc('FileList', { path: dir, depth: 1, limit: 1000 })
       if (!r.isDir) return
       for (const f of (r.files || [])) {
-        const rel = f.path
+        const abs = absOf(f.path)
         const node = document.createElement('div')
         node.className = 'node' + (f.isDir ? ' dir' : '')
         node.style.paddingLeft = 6 + depth * 14 + 'px'
-        const isOpen = expanded.has(rel)
+        const isOpen = expanded.has(abs)
         node.innerHTML = `<span class="tw">${f.isDir ? (isOpen ? '▾' : '▸') : ''}</span>` +
-          `<span class="truncate">${escapeHtml(basename(rel))}</span>` +
+          `<span class="truncate">${escapeHtml(basename(abs))}</span>` +
           `<span class="sz">${f.isDir ? '' : fmtSize(f.size)}</span>`
         node.onclick = async () => {
           if (f.isDir) {
-            if (expanded.has(rel)) { expanded.delete(rel) } else { expanded.add(rel) }
+            if (expanded.has(abs)) expanded.delete(abs); else expanded.add(abs)
             renderTree()
           } else {
-            openFile(rel)
+            openFile(abs)
           }
         }
         parent.appendChild(node)
-        if (f.isDir && isOpen) await renderDir(rel, parent, depth + 1)
+        if (f.isDir && isOpen) await renderDir(abs, parent, depth + 1)
       }
     } catch (e) { toast(e.message, true) }
   }
 
+  $('f-up').addEventListener('click', () => { treeRoot = normAbs(treeRoot + '/..'); renderTree() })
+  $('f-home').addEventListener('click', () => { treeRoot = workspace || '/'; renderTree() })
   $('f-new').addEventListener('click', () => {
-    const name = prompt('new file path (relative to workspace)')
+    const name = prompt('new file path (absolute, or relative to ' + treeRoot + ')')
     if (!name) return
-    openFile(name.replace(/^\/+/, ''), '')
+    openFile(resolveAbs(treeRoot, name), '')
   })
 
   let editing = ''
   function openFile(path, initial) {
     editing = path
-    $('f-name').textContent = '/' + path
+    $('f-name').textContent = path
     $('f-tree').classList.add('hidden')
     $('f-editor').classList.remove('hidden')
     if (initial !== undefined) { $('f-content').value = initial; return }
@@ -352,7 +402,7 @@
       .then((r) => { $('f-content').value = b64dec(r.content) })
       .catch((e) => toast(e.message, true))
   }
-  $('f-back').addEventListener('click', () => { $('f-editor').classList.add('hidden'); $('f-tree').classList.remove('hidden'); renderTree() })
+  $('f-back').addEventListener('click', () => { renderTree() })
   $('f-save').addEventListener('click', async () => {
     try { await rpc('FileWrite', { path: editing, content: b64enc($('f-content').value) }); toast('saved ' + editing) } catch (e) { toast(e.message, true) }
   })
@@ -366,8 +416,8 @@
     } catch (e) { toast(e.message, true) }
   })
   $('f-del').addEventListener('click', async () => {
-    if (!confirm('Delete /' + editing + '?')) return
-    try { await rpc('FileDelete', { path: editing }); toast('deleted'); $('f-back').click() } catch (e) { toast(e.message, true) }
+    if (!confirm('Delete ' + editing + '?')) return
+    try { await rpc('FileDelete', { path: editing }); toast('deleted'); renderTree() } catch (e) { toast(e.message, true) }
   })
 
   // ------------------------------------------------------------------ jobs
@@ -382,7 +432,7 @@
           `<td>${j.state === 'running' ? '' : (j.exitCode ?? 0)}</td>` +
           `<td class="cmd" title="${escapeHtml(j.command)}">${escapeHtml(j.command)}</td>`
         tr.querySelector('.cmd').onclick = () => {
-          $('jobs').classList.add('hidden')
+          openDrawer(null)
           writeCmd(j.command)
           watchJob(j.id)
         }
@@ -396,7 +446,8 @@
     if (token) {
       try {
         const i = await rpc('Info', {})
-        workspace = i.workspace || '/workspace'
+        workspace = i.workspace || '/'
+        if (!cwd) cwd = workspace
         enterApp()
         return
       } catch { token = ''; localStorage.removeItem(TOKEN_KEY) }

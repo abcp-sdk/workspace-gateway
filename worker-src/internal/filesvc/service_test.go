@@ -3,6 +3,7 @@ package filesvc
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -173,5 +174,25 @@ func TestListDepthAndLimit(t *testing.T) {
 	_, entries, trunc, err := s.List("d", 3, 2)
 	if err != nil || len(entries) != 2 || !trunc {
 		t.Fatalf("limit2: n=%d trunc=%v err=%v", len(entries), trunc, err)
+	}
+}
+
+func TestListOutsideRootReturnsAbsolute(t *testing.T) {
+	s := New(t.TempDir())
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "f.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	isDir, entries, _, err := s.List(outside, 1, 0)
+	if err != nil || !isDir || len(entries) != 1 {
+		t.Fatalf("list outside: %v %v err=%v", isDir, entries, err)
+	}
+	// The child path must stay ABSOLUTE (not stripped to a workspace-relative
+	// name that a client would re-root under the workspace).
+	if !strings.HasPrefix(entries[0].Path, "/") {
+		t.Fatalf("expected absolute path, got %q", entries[0].Path)
+	}
+	if !strings.HasSuffix(entries[0].Path, "/f.txt") {
+		t.Fatalf("unexpected path %q", entries[0].Path)
 	}
 }

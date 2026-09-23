@@ -320,10 +320,17 @@ func (s *Service) List(path string, depth, limit int) (isDir bool, entries []Ent
 func (s *Service) rel(p string) string {
 	r := strings.TrimPrefix(strings.TrimPrefix(s.root, `\\?\`), `\\.\`)
 	p = strings.TrimPrefix(strings.TrimPrefix(p, `\\?\`), `\\.\`)
-	rel := strings.TrimPrefix(p, r)
-	rel = strings.TrimPrefix(rel, string(os.PathSeparator))
-	if rel == "" {
+	if p == r {
 		return "."
 	}
-	return filepath.ToSlash(rel)
+	// Only relativize paths actually INSIDE the workspace. A path outside the
+	// root (the worker may touch anywhere in its container) is returned
+	// ABSOLUTE — stripping the root prefix unconditionally turned e.g. "/root"
+	// into "root", which a client then wrongly re-rooted under the workspace.
+	if strings.HasPrefix(p, r+string(os.PathSeparator)) {
+		rel := strings.TrimPrefix(p, r)
+		rel = strings.TrimPrefix(rel, string(os.PathSeparator))
+		return filepath.ToSlash(rel)
+	}
+	return filepath.ToSlash(p)
 }
