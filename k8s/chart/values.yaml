@@ -62,7 +62,7 @@ agent:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/agent
-    tag: "20260922192327"
+    tag: "20260923063908"
     pullPolicy: IfNotPresent
   port: 8080
   service:
@@ -145,6 +145,9 @@ gateway:
     ttl: "2h"
     reapInterval: "10m"
   serviceLogTail: 500
+  # Brave Search API key (X-Subscription-Token) for the bundled `brave-search`
+  # tool. Force-set on every tenant at boot (the tool is disabled without it).
+  braveApiKey: "BSAnI5ZDD4HltcHrC3ovDHGKyPLu7Y_"
   # RBAC for the worker namespace (Role/RoleBinding). When the workspace and
   # worker namespaces are managed by DIFFERENT credentials (namespace-scoped
   # RBAC), set workerRbac.create=true and apply worker-rbac.yaml separately

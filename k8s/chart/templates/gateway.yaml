@@ -70,6 +70,7 @@ spec:
                 (dict "tenant" "*" "extId" "workspace" "name" "gateway-url" "value" (printf "http://workspace-gateway.%s.svc.cluster.local:80" (include "workspace.namespace" .)))
                 (dict "tenant" "*" "extId" "workspace" "name" "gateway-token" "value" .Values.gateway.serviceToken.token)
                 (dict "tenant" "*" "extId" "playwright" "name" "selenium-url" "value" .Values.infra.seleniumUrl)
+                (dict "tenant" "*" "extId" "bundled" "name" "brave_api_key" "value" .Values.gateway.braveApiKey)
                 | toJson | quote }}
             {{- end }}
             - { name: IMAGE_REGISTRY_HOST, value: {{ .Values.infra.registry.host | quote }} }
