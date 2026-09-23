@@ -44,6 +44,36 @@ type WatchEvent struct {
 	Stderr   string
 }
 
+// Info is the worker environment summary.
+type Info struct {
+	OS        string
+	Arch      string
+	Workspace string // absolute workspace root (relative paths resolve here)
+	Home      string // the worker user's home dir (the OS `~`)
+}
+
+// FileEntry is one entry of a directory listing. Path is workspace-relative
+// when inside the workspace, absolute otherwise.
+type FileEntry struct {
+	Path  string
+	Size  int64
+	IsDir bool
+}
+
+// FileList is a directory listing.
+type FileList struct {
+	IsDir bool
+	Files []FileEntry
+}
+
+// FileRead is a (windowed) file read.
+type FileRead struct {
+	Content    []byte
+	TotalLines int32
+	StartLine  int32
+	EndLine    int32
+}
+
 // Client talks to one agent-worker endpoint.
 type Client struct {
 	c workerv1connect.WorkerServiceClient
@@ -73,6 +103,47 @@ func (c *Client) ListJobs(ctx context.Context) ([]Job, error) {
 		})
 	}
 	return out, nil
+}
+
+// Info returns the worker's environment summary.
+func (c *Client) Info(ctx context.Context) (Info, error) {
+	res, err := c.c.Info(ctx, connect.NewRequest(&workerv1.InfoRequest{}))
+	if err != nil {
+		return Info{}, err
+	}
+	m := res.Msg
+	return Info{OS: m.GetOs(), Arch: m.GetArch(), Workspace: m.GetWorkspace(), Home: m.GetHome()}, nil
+}
+
+// FileList lists a directory (or a single file) on the worker.
+func (c *Client) FileList(ctx context.Context, path string, depth, limit int32) (FileList, error) {
+	res, err := c.c.FileList(ctx, connect.NewRequest(&workerv1.FileListRequest{
+		Path: path, Depth: depth, Limit: limit,
+	}))
+	if err != nil {
+		return FileList{}, err
+	}
+	m := res.Msg
+	out := FileList{IsDir: m.GetIsDir(), Files: make([]FileEntry, 0, len(m.GetFiles()))}
+	for _, f := range m.GetFiles() {
+		out.Files = append(out.Files, FileEntry{Path: f.GetPath(), Size: f.GetSize(), IsDir: f.GetIsDir()})
+	}
+	return out, nil
+}
+
+// FileRead reads a (windowed) file from the worker.
+func (c *Client) FileRead(ctx context.Context, path string, start, end int32) (FileRead, error) {
+	res, err := c.c.FileRead(ctx, connect.NewRequest(&workerv1.FileReadRequest{
+		Path: path, StartLine: start, EndLine: end,
+	}))
+	if err != nil {
+		return FileRead{}, err
+	}
+	m := res.Msg
+	return FileRead{
+		Content: m.GetContent(), TotalLines: m.GetTotalLines(),
+		StartLine: m.GetStartLine(), EndLine: m.GetEndLine(),
+	}, nil
 }
 
 // JobOutput polls a bounded window of one job's buffered output.

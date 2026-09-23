@@ -217,6 +217,12 @@ const (
 	// BranchSessionServiceWatchSandboxJobProcedure is the fully-qualified name of the
 	// BranchSessionService's WatchSandboxJob RPC.
 	BranchSessionServiceWatchSandboxJobProcedure = "/workspace.v1.BranchSessionService/WatchSandboxJob"
+	// BranchSessionServiceListSandboxFilesProcedure is the fully-qualified name of the
+	// BranchSessionService's ListSandboxFiles RPC.
+	BranchSessionServiceListSandboxFilesProcedure = "/workspace.v1.BranchSessionService/ListSandboxFiles"
+	// BranchSessionServiceReadSandboxFileProcedure is the fully-qualified name of the
+	// BranchSessionService's ReadSandboxFile RPC.
+	BranchSessionServiceReadSandboxFileProcedure = "/workspace.v1.BranchSessionService/ReadSandboxFile"
 	// BranchSessionServiceDeployServiceProcedure is the fully-qualified name of the
 	// BranchSessionService's DeployService RPC.
 	BranchSessionServiceDeployServiceProcedure = "/workspace.v1.BranchSessionService/DeployService"
@@ -427,6 +433,8 @@ type BranchSessionServiceClient interface {
 	ListSandboxJobs(context.Context, *connect.Request[v1.ListSandboxJobsRequest]) (*connect.Response[v1.ListSandboxJobsResponse], error)
 	GetSandboxJobOutput(context.Context, *connect.Request[v1.GetSandboxJobOutputRequest]) (*connect.Response[v1.GetSandboxJobOutputResponse], error)
 	WatchSandboxJob(context.Context, *connect.Request[v1.WatchSandboxJobRequest]) (*connect.ServerStreamForClient[v1.WatchSandboxJobResponse], error)
+	ListSandboxFiles(context.Context, *connect.Request[v1.ListSandboxFilesRequest]) (*connect.Response[v1.ListSandboxFilesResponse], error)
+	ReadSandboxFile(context.Context, *connect.Request[v1.ReadSandboxFileRequest]) (*connect.Response[v1.ReadSandboxFileResponse], error)
 	// services (long-lived Deployments)
 	DeployService(context.Context, *connect.Request[v1.DeployServiceRequest]) (*connect.Response[v1.DeployServiceResponse], error)
 	// PreviewService deploys a session-bound, cluster-only preview (developer).
@@ -838,6 +846,18 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(branchSessionServiceMethods.ByName("WatchSandboxJob")),
 			connect.WithClientOptions(opts...),
 		),
+		listSandboxFiles: connect.NewClient[v1.ListSandboxFilesRequest, v1.ListSandboxFilesResponse](
+			httpClient,
+			baseURL+BranchSessionServiceListSandboxFilesProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ListSandboxFiles")),
+			connect.WithClientOptions(opts...),
+		),
+		readSandboxFile: connect.NewClient[v1.ReadSandboxFileRequest, v1.ReadSandboxFileResponse](
+			httpClient,
+			baseURL+BranchSessionServiceReadSandboxFileProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ReadSandboxFile")),
+			connect.WithClientOptions(opts...),
+		),
 		deployService: connect.NewClient[v1.DeployServiceRequest, v1.DeployServiceResponse](
 			httpClient,
 			baseURL+BranchSessionServiceDeployServiceProcedure,
@@ -1158,6 +1178,8 @@ type branchSessionServiceClient struct {
 	listSandboxJobs      *connect.Client[v1.ListSandboxJobsRequest, v1.ListSandboxJobsResponse]
 	getSandboxJobOutput  *connect.Client[v1.GetSandboxJobOutputRequest, v1.GetSandboxJobOutputResponse]
 	watchSandboxJob      *connect.Client[v1.WatchSandboxJobRequest, v1.WatchSandboxJobResponse]
+	listSandboxFiles     *connect.Client[v1.ListSandboxFilesRequest, v1.ListSandboxFilesResponse]
+	readSandboxFile      *connect.Client[v1.ReadSandboxFileRequest, v1.ReadSandboxFileResponse]
 	deployService        *connect.Client[v1.DeployServiceRequest, v1.DeployServiceResponse]
 	previewService       *connect.Client[v1.PreviewServiceRequest, v1.PreviewServiceResponse]
 	listServices         *connect.Client[v1.ListServicesRequest, v1.ListServicesResponse]
@@ -1488,6 +1510,16 @@ func (c *branchSessionServiceClient) WatchSandboxJob(ctx context.Context, req *c
 	return c.watchSandboxJob.CallServerStream(ctx, req)
 }
 
+// ListSandboxFiles calls workspace.v1.BranchSessionService.ListSandboxFiles.
+func (c *branchSessionServiceClient) ListSandboxFiles(ctx context.Context, req *connect.Request[v1.ListSandboxFilesRequest]) (*connect.Response[v1.ListSandboxFilesResponse], error) {
+	return c.listSandboxFiles.CallUnary(ctx, req)
+}
+
+// ReadSandboxFile calls workspace.v1.BranchSessionService.ReadSandboxFile.
+func (c *branchSessionServiceClient) ReadSandboxFile(ctx context.Context, req *connect.Request[v1.ReadSandboxFileRequest]) (*connect.Response[v1.ReadSandboxFileResponse], error) {
+	return c.readSandboxFile.CallUnary(ctx, req)
+}
+
 // DeployService calls workspace.v1.BranchSessionService.DeployService.
 func (c *branchSessionServiceClient) DeployService(ctx context.Context, req *connect.Request[v1.DeployServiceRequest]) (*connect.Response[v1.DeployServiceResponse], error) {
 	return c.deployService.CallUnary(ctx, req)
@@ -1783,6 +1815,8 @@ type BranchSessionServiceHandler interface {
 	ListSandboxJobs(context.Context, *connect.Request[v1.ListSandboxJobsRequest]) (*connect.Response[v1.ListSandboxJobsResponse], error)
 	GetSandboxJobOutput(context.Context, *connect.Request[v1.GetSandboxJobOutputRequest]) (*connect.Response[v1.GetSandboxJobOutputResponse], error)
 	WatchSandboxJob(context.Context, *connect.Request[v1.WatchSandboxJobRequest], *connect.ServerStream[v1.WatchSandboxJobResponse]) error
+	ListSandboxFiles(context.Context, *connect.Request[v1.ListSandboxFilesRequest]) (*connect.Response[v1.ListSandboxFilesResponse], error)
+	ReadSandboxFile(context.Context, *connect.Request[v1.ReadSandboxFileRequest]) (*connect.Response[v1.ReadSandboxFileResponse], error)
 	// services (long-lived Deployments)
 	DeployService(context.Context, *connect.Request[v1.DeployServiceRequest]) (*connect.Response[v1.DeployServiceResponse], error)
 	// PreviewService deploys a session-bound, cluster-only preview (developer).
@@ -2190,6 +2224,18 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		connect.WithSchema(branchSessionServiceMethods.ByName("WatchSandboxJob")),
 		connect.WithHandlerOptions(opts...),
 	)
+	branchSessionServiceListSandboxFilesHandler := connect.NewUnaryHandler(
+		BranchSessionServiceListSandboxFilesProcedure,
+		svc.ListSandboxFiles,
+		connect.WithSchema(branchSessionServiceMethods.ByName("ListSandboxFiles")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceReadSandboxFileHandler := connect.NewUnaryHandler(
+		BranchSessionServiceReadSandboxFileProcedure,
+		svc.ReadSandboxFile,
+		connect.WithSchema(branchSessionServiceMethods.ByName("ReadSandboxFile")),
+		connect.WithHandlerOptions(opts...),
+	)
 	branchSessionServiceDeployServiceHandler := connect.NewUnaryHandler(
 		BranchSessionServiceDeployServiceProcedure,
 		svc.DeployService,
@@ -2564,6 +2610,10 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceGetSandboxJobOutputHandler.ServeHTTP(w, r)
 		case BranchSessionServiceWatchSandboxJobProcedure:
 			branchSessionServiceWatchSandboxJobHandler.ServeHTTP(w, r)
+		case BranchSessionServiceListSandboxFilesProcedure:
+			branchSessionServiceListSandboxFilesHandler.ServeHTTP(w, r)
+		case BranchSessionServiceReadSandboxFileProcedure:
+			branchSessionServiceReadSandboxFileHandler.ServeHTTP(w, r)
 		case BranchSessionServiceDeployServiceProcedure:
 			branchSessionServiceDeployServiceHandler.ServeHTTP(w, r)
 		case BranchSessionServicePreviewServiceProcedure:
@@ -2885,6 +2935,14 @@ func (UnimplementedBranchSessionServiceHandler) GetSandboxJobOutput(context.Cont
 
 func (UnimplementedBranchSessionServiceHandler) WatchSandboxJob(context.Context, *connect.Request[v1.WatchSandboxJobRequest], *connect.ServerStream[v1.WatchSandboxJobResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.WatchSandboxJob is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) ListSandboxFiles(context.Context, *connect.Request[v1.ListSandboxFilesRequest]) (*connect.Response[v1.ListSandboxFilesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListSandboxFiles is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) ReadSandboxFile(context.Context, *connect.Request[v1.ReadSandboxFileRequest]) (*connect.Response[v1.ReadSandboxFileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ReadSandboxFile is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) DeployService(context.Context, *connect.Request[v1.DeployServiceRequest]) (*connect.Response[v1.DeployServiceResponse], error) {

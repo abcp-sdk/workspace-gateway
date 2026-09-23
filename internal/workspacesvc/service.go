@@ -1725,7 +1725,15 @@ func (s *Service) GetSandbox(ctx context.Context, req *connect.Request[wsv1.GetS
 	if sb.Creator != "" && sb.Creator != tenant {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
 	}
-	return connect.NewResponse(&wsv1.GetSandboxResponse{Sandbox: toSandboxInfo(sb)}), nil
+	info := toSandboxInfo(sb)
+	// Best-effort worker environment (workspace root + home) so the webui can
+	// anchor relative paths and show `~`. Never fails the request.
+	if url, token, rerr := s.sbx.Resolve(ctx, sb.Name); rerr == nil {
+		if wi, ierr := workerclient.New(url, token).Info(ctx); ierr == nil {
+			info.Workspace, info.Home, info.Os, info.Arch = wi.Workspace, wi.Home, wi.OS, wi.Arch
+		}
+	}
+	return connect.NewResponse(&wsv1.GetSandboxResponse{Sandbox: info}), nil
 }
 
 func (s *Service) DeleteSandbox(ctx context.Context, req *connect.Request[wsv1.DeleteSandboxRequest]) (*connect.Response[wsv1.DeleteSandboxResponse], error) {
@@ -1860,6 +1868,43 @@ func (s *Service) WatchSandboxJob(ctx context.Context, req *connect.Request[wsv1
 		return connect.NewError(connect.CodeInternal, err)
 	}
 	return nil
+}
+
+// ListSandboxFiles lists a directory (or a single file) in the sandbox. The
+// path is passed to the worker VERBATIM: a relative path resolves against the
+// worker's workspace, an absolute path is used as-is.
+func (s *Service) ListSandboxFiles(ctx context.Context, req *connect.Request[wsv1.ListSandboxFilesRequest]) (*connect.Response[wsv1.ListSandboxFilesResponse], error) {
+	url, token, err := s.ownedSandbox(ctx, req.Header(), req.Msg.GetName())
+	if err != nil {
+		return nil, err
+	}
+	m := req.Msg
+	fl, err := workerclient.New(url, token).FileList(ctx, m.GetPath(), m.GetDepth(), m.GetLimit())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	out := make([]*wsv1.SandboxFileEntry, 0, len(fl.Files))
+	for _, f := range fl.Files {
+		out = append(out, &wsv1.SandboxFileEntry{Path: f.Path, Size: f.Size, IsDir: f.IsDir})
+	}
+	return connect.NewResponse(&wsv1.ListSandboxFilesResponse{IsDir: fl.IsDir, Files: out}), nil
+}
+
+// ReadSandboxFile reads a (windowed) file from the sandbox.
+func (s *Service) ReadSandboxFile(ctx context.Context, req *connect.Request[wsv1.ReadSandboxFileRequest]) (*connect.Response[wsv1.ReadSandboxFileResponse], error) {
+	url, token, err := s.ownedSandbox(ctx, req.Header(), req.Msg.GetName())
+	if err != nil {
+		return nil, err
+	}
+	m := req.Msg
+	fr, err := workerclient.New(url, token).FileRead(ctx, m.GetPath(), m.GetStartLine(), m.GetEndLine())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.ReadSandboxFileResponse{
+		Content: fr.Content, TotalLines: fr.TotalLines,
+		StartLine: fr.StartLine, EndLine: fr.EndLine,
+	}), nil
 }
 
 // ---- services (long-lived Deployments) ----

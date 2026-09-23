@@ -699,6 +699,13 @@ message SandboxInfo {
   // The session this sandbox is bound to (`org:repo:branch`, or a free-session
   // name). Empty for legacy sandboxes created before session binding.
   string session = 8;
+  // Worker environment (from the worker's Info; best-effort, empty when the
+  // sandbox is not yet reachable). `workspace` is the root a RELATIVE path
+  // resolves against; `home` is the worker user's home (the OS `~`).
+  string workspace = 9;
+  string home = 10;
+  string os = 11;
+  string arch = 12;
 }
 message ListSandboxesResponse { repeated SandboxInfo sandboxes = 1; }
 
@@ -784,6 +791,46 @@ message WatchSandboxJobResponse {
   int32 exit_code = 3;
   string stdout = 4; // tail
   string stderr = 5; // tail
+}
+
+// ---- sandbox files (read-only browser over the worker filesystem) ----
+//
+// A sandbox is the worker's own filesystem: a relative path resolves against
+// the worker's workspace root, an absolute path is used verbatim (the worker
+// may touch any path in its container). The webui browses it read-only.
+
+message SandboxFileEntry {
+  // Workspace-relative when inside the workspace, absolute otherwise.
+  string path = 1;
+  int64 size = 2;
+  bool is_dir = 3;
+}
+message ListSandboxFilesRequest {
+  string name = 1;
+  // Directory (or a single file) to list. "" / "." = the workspace root.
+  string path = 2;
+  // Expand directories up to `depth` levels (1 = immediate children, default).
+  int32 depth = 3;
+  int32 limit = 4; // max entries (<=0 = 1000, hard cap 10000)
+}
+message ListSandboxFilesResponse {
+  bool is_dir = 1;
+  repeated SandboxFileEntry files = 2;
+}
+
+message ReadSandboxFileRequest {
+  string name = 1;
+  string path = 2;
+  // Optional 0-based line window (end exclusive; 0 = through EOF; a negative
+  // start counts from the end). Omitted reads the whole file.
+  int32 start_line = 3;
+  int32 end_line = 4;
+}
+message ReadSandboxFileResponse {
+  bytes content = 1;
+  int32 total_lines = 2;
+  int32 start_line = 3;
+  int32 end_line = 4;
 }
 
 // ---- services (long-lived Deployments) ----
@@ -1053,6 +1100,8 @@ service BranchSessionService {
   rpc ListSandboxJobs(ListSandboxJobsRequest) returns (ListSandboxJobsResponse);
   rpc GetSandboxJobOutput(GetSandboxJobOutputRequest) returns (GetSandboxJobOutputResponse);
   rpc WatchSandboxJob(WatchSandboxJobRequest) returns (stream WatchSandboxJobResponse);
+  rpc ListSandboxFiles(ListSandboxFilesRequest) returns (ListSandboxFilesResponse);
+  rpc ReadSandboxFile(ReadSandboxFileRequest) returns (ReadSandboxFileResponse);
   // services (long-lived Deployments)
   rpc DeployService(DeployServiceRequest) returns (DeployServiceResponse);
   // PreviewService deploys a session-bound, cluster-only preview (developer).

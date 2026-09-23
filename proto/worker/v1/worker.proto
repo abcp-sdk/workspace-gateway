@@ -44,6 +44,8 @@ message InfoResponse {
   int64 dropped_lines = 6; // output lines lost to backpressure (store channel
                            // full + ring overflow) since process start; a
                            // rising counter means consumers are too slow
+  string home = 7;      // the worker user's home dir (where `~` resolves); may
+                        // be empty when the platform has no home concept
 }
 
 // ---- jobs ----
