@@ -29,6 +29,9 @@ func (s *Service) Root() string { return s.root }
 // are resolved when the target exists so callers see the real path.
 func (s *Service) resolve(path string) (string, error) {
 	p := filepath.FromSlash(path)
+	// NOTE: `~` is NOT expanded here. It is a CLIENT-side alias for the
+	// workspace root (see the control panel's paths.ts); API callers pass
+	// absolute paths. A bare `~` is treated as a literal relative name.
 	if !filepath.IsAbs(p) {
 		p = filepath.Join(s.root, p)
 	} else {

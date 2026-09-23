@@ -93,7 +93,10 @@ type InfoResponse struct {
 	BootId    string                 `protobuf:"bytes,5,opt,name=boot_id,json=bootId,proto3" json:"boot_id,omitempty"` // per-process UUID: easylab compares it against the
 	// boot_id recorded at sync time to detect worker
 	// restarts and re-sync workspaces
-	DroppedLines  int64 `protobuf:"varint,6,opt,name=dropped_lines,json=droppedLines,proto3" json:"dropped_lines,omitempty"` // output lines lost to backpressure (store channel
+	DroppedLines int64 `protobuf:"varint,6,opt,name=dropped_lines,json=droppedLines,proto3" json:"dropped_lines,omitempty"` // output lines lost to backpressure (store channel
+	// full + ring overflow) since process start; a
+	// rising counter means consumers are too slow
+	Home          string `protobuf:"bytes,7,opt,name=home,proto3" json:"home,omitempty"` // the worker user's home dir (where `~` resolves); may
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -168,6 +171,13 @@ func (x *InfoResponse) GetDroppedLines() int64 {
 		return x.DroppedLines
 	}
 	return 0
+}
+
+func (x *InfoResponse) GetHome() string {
+	if x != nil {
+		return x.Home
+	}
+	return ""
 }
 
 // Execute always registers a job (no fast/slow split, same as legacy worker).
@@ -2208,14 +2218,15 @@ var File_worker_v1_worker_proto protoreflect.FileDescriptor
 const file_worker_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"\x16worker/v1/worker.proto\x12\tworker.v1\"\r\n" +
-	"\vInfoRequest\"\xa4\x01\n" +
+	"\vInfoRequest\"\xb8\x01\n" +
 	"\fInfoResponse\x12\x0e\n" +
 	"\x02os\x18\x01 \x01(\tR\x02os\x12\x12\n" +
 	"\x04arch\x18\x02 \x01(\tR\x04arch\x12\x14\n" +
 	"\x05shell\x18\x03 \x01(\tR\x05shell\x12\x1c\n" +
 	"\tworkspace\x18\x04 \x01(\tR\tworkspace\x12\x17\n" +
 	"\aboot_id\x18\x05 \x01(\tR\x06bootId\x12#\n" +
-	"\rdropped_lines\x18\x06 \x01(\x03R\fdroppedLines\"\xd1\x01\n" +
+	"\rdropped_lines\x18\x06 \x01(\x03R\fdroppedLines\x12\x12\n" +
+	"\x04home\x18\a \x01(\tR\x04home\"\xd1\x01\n" +
 	"\x0eExecuteRequest\x12\x18\n" +
 	"\acommand\x18\x01 \x01(\tR\acommand\x12\x18\n" +
 	"\aworkdir\x18\x02 \x01(\tR\aworkdir\x124\n" +

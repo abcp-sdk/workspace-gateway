@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"path/filepath"
 	"time"
 
 	"connectrpc.com/connect"
@@ -44,12 +45,14 @@ func NewService(jobs *jobsvc.Manager, files *filesvc.Service, shell *shellh.Runn
 
 func (s *WorkerService) Info(ctx context.Context, req *connect.Request[workerv1.InfoRequest]) (*connect.Response[workerv1.InfoResponse], error) {
 	return connect.NewResponse(&workerv1.InfoResponse{
-		Os:           goos(),
-		Arch:         goarch(),
-		Shell:        "builtin(mvdan-sh)",
-		Workspace:    s.files.Root(),
+		Os:    goos(),
+		Arch:  goarch(),
+		Shell: "builtin(mvdan-sh)",
+		// Slash-form so a Windows worker reports C:/... consistently to the UI.
+		Workspace:    filepath.ToSlash(s.files.Root()),
 		BootId:       s.bootID,
 		DroppedLines: s.jobs.Dropped(),
+		Home:         filepath.ToSlash(homeDir()),
 	}), nil
 }
 
