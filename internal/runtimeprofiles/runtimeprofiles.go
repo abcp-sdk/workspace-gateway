@@ -23,6 +23,13 @@ type Settings struct {
 	// KVMSecurityContext applied to a KVM container (privileged is ALWAYS
 	// forced false by Render).
 	KVMSecurityContext *corev1.SecurityContext `json:"kvmSecurityContext"`
+	// GPURuntimeClass is the pod RuntimeClass that injects the NVIDIA driver
+	// devices (nvidia-container-runtime). Without it a GPU request allocates
+	// the device but /dev/nvidia* is NOT mounted. Empty = no runtime class.
+	GPURuntimeClass string `json:"gpuRuntimeClass"`
+	// KVMRuntimeClass is an optional RuntimeClass for KVM pods (the device
+	// plugin usually suffices, so this is empty by default).
+	KVMRuntimeClass string `json:"kvmRuntimeClass"`
 }
 
 // DefaultSettings are the built-in knobs (matching the cluster's device plugin
@@ -43,6 +50,10 @@ func DefaultSettings() Settings {
 			AppArmorProfile: &corev1.AppArmorProfile{Type: corev1.AppArmorProfileTypeUnconfined},
 			SeccompProfile:  &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeUnconfined},
 		},
+		// The cluster's GPU device plugin installs an `nvidia` RuntimeClass
+		// (nvidia-container-runtime); GPU pods must set it for the driver
+		// devices to appear.
+		GPURuntimeClass: "nvidia",
 	}
 }
 
@@ -76,6 +87,13 @@ func Load(path string) (Settings, error) {
 	if o.KVMSecurityContext != nil {
 		s.KVMSecurityContext = o.KVMSecurityContext
 	}
+	// A non-empty override replaces the default runtime class name.
+	if o.GPURuntimeClass != "" {
+		s.GPURuntimeClass = o.GPURuntimeClass
+	}
+	if o.KVMRuntimeClass != "" {
+		s.KVMRuntimeClass = o.KVMRuntimeClass
+	}
 	return s, nil
 }
 
@@ -88,6 +106,9 @@ type Rendered struct {
 	Env              map[string]string
 	SecurityContext  *corev1.SecurityContext
 	Resources        *corev1.ResourceRequirements
+	// RuntimeClass selects the pod runtime handler. GPU pods need the NVIDIA
+	// class so the driver devices are injected; KVM pods may set one too.
+	RuntimeClass string
 }
 
 // Render maps (kvm, gpuCount) to pod settings. gpuCount > 0 requests that many
@@ -96,6 +117,9 @@ func (s Settings) Render(kvm bool, gpuCount int) Rendered {
 	r := Rendered{}
 	if gpuCount > 0 {
 		r.DeviceLimits = map[string]string{s.GPUDevice: itoa(gpuCount)}
+		// Without the NVIDIA runtime class the device is allocated but the
+		// driver devices (/dev/nvidia*) are never mounted.
+		r.RuntimeClass = s.GPURuntimeClass
 	}
 	if kvm {
 		r.NeedsTun = s.KVMNeedsTun
@@ -103,6 +127,9 @@ func (s Settings) Render(kvm bool, gpuCount int) Rendered {
 			r.DeviceLimits = map[string]string{}
 		}
 		r.DeviceLimits[s.KVMDevice] = "1"
+		if r.RuntimeClass == "" {
+			r.RuntimeClass = s.KVMRuntimeClass
+		}
 		if s.KVMSecurityContext != nil {
 			sc := *s.KVMSecurityContext
 			priv := false

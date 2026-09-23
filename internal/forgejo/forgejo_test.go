@@ -56,7 +56,7 @@ func TestMergeMRPath(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := New(srv.URL, "tok")
-	if err := c.MergeMR(context.Background(), "acme", "app", 7); err != nil {
+	if err := c.MergeMR(context.Background(), "acme", "app", 7, ""); err != nil {
 		t.Fatal(err)
 	}
 	if path != "/api/v1/repos/acme/app/pulls/7/merge" {
@@ -126,7 +126,7 @@ func TestMergeMRConflictMapsToErrConflict(t *testing.T) {
 	defer srv.Close()
 
 	c := New(srv.URL, "tok")
-	err := c.MergeMR(context.Background(), "acme", "app", 1)
+	err := c.MergeMR(context.Background(), "acme", "app", 1, "")
 	var conflict *ErrConflict
 	if !errorsAs(err, &conflict) {
 		t.Fatalf("expected *ErrConflict, got %T (%v)", err, err)
@@ -145,7 +145,7 @@ func TestMergeMRSendsMergeStyle(t *testing.T) {
 	defer srv.Close()
 
 	c := New(srv.URL, "tok")
-	if err := c.MergeMR(context.Background(), "acme", "app", 3); err != nil {
+	if err := c.MergeMR(context.Background(), "acme", "app", 3, ""); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(body, `"Do":"merge"`) {

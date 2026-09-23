@@ -48,17 +48,21 @@ infra:
   proxy:
     http: "http://mihomo.develop.svc.cluster.local:7890"
     https: "http://mihomo.develop.svc.cluster.local:7890"
-  # Registry host + toolchain org surfaced by list-oci-images.
+  # Registry host + toolchain org surfaced by list-oci-images. The registry is
+  # reached IN-CLUSTER over plaintext HTTP (containerd + buildkitd are both
+  # configured with git.agent.svc.cluster.local as an insecure registry), so
+  # image refs never leave the cluster network.
   registry:
-    host: "git.agent.fenjin.org"
+    host: "git.agent.svc.cluster.local"
+    scheme: "http"
     toolchainOrg: "agent-toolchain"
 
 # ---- dedicated workspace agent (h2c) ----
 agent:
   enabled: true
   image:
-    repository: git.agent.fenjin.org/abcp/agent
-    tag: "20260922054428"
+    repository: git.agent.svc.cluster.local/abcp/agent
+    tag: "20260922192327"
     pullPolicy: IfNotPresent
   port: 8080
   service:
@@ -86,8 +90,8 @@ agent:
 workspaceExtension:
   enabled: true
   image:
-    repository: git.agent.fenjin.org/abcp/workspace-extension
-    tag: "20260922082349"
+    repository: git.agent.svc.cluster.local/abcp/workspace-extension
+    tag: "20260923025116"
     pullPolicy: IfNotPresent
   # Tenant seeded with the gateway/forgejo defaults. `"*"` = every tenant.
   seedTenant: "*"
@@ -99,7 +103,7 @@ workspaceExtension:
 playwright:
   enabled: true
   image:
-    repository: git.agent.fenjin.org/abcp/playwright-extension
+    repository: git.agent.svc.cluster.local/abcp/playwright-extension
     tag: "20260921141241"
     pullPolicy: IfNotPresent
   seedTenant: "*"
@@ -114,14 +118,33 @@ playwright:
 gateway:
   enabled: true
   image:
-    repository: git.agent.fenjin.org/abcp/workspace-gateway
-    tag: "20260922083902"
+    repository: git.agent.svc.cluster.local/abcp/workspace-gateway
+    tag: "20260923034059"
     pullPolicy: IfNotPresent
   # Namespace the sandbox/service backend manages, and where its RBAC lands.
   sandbox:
     namespace: worker
     idleTTL: "24h"
     reapInterval: "10m"
+  # Public domain services are published under (`<name>.<ns>.<domain>`). Empty =
+  # infer from the request Host by dropping the first two labels (the edge
+  # convention is `<svc>.<ns>.<domain>`), so a domain change needs no config.
+  publicServiceDomain: ""
+  # Nudge stalled sessions: a session that is idle, quiet for `after`, and
+  # still has unfinished todos gets a mailbox `trigger` (source
+  # `system:idlewatch`). Needs NATS_URL (set below) + the service/admin tokens.
+  idlewatch:
+    enabled: true
+    after: "1h"
+    interval: "5m"
+    cooldown: "30m"
+  # Developer preview services: session-bound, cluster-only, reclaimed on
+  # session end or after previewTTL. serviceLogTail is the default number of
+  # service-log lines returned.
+  preview:
+    ttl: "2h"
+    reapInterval: "10m"
+  serviceLogTail: 500
   # RBAC for the worker namespace (Role/RoleBinding). When the workspace and
   # worker namespaces are managed by DIFFERENT credentials (namespace-scoped
   # RBAC), set workerRbac.create=true and apply worker-rbac.yaml separately
@@ -160,7 +183,7 @@ gateway:
   forgejo:
     token: "8a582a2d295a7d19f089b449bc29e5e4e34b3039"
   registry:
-    defaultBaseImage: "git.agent.fenjin.org/agent-toolchain/toolchain-base:debian-trixie"
+    defaultBaseImage: "git.agent.svc.cluster.local/agent-toolchain/toolchain-base:debian-trixie"
     deriveRepo: "root/sandbox"
     workerBin: "/usr/local/lib/easyworker/easyworker"
   # Optional JSON overriding KVM/GPU device names, the GPU RuntimeClass (needed
@@ -180,8 +203,8 @@ gateway:
 webui:
   enabled: true
   image:
-    repository: git.agent.fenjin.org/abcp/workspace-webui
-    tag: "20260922074803"
+    repository: git.agent.svc.cluster.local/abcp/workspace-webui
+    tag: "20260923034310"
     pullPolicy: IfNotPresent
   port: 8080
   service:

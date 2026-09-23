@@ -24,11 +24,14 @@ import (
 
 // Result reports what was imported.
 type Result struct {
-	// DefaultBranch is the source's HEAD branch (e.g. `main`/`master`), or the
-	// branch named by an explicit single-ref request.
+	// DefaultBranch is ALWAYS `main`: the imported content lands there whatever
+	// the source ref was named.
 	DefaultBranch string
-	// Branches are the branch names pushed to the destination.
+	// Branches are the branch names pushed to the destination (always [`main`]).
 	Branches []string
+	// SourceRef is the source ref actually imported (the explicit `Ref`, or the
+	// source's HEAD branch when none was given).
+	SourceRef string
 	// Bytes is the on-disk size of the bare clone (for diagnostics).
 	Bytes int64
 }
@@ -48,8 +51,9 @@ type Options struct {
 	// SourceUser + SourceToken authenticate a PRIVATE source. Empty = anonymous.
 	SourceUser  string
 	SourceToken string
-	// Ref imports ONLY this branch. Empty = every head branch. When set, the
-	// other heads are still fetched but only this one is pushed.
+	// Ref selects the SOURCE ref to import: a branch name, a tag name, or any
+	// revision git can resolve (e.g. a commit sha). Empty = the source's HEAD
+	// branch. Whatever it resolves to lands on the destination's `main`.
 	Ref string
 	// Timeout bounds the whole operation. Zero = 15 minutes.
 	Timeout time.Duration
@@ -93,50 +97,37 @@ func Import(ctx context.Context, opt Options) (Result, error) {
 		return Result{}, fmt.Errorf("read source HEAD: %w", err)
 	}
 
-	// Fetch heads only (never tags or pull refs). This is the crux: a mirror
-	// refspec would drag in every `refs/pull/*`.
-	fetchSpec := "+refs/heads/*:refs/heads/*"
-	if opt.Ref != "" {
-		fetchSpec = fmt.Sprintf("+refs/heads/%s:refs/heads/%s", opt.Ref, opt.Ref)
-	}
+	// Fetch heads + tags (never pull refs). This is the crux: a mirror refspec
+	// would drag in every `refs/pull/*`. Tags are fetched so a tag/rev `Ref`
+	// can be resolved and imported.
 	if err := src.FetchContext(ctx, &git.FetchOptions{
-		RefSpecs: []config.RefSpec{config.RefSpec(fetchSpec)},
-		Tags:     git.NoTags,
-		Auth:     srcAuth,
+		RefSpecs: []config.RefSpec{
+			"+refs/heads/*:refs/heads/*",
+			"+refs/tags/*:refs/tags/*",
+		},
+		Tags: git.NoTags,
+		Auth: srcAuth,
 	}); err != nil && err != git.NoErrAlreadyUpToDate {
 		return Result{}, fmt.Errorf("fetch %s: %w", opt.SourceURL, err)
 	}
 
-	// Which branch becomes the default, and which heads get pushed.
-	defaultBranch = chooseDefault(defaultBranch, opt.Ref)
-	branches, err := localHeads(repo)
+	// Resolve the SOURCE ref to import: the explicit `Ref` (branch/tag/rev) or
+	// the source's HEAD branch. It is pushed to the destination as `main`.
+	sourceRef, commit, err := resolveSourceRef(repo, defaultBranch, opt.Ref)
 	if err != nil {
 		return Result{}, err
 	}
-	if opt.Ref != "" {
-		if !contains(branches, opt.Ref) {
-			return Result{}, fmt.Errorf("ref %q not found in the source repository", opt.Ref)
-		}
-		branches = []string{opt.Ref}
-	}
-	if len(branches) == 0 {
-		return Result{}, fmt.Errorf("source repository has no branches")
-	}
 
-	// Push every fetched head to the (empty) destination.
+	// Push the resolved commit to the destination as `main`. Using the commit
+	// hash (not a ref name) lets a tag or arbitrary revision become `main`.
 	dst, err := repo.CreateRemote(&config.RemoteConfig{Name: "dst", URLs: []string{opt.DestURL}})
 	if err != nil {
 		return Result{}, fmt.Errorf("add dest remote: %w", err)
 	}
-	pushSpecs := make([]config.RefSpec, 0, len(branches))
-	if opt.Ref != "" {
-		pushSpecs = append(pushSpecs, config.RefSpec(fmt.Sprintf("+refs/heads/%s:refs/heads/%s", opt.Ref, opt.Ref)))
-	} else {
-		pushSpecs = append(pushSpecs, "+refs/heads/*:refs/heads/*")
-	}
+	pushSpec := config.RefSpec(fmt.Sprintf("+%s:refs/heads/%s", commit.String(), mainBranch))
 	if err := dst.PushContext(ctx, &git.PushOptions{
 		RemoteName: "dst",
-		RefSpecs:   pushSpecs,
+		RefSpecs:   []config.RefSpec{pushSpec},
 		Auth:       &http.BasicAuth{Username: opt.DestUser, Password: opt.DestToken},
 	}); err != nil && err != git.NoErrAlreadyUpToDate {
 		return Result{}, fmt.Errorf("push to destination: %w", err)
@@ -146,7 +137,34 @@ func Import(ctx context.Context, opt Options) (Result, error) {
 	if fi, serr := os.Stat(dir); serr == nil {
 		size = dirSize(fi)
 	}
-	return Result{DefaultBranch: defaultBranch, Branches: branches, Bytes: size}, nil
+	return Result{DefaultBranch: mainBranch, Branches: []string{mainBranch}, SourceRef: sourceRef, Bytes: size}, nil
+}
+
+// mainBranch is the only destination branch an import creates.
+const mainBranch = "main"
+
+// resolveSourceRef turns the requested source ref into a commit to import.
+// An explicit ref may be a branch, a tag, or any revision (e.g. a sha); an
+// empty ref means the source's HEAD branch. It returns the ref's display name
+// and the resolved commit.
+func resolveSourceRef(repo *git.Repository, headBranch, ref string) (string, plumbing.Hash, error) {
+	if ref == "" {
+		ref = headBranch
+	}
+	if ref == "" {
+		return "", plumbing.ZeroHash, fmt.Errorf("source repository has no branches")
+	}
+	// A branch first, then a tag, then any revision git can peel.
+	if h, err := repo.ResolveRevision(plumbing.Revision("refs/heads/" + ref)); err == nil {
+		return ref, *h, nil
+	}
+	if h, err := repo.ResolveRevision(plumbing.Revision("refs/tags/" + ref)); err == nil {
+		return ref, *h, nil
+	}
+	if h, err := repo.ResolveRevision(plumbing.Revision(ref)); err == nil {
+		return ref, *h, nil
+	}
+	return "", plumbing.ZeroHash, fmt.Errorf("ref %q not found in the source repository", ref)
 }
 
 // remoteHead reads the source's HEAD symref target (e.g. `refs/heads/main`).
@@ -172,30 +190,6 @@ func sourceAuth(user, token string) transport.AuthMethod {
 		user = "git"
 	}
 	return &http.BasicAuth{Username: user, Password: token}
-}
-
-func chooseDefault(head, ref string) string {
-	if ref != "" {
-		return ref
-	}
-	if head != "" {
-		return head
-	}
-	return "main"
-}
-
-func localHeads(repo *git.Repository) ([]string, error) {
-	iter, err := repo.Branches()
-	if err != nil {
-		return nil, err
-	}
-	defer iter.Close()
-	var out []string
-	err = iter.ForEach(func(ref *plumbing.Reference) error {
-		out = append(out, ref.Name().Short())
-		return nil
-	})
-	return out, err
 }
 
 func contains(ss []string, s string) bool {

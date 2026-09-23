@@ -47,8 +47,9 @@ type Config struct {
 
 // Client wraps the generated agent clients + the credential-rewriting transport.
 type Client struct {
-	c     agentv1connect.AgentServiceClient
-	admin agentv1connect.AdminServiceClient
+	c        agentv1connect.AgentServiceClient
+	admin    agentv1connect.AdminServiceClient
+	svcToken string
 }
 
 // New dials the agent URL over h2c (the agent serves unencrypted HTTP/2 ONLY).
@@ -76,8 +77,9 @@ func New(cfg Config) *Client {
 	}
 	hc := &http.Client{Transport: rt}
 	client := &Client{
-		c:     agentv1connect.NewAgentServiceClient(hc, trimSlash(cfg.URL)),
-		admin: agentv1connect.NewAdminServiceClient(hc, trimSlash(cfg.URL)),
+		c:        agentv1connect.NewAgentServiceClient(hc, trimSlash(cfg.URL)),
+		admin:    agentv1connect.NewAdminServiceClient(hc, trimSlash(cfg.URL)),
+		svcToken: cfg.ServiceToken,
 	}
 	rt.broker.admin = client.admin
 	return client
@@ -85,6 +87,13 @@ func New(cfg Config) *Client {
 
 // Raw exposes the generated agent client (the workspace service forwards with it).
 func (c *Client) Raw() agentv1connect.AgentServiceClient { return c.c }
+
+// Admin exposes the generated admin client (tenant enumeration / token minting).
+func (c *Client) Admin() agentv1connect.AdminServiceClient { return c.admin }
+
+// ServiceToken returns the shared service token ("" when disabled). Callers
+// that must act for a named tenant set it as the bearer + `X-Abc-Tenant`.
+func (c *Client) ServiceToken() string { return c.svcToken }
 
 func trimSlash(s string) string {
 	return strings.TrimRight(s, "/")

@@ -1,6 +1,6 @@
 # workspace-gateway Go build (buildkitd -> forgejo OCI). The generated protos
 # are vendored under gen/; the k8s client-go deps come from the module proxy.
-ARG REGISTRY=git.agent.fenjin.org/root
+ARG REGISTRY=git.agent.svc.cluster.local/root
 # Declared before any FROM so it is usable in a later FROM line.
 ARG BUILDKIT_IMAGE=docker.io/moby/buildkit:v0.32.2-rootless
 FROM ${REGISTRY}/golang:1.26-alpine AS build
@@ -8,7 +8,7 @@ ARG HTTP_PROXY
 ARG HTTPS_PROXY
 ENV HTTP_PROXY=${HTTP_PROXY} \
     HTTPS_PROXY=${HTTPS_PROXY} \
-    NO_PROXY=localhost,127.0.0.1,.svc.cluster.local,.svc,git.agent.fenjin.org,10.199.64.20 \
+    NO_PROXY=localhost,127.0.0.1,.svc.cluster.local,.svc,10.199.64.20 \
     GOWORK=off
 WORKDIR /src
 COPY go.mod go.sum ./

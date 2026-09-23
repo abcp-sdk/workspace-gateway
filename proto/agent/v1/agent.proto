@@ -240,6 +240,10 @@ message CreateSessionRequest {
   // Optional generic grouping key (empty = ungrouped). A subsession sets this
   // to its parent session name.
   string group = 8;
+  // Session language pinned at creation ("zh" / "en"; empty = fall back to the
+  // tenant default at turn time). Pinning it makes the language STABLE for the
+  // session's lifetime instead of following a mutable tenant config.
+  string locale = 9;
 }
 message CreateSessionResponse {
   bool ok = 1;

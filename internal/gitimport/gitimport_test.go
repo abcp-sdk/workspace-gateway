@@ -89,7 +89,7 @@ func seedSource(t *testing.T) string {
 	return src
 }
 
-func TestImportHeadsOnly(t *testing.T) {
+func TestImportDefaultRefLandsOnMain(t *testing.T) {
 	src := seedSource(t)
 	dst := filepath.Join(t.TempDir(), "dst.git")
 	if _, err := git.PlainInit(dst, true); err != nil {
@@ -107,11 +107,15 @@ func TestImportHeadsOnly(t *testing.T) {
 	if res.DefaultBranch != "main" {
 		t.Fatalf("DefaultBranch = %q, want main", res.DefaultBranch)
 	}
-	if !contains(res.Branches, "main") || !contains(res.Branches, "dev") {
-		t.Fatalf("Branches = %v, want main+dev", res.Branches)
+	if res.SourceRef != "main" {
+		t.Fatalf("SourceRef = %q, want main", res.SourceRef)
+	}
+	if len(res.Branches) != 1 || res.Branches[0] != "main" {
+		t.Fatalf("Branches = %v, want [main]", res.Branches)
 	}
 
-	// The destination must have the heads but NOT the tag or the pull ref.
+	// The destination must have ONLY refs/heads/main — never the source's other
+	// heads, the tag, or the pull ref.
 	dstRepo, err := git.PlainOpen(dst)
 	if err != nil {
 		t.Fatal(err)
@@ -128,14 +132,16 @@ func TestImportHeadsOnly(t *testing.T) {
 	if !contains(names, "refs/heads/main") {
 		t.Fatalf("destination missing refs/heads/main: %v", names)
 	}
-	for _, bad := range []string{"refs/tags/v1", "refs/pull/1/head"} {
+	for _, bad := range []string{"refs/heads/dev", "refs/tags/v1", "refs/pull/1/head"} {
 		if contains(names, bad) {
 			t.Fatalf("destination leaked %s: %v", bad, names)
 		}
 	}
 }
 
-func TestImportSingleRef(t *testing.T) {
+// TestImportBranchAsMain imports a NON-main source branch and asserts it lands
+// on the destination's `main`.
+func TestImportBranchAsMain(t *testing.T) {
 	src := seedSource(t)
 	dst := filepath.Join(t.TempDir(), "dst.git")
 	if _, err := git.PlainInit(dst, true); err != nil {
@@ -151,16 +157,44 @@ func TestImportSingleRef(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Import: %v", err)
 	}
-	if res.DefaultBranch != "dev" {
-		t.Fatalf("DefaultBranch = %q, want dev", res.DefaultBranch)
+	if res.DefaultBranch != "main" || res.SourceRef != "dev" {
+		t.Fatalf("got DefaultBranch=%q SourceRef=%q, want main/dev", res.DefaultBranch, res.SourceRef)
 	}
-	if len(res.Branches) != 1 || res.Branches[0] != "dev" {
-		t.Fatalf("Branches = %v, want [dev]", res.Branches)
+	if len(res.Branches) != 1 || res.Branches[0] != "main" {
+		t.Fatalf("Branches = %v, want [main]", res.Branches)
 	}
-	// main must NOT be present when a single ref was requested.
 	dstRepo, _ := git.PlainOpen(dst)
-	if _, err := dstRepo.Reference(plumbing.NewBranchReferenceName("main"), false); err == nil {
-		t.Fatal("single-ref import leaked the main branch")
+	if _, err := dstRepo.Reference(plumbing.NewBranchReferenceName("main"), false); err != nil {
+		t.Fatalf("destination missing main: %v", err)
+	}
+	if _, err := dstRepo.Reference(plumbing.NewBranchReferenceName("dev"), false); err == nil {
+		t.Fatal("destination must not have the source branch name `dev`")
+	}
+}
+
+// TestImportTagAsMain imports a TAG and asserts it becomes the destination main.
+func TestImportTagAsMain(t *testing.T) {
+	src := seedSource(t)
+	dst := filepath.Join(t.TempDir(), "dst.git")
+	if _, err := git.PlainInit(dst, true); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Import(context.Background(), Options{
+		SourceURL: src,
+		DestURL:   dst,
+		Ref:       "v1",
+		Timeout:   30 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("Import tag: %v", err)
+	}
+	if res.DefaultBranch != "main" || res.SourceRef != "v1" {
+		t.Fatalf("got DefaultBranch=%q SourceRef=%q, want main/v1", res.DefaultBranch, res.SourceRef)
+	}
+	dstRepo, _ := git.PlainOpen(dst)
+	if _, err := dstRepo.Reference(plumbing.NewBranchReferenceName("main"), false); err != nil {
+		t.Fatalf("destination missing main: %v", err)
 	}
 }
 

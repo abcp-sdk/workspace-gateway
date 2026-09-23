@@ -29,6 +29,8 @@ spec:
             - { name: AGENT_URL, value: "http://standalone-agent:80" }
             # Sandboxes are managed in this namespace, in-process.
             - { name: SANDBOX_NAMESPACE, value: worker }
+            # Empty = infer the public service domain from the request Host.
+            - { name: PUBLIC_SERVICE_DOMAIN, value: "" }
             - { name: FORGEJO_URL, value: "http://git.agent.svc.cluster.local" }
             - name: FORGEJO_TOKEN
               valueFrom:

@@ -1510,7 +1510,11 @@ type CreateSessionRequest struct {
 	Variant string `protobuf:"bytes,7,opt,name=variant,proto3" json:"variant,omitempty"`
 	// Optional generic grouping key (empty = ungrouped). A subsession sets this
 	// to its parent session name.
-	Group         string `protobuf:"bytes,8,opt,name=group,proto3" json:"group,omitempty"`
+	Group string `protobuf:"bytes,8,opt,name=group,proto3" json:"group,omitempty"`
+	// Session language pinned at creation ("zh" / "en"; empty = fall back to the
+	// tenant default at turn time). Pinning it makes the language STABLE for the
+	// session's lifetime instead of following a mutable tenant config.
+	Locale        string `protobuf:"bytes,9,opt,name=locale,proto3" json:"locale,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1597,6 +1601,13 @@ func (x *CreateSessionRequest) GetVariant() string {
 func (x *CreateSessionRequest) GetGroup() string {
 	if x != nil {
 		return x.Group
+	}
+	return ""
+}
+
+func (x *CreateSessionRequest) GetLocale() string {
+	if x != nil {
+		return x.Locale
 	}
 	return ""
 }
@@ -6549,7 +6560,7 @@ const file_agent_v1_agent_proto_rawDesc = "" +
 	"\x04size\x18\x03 \x01(\x05R\x04size\"\x15\n" +
 	"\x13ListSessionsRequest\"E\n" +
 	"\x14ListSessionsResponse\x12-\n" +
-	"\bsessions\x18\x01 \x03(\v2\x11.agent.v1.SessionR\bsessions\"\xc6\x01\n" +
+	"\bsessions\x18\x01 \x03(\v2\x11.agent.v1.SessionR\bsessions\"\xde\x01\n" +
 	"\x14CreateSessionRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x16\n" +
@@ -6558,7 +6569,8 @@ const file_agent_v1_agent_proto_rawDesc = "" +
 	"\x04repo\x18\x05 \x01(\tR\x04repo\x12\x16\n" +
 	"\x06branch\x18\x06 \x01(\tR\x06branch\x12\x18\n" +
 	"\avariant\x18\a \x01(\tR\avariant\x12\x14\n" +
-	"\x05group\x18\b \x01(\tR\x05group\"J\n" +
+	"\x05group\x18\b \x01(\tR\x05group\x12\x16\n" +
+	"\x06locale\x18\t \x01(\tR\x06locale\"J\n" +
 	"\x15CreateSessionResponse\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12!\n" +
 	"\fsession_name\x18\x02 \x01(\tR\vsessionName\"#\n" +

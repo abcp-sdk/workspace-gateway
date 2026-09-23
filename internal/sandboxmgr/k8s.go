@@ -32,6 +32,9 @@ const (
 	LabelName    = "worker-manager/name"
 	AnnoImage    = "worker-manager/image"
 	AnnoCreator  = "worker-manager/creator"
+	// AnnoSession binds a sandbox to the session that created it (its owner),
+	// so a session can enumerate and fan out to its own sandboxes.
+	AnnoSession = "worker-manager/session"
 
 	// WorkerPort is the easyworker listen port baked into preset images.
 	WorkerPort = 48080
@@ -45,6 +48,7 @@ type Sandbox struct {
 	Ready     bool
 	URL       string
 	Creator   string
+	Session   string
 	CreatedAt int64 // unix millis
 }
 
@@ -56,6 +60,8 @@ type Spec struct {
 	Memory  string
 	Env     map[string]string
 	Creator string
+	// Session binds the sandbox to its owning session (empty = unbound).
+	Session string
 	// Runtime is the rendered runtime capabilities (device limits, security
 	// context, tun mount, ...). Zero value = a plain sandbox.
 	Runtime runtimeprofiles.Rendered
@@ -166,6 +172,7 @@ func (c *Client) Create(ctx context.Context, s Spec) (Sandbox, string, error) {
 	annotations := map[string]string{
 		AnnoImage:   s.Image,
 		AnnoCreator: s.Creator,
+		AnnoSession: s.Session,
 	}
 
 	// Idempotent: clear any prior objects with the same name first.
@@ -216,6 +223,10 @@ func (c *Client) Create(ctx context.Context, s Spec) (Sandbox, string, error) {
 		RestartPolicy: corev1.RestartPolicyAlways,
 		Containers:    []corev1.Container{container},
 	}
+	if s.Runtime.RuntimeClass != "" {
+		rc := s.Runtime.RuntimeClass
+		podSpec.RuntimeClassName = &rc
+	}
 	if len(s.Runtime.NodeSelector) > 0 {
 		podSpec.NodeSelector = s.Runtime.NodeSelector
 	}
@@ -261,7 +272,8 @@ func (c *Client) Create(ctx context.Context, s Spec) (Sandbox, string, error) {
 
 	sb := Sandbox{
 		Name: s.Name, Image: s.Image, Phase: "Pending",
-		URL: c.ServiceDNS(res), Creator: s.Creator, CreatedAt: time.Now().UnixMilli(),
+		URL: c.ServiceDNS(res), Creator: s.Creator, Session: s.Session,
+		CreatedAt: time.Now().UnixMilli(),
 	}
 	return sb, token, nil
 }
@@ -367,6 +379,7 @@ func toSandbox(c *Client, p *corev1.Pod) Sandbox {
 		Ready:     ready,
 		URL:       c.ServiceDNS(p.Name),
 		Creator:   p.Annotations[AnnoCreator],
+		Session:   p.Annotations[AnnoSession],
 		CreatedAt: created,
 	}
 }

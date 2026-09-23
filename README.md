@@ -91,7 +91,8 @@ folded in under `internal/sandboxmgr`).
 | `SANDBOX_NAMESPACE` | namespace the sandbox backend manages (default `worker`) |
 | `FORGEJO_URL` / `FORGEJO_TOKEN` | Forgejo |
 | `GATEWAY_SERVICE_TOKEN` / `GATEWAY_SERVICE_TENANT` | shared service token for the workspace-extension's sandbox RPCs |
-| `IMAGE_REGISTRY_HOST` | registry host (default `git.agent.fenjin.org`) |
+| `IMAGE_REGISTRY_HOST` | registry host (default `git.agent.svc.cluster.local`) |
+| `IMAGE_REGISTRY_SCHEME` | registry scheme (default `http`; the in-cluster registry is plaintext) |
 | `TOOLCHAIN_ORG` | default owner `ListOCIImages` browses (default `agent-toolchain`) |
 | `DEFAULT_BASE_IMAGE` | base image used when `CreateSandbox` omits one |
 | `DERIVE_REPO` | repo for derived sandbox images (default `root/sandbox`) |
@@ -100,7 +101,7 @@ folded in under `internal/sandboxmgr`).
 | `WORKSPACE_RUNTIME` | optional JSON overriding KVM/GPU device names + KVM security context |
 | `SANDBOX_IDLE_TTL` | reclaim sandboxes idle this long (default `24h`; `0` disables) |
 | `SANDBOX_REAP_INTERVAL` | reaper sweep period (default `10m`) |
-| `NO_PROXY` / `no_proxy` | MUST include `.svc.cluster.local`, `.fenjin.org`, `.nip.io` |
+| `NO_PROXY` / `no_proxy` | MUST include `.svc.cluster.local` (and the node edge IP) |
 
 ## Build & test
 

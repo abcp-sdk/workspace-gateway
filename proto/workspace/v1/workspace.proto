@@ -40,6 +40,8 @@ message EnsureBranchSessionRequest {
   string model = 4;
   // Optional sandbox image override; empty = the gateway default.
   string image = 5;
+  // Optional agent language pinned at creation ("zh"/"en"; empty = tenant default).
+  string locale = 6;
 }
 message EnsureBranchSessionResponse { BranchSession branch_session = 1; }
 
@@ -54,6 +56,11 @@ message DeleteBranchSessionResponse { bool ok = 1; }
 
 message DeleteBranchRequest { string org = 1; string repo = 2; string branch = 3; }
 message DeleteBranchResponse { bool ok = 1; }
+
+// DeleteRepo removes a repository AND every one of its branch sessions
+// (session + sandboxes cascade). Admin action; the org is left in place.
+message DeleteRepoRequest { string org = 1; string repo = 2; }
+message DeleteRepoResponse { bool ok = 1; }
 
 // ForkBranchSession creates a NEW branch workspace from a parent session: the
 // gateway derives org/repo from the parent's name, requires `branch` to be a
@@ -74,6 +81,8 @@ message CreateFreeSessionRequest {
   string name = 1;
   string role = 2; // admin | explorer
   string model = 3;
+  // Optional agent language pinned at creation ("zh"/"en"; empty = tenant default).
+  string locale = 4;
 }
 message CreateFreeSessionResponse { string session = 1; string preset = 2; }
 
@@ -321,6 +330,52 @@ message CommitFilesResponse {
   string message = 2;
 }
 
+// ---- branch staging (amend semantics) ----
+//
+// A branch session's writes AMEND one synthetic "staging" commit (message
+// sentinel `ABCP_XXX`) instead of appending a commit per edit. BranchStatus
+// reports whether that placeholder currently carries staged changes; CommitStaged
+// rewinds it to a real message and opens a fresh (empty) staging commit.
+
+// BranchStatus reports a branch's staging state.
+message BranchStatusRequest {
+  string org = 1;
+  string repo = 2;
+  string branch = 3;
+}
+message BranchStatusResponse {
+  // HEAD's message is the staging placeholder.
+  bool placeholder = 1;
+  // The placeholder carries changes (its tree differs from its parent).
+  bool staged = 2;
+  // HEAD's sha.
+  string tip = 3;
+  // The sha an MR should merge (the placeholder's parent, else the tip).
+  string merge_tip = 4;
+}
+
+// CommitStaged rewinds the placeholder to `message` and opens a fresh empty
+// staging commit.
+message CommitStagedRequest {
+  string org = 1;
+  string repo = 2;
+  string branch = 3;
+  string message = 4;
+}
+message CommitStagedResponse { string sha = 1; }
+
+// ApplyFiles applies file operations to a branch's staging commit (amending the
+// placeholder when one is open, otherwise opening it with the change). This is
+// the write path for repo-write/edit/delete/port; it rewrites HEAD, so it never
+// touches the default branch.
+message ApplyFilesRequest {
+  string org = 1;
+  string repo = 2;
+  string branch = 3;
+  repeated CommitFileOp files = 4;
+}
+message ApplyFilesResponse { string sha = 1; }
+
 // Compare returns per-file patches between two refs (`base...head`).
 message CompareRequest {
   string org = 1;
@@ -336,6 +391,36 @@ message CompareFile {
   string patch = 5;
 }
 message CompareResponse { repeated CompareFile files = 1; }
+
+// Blame returns per-line authorship of one file at a ref. Forgejo has no blame
+// API, so the gateway computes it with go-git over a bare clone.
+message BlameRequest {
+  string org = 1;
+  string repo = 2;
+  string ref = 3;
+  string path = 4;
+}
+message BlameLine {
+  int32 line = 1; // 1-based line number
+  string sha = 2;
+  string author = 3;
+  string author_email = 4;
+  string date = 5;
+  string content = 6;
+}
+message BlameResponse { repeated BlameLine lines = 1; }
+
+// FileDiff returns the unified diff of ONE file between two refs. Forgejo's
+// compare API returns an empty `patch` field (1.22), so the gateway computes it
+// with go-git. An unchanged file yields an empty diff.
+message FileDiffRequest {
+  string org = 1;
+  string repo = 2;
+  string base = 3;
+  string head = 4;
+  string path = 5;
+}
+message FileDiffResponse { string diff = 1; }
 
 // CreateTag creates a tag at a target ref.
 message CreateTagRequest {
@@ -374,15 +459,56 @@ message ImportRepoRequest {
   // Explicit repo name; empty = derived from the URL's last path segment.
   string repo = 2;
   string url = 3;
-  // Import ONLY this ref (default: all branches + the source default branch).
+  // SOURCE ref to import as the new repo's `main`: a branch, a tag, or any
+  // revision. Empty = the source's HEAD branch. Only `main` is created.
   string ref = 4;
   string auth_user = 5;
   string auth_token = 6;
-  bool private = 7; // default true
+  bool private = 7; // ignored: imports are always public
   bool mirror = 8;
   string description = 9;
 }
 message ImportRepoResponse { RepoInfo repo = 1; }
+
+// ---- push mirrors (admin) ----
+// A push mirror continuously pushes this repo's branches to an external remote.
+// A repo may have MULTIPLE mirrors; HTTPS only.
+
+message PushMirrorInfo {
+  string remote_name = 1;     // Forgejo-assigned mirror id (use to delete)
+  string remote_address = 2;  // destination git URL
+  string interval = 3;        // periodic sync interval (e.g. "8h")
+  bool sync_on_commit = 4;    // push immediately on every commit
+  string branch_filter = 5;   // mirrored branch glob (empty = all)
+  string last_error = 6;      // last sync error (empty = ok)
+  string last_update = 7;     // last sync time
+  string created = 8;
+}
+
+message SetPushMirrorRequest {
+  string org = 1;
+  string repo = 2;
+  string remote_address = 3;  // https destination git URL
+  string remote_username = 4; // auth for a private destination (optional)
+  string remote_password = 5;
+  bool sync_on_commit = 6;
+  string interval = 7;        // Go duration, e.g. "8h" (empty = default)
+  string branch_filter = 8;
+}
+message SetPushMirrorResponse { PushMirrorInfo mirror = 1; }
+
+message ListPushMirrorsRequest {
+  string org = 1;
+  string repo = 2;
+}
+message ListPushMirrorsResponse { repeated PushMirrorInfo mirrors = 1; }
+
+message DeletePushMirrorRequest {
+  string org = 1;
+  string repo = 2;
+  string remote_name = 3; // the mirror's remote_name from List
+}
+message DeletePushMirrorResponse { bool ok = 1; }
 
 // ---- change requests (MRs) — the maintainer's ONLY path to change main ----
 
@@ -531,9 +657,37 @@ message BuildSandboxImageResponse {
   string log = 2;
 }
 
+// ImportImage mirrors an upstream image (public or, with credentials, private)
+// into the deployment registry under an org the caller owns, with a no-op
+// `FROM <source>` rebuild. The upstream config (entrypoint/env/...) is kept.
+message ImportImageRequest {
+  // Destination org (must be owned by the caller's tenant). The image lands at
+  // <registry>/<org>/<name>:<tag>.
+  string org = 1;
+  // Destination image name (single path segment).
+  string name = 2;
+  // Destination tag (e.g. the upstream version).
+  string tag = 3;
+  // Upstream image ref to mirror (e.g. docker.io/library/redis:7.4.2).
+  string source = 4;
+  // Basic-auth for a PRIVATE source registry (optional).
+  string auth_user = 5;
+  string auth_token = 6;
+}
+message ImportImageResponse {
+  string image_ref = 1;
+  string log = 2;
+}
+
 // ---- sandboxes (the gateway owns the k8s lifecycle in-process) ----
 
-message ListSandboxesRequest {}
+// A sandbox belongs to the SESSION that created it (annotation on the k8s
+// objects), so a session can enumerate and drive its own sandboxes. The tenant
+// remains the visibility boundary.
+message ListSandboxesRequest {
+  // Optional filter: only sandboxes bound to this session name.
+  string session = 1;
+}
 message SandboxInfo {
   string name = 1;
   string image = 2;
@@ -542,6 +696,9 @@ message SandboxInfo {
   string url = 5;
   string creator = 6;
   int64 created_at = 7;
+  // The session this sandbox is bound to (`org:repo:branch`, or a free-session
+  // name). Empty for legacy sandboxes created before session binding.
+  string session = 8;
 }
 message ListSandboxesResponse { repeated SandboxInfo sandboxes = 1; }
 
@@ -560,6 +717,9 @@ message CreateSandboxRequest {
   bool kvm = 6;
   // Request this many NVIDIA GPUs (0 = none; needs the GPU device plugin).
   int32 gpu_count = 7;
+  // The session this sandbox belongs to. Bound as an annotation so the sandbox
+  // can be enumerated/fanned out to per session.
+  string session = 8;
 }
 message CreateSandboxResponse { SandboxInfo sandbox = 1; }
 
@@ -639,6 +799,55 @@ message ServiceInfo {
   bool ready = 4;
   int32 replicas = 5;
   string url = 6; // http://<name>.<ns>.svc.cluster.local:<service_port>
+  string creator = 7; // owning tenant
+  // The session that deployed the service (empty = legacy / unbound).
+  string session = 8;
+  // Public, anonymous URL the service is reachable at from outside the cluster:
+  // https://<name>.<service_domain> (the cluster edge maps
+  // <name>.<ns>.<domain> to the service's port 80). Empty when the public
+  // domain could not be determined.
+  string public_url = 9;
+  // Every port this service exposes (one k8s Service per distinct `name`).
+  repeated ServicePortInfo ports = 10;
+  // Stage: "release" (long-lived, public) or "preview" (developer verification:
+  // session-bound, cluster-only, TTL-reclaimed).
+  string stage = 11;
+  // Pod diagnostics (best-effort): the pod phase, total container restarts and
+  // the first unhealthy container reason (e.g. CrashLoopBackOff).
+  string pod_phase = 12;
+  int32 restarts = 13;
+  string message = 14;
+  // Unix-millis TTL deadline of a preview service (0 = none).
+  int64 expires_at = 15;
+}
+
+// ServicePortInfo is one exposed port of a service.
+message ServicePortInfo {
+  // Service suffix ("" = the primary service `<name>`; else `<name>-<suffix>`).
+  string name = 1;
+  // Preset: tcp80 | tcp443 | udp443.
+  string preset = 2;
+  // k8s Service port (from the preset).
+  int32 port = 3;
+  // tcp | udp.
+  string protocol = 4;
+  // Container port this forwards to.
+  int32 target_port = 5;
+  // Anonymous public URL when this port is a tcp80 ingress
+  // (`https://<name>[-<suffix>].<ns>.<domain>`); empty otherwise.
+  string public_url = 6;
+}
+
+// ServicePortSpec declares one exposed port of a deployed service.
+message ServicePortSpec {
+  // Service suffix. "" = the primary service (`<name>`, publicly reachable as
+  // https://<name>.<domain>). A non-empty value creates a SIBLING service named
+  // `<name>-<suffix>` (for a second public endpoint).
+  string name = 1;
+  // Preset: tcp80 (public HTTP ingress) | tcp443 | udp443 (in-cluster only).
+  string preset = 2;
+  // Container port to forward to (0 = the request's container_port).
+  int32 target_port = 3;
 }
 
 message DeployServiceRequest {
@@ -661,14 +870,82 @@ message DeployServiceRequest {
   bool kvm = 10;
   // Request this many NVIDIA GPUs (0 = none; needs the GPU device plugin).
   int32 gpu_count = 11;
+  // Ports to expose. Empty = the default single public port (tcp80 ->
+  // container_port). Entries sharing a `name` merge into ONE k8s Service
+  // (multi-port); a second public endpoint (tcp80) needs a distinct `name`.
+  repeated ServicePortSpec services = 12;
 }
 message DeployServiceResponse { ServiceInfo service = 1; }
+
+// PreviewService deploys a PREVIEW service for verification: session-bound,
+// cluster-only (no public URL), and reclaimed on session end / TTL.
+message PreviewServiceRequest {
+  // Image to run as-is.
+  string image = 2;
+  // Base name (a DNS-1123 label); the gateway prefixes it with the session slug.
+  string name = 3;
+  int32 container_port = 4;
+  map<string, string> env = 5;
+  string cpu = 6;
+  string memory = 7;
+  repeated string command = 8;
+  bool kvm = 9;
+  int32 gpu_count = 10;
+  // Ports to expose (cluster-internal only). Empty = one port 80 -> container.
+  repeated ServicePortSpec services = 11;
+  // TTL in seconds (0 = the deployment default).
+  int32 ttl_seconds = 12;
+}
+message PreviewServiceResponse { ServiceInfo service = 1; }
 
 message ListServicesRequest {}
 message ListServicesResponse { repeated ServiceInfo services = 1; }
 
 message DeleteServiceRequest { string name = 1; }
 message DeleteServiceResponse { bool ok = 1; }
+
+// ---- service logs ----
+message ServiceLogsRequest {
+  string name = 1;
+  // Number of trailing lines (0 = the deployment default).
+  int64 tail_lines = 2;
+  // Read the PREVIOUS container instance (the crash that restarted it).
+  bool previous = 3;
+}
+message ServiceLogsResponse { repeated string lines = 1; }
+
+message WatchServiceLogsRequest {
+  string name = 1;
+  bool previous = 2;
+}
+message WatchServiceLogsResponse {
+  // Incremental log chunk (may contain several lines).
+  string output = 1;
+  // Terminal event (always the last message): the stream ended.
+  bool done = 2;
+  // Reason the stream ended (e.g. container exit); empty on a clean end.
+  string error = 3;
+}
+
+// BuildPreviewImage builds a PREVIEW image from a repository Dockerfile. The
+// image name is FORCED to the repo name and the tag is FORCED to
+// `preview-<branch>-<sha>` (the caller may add a suffix), so a preview build
+// can never overwrite a release tag.
+message BuildPreviewImageRequest {
+  string org = 1;
+  string repo = 2;
+  string ref = 3;
+  string dockerfile = 4;
+  string context = 5;
+  // Optional tag suffix appended after the forced preview prefix.
+  string tag_suffix = 6;
+  map<string, string> build_args = 7;
+}
+message BuildPreviewImageResponse {
+  string image_ref = 1;
+  string log = 2;
+  string tag = 3;
+}
 
 // ---- settings (NARROWED) ----
 
@@ -694,6 +971,8 @@ service BranchSessionService {
   // DeleteBranch removes a repo branch AND its branch session (session +
   // sandboxes cascade); requires the branch owner (non-main).
   rpc DeleteBranch(DeleteBranchRequest) returns (DeleteBranchResponse);
+  // DeleteRepo removes a repo AND all its branch sessions (admin).
+  rpc DeleteRepo(DeleteRepoRequest) returns (DeleteRepoResponse);
   // standalone sessions
   rpc CreateFreeSession(CreateFreeSessionRequest) returns (CreateFreeSessionResponse);
   // git browse (read-only) + ensure
@@ -720,12 +999,21 @@ service BranchSessionService {
   rpc RepoMeta(RepoMetaRequest) returns (RepoMetaResponse);
   rpc Contents(ContentsRequest) returns (ContentsResponse);
   rpc CommitFiles(CommitFilesRequest) returns (CommitFilesResponse);
+  rpc BranchStatus(BranchStatusRequest) returns (BranchStatusResponse);
+  rpc CommitStaged(CommitStagedRequest) returns (CommitStagedResponse);
+  rpc ApplyFiles(ApplyFilesRequest) returns (ApplyFilesResponse);
   rpc Compare(CompareRequest) returns (CompareResponse);
+  rpc Blame(BlameRequest) returns (BlameResponse);
+  rpc FileDiff(FileDiffRequest) returns (FileDiffResponse);
   rpc CreateTag(CreateTagRequest) returns (CreateTagResponse);
   rpc CreateBranch(CreateBranchRequest) returns (CreateBranchResponse);
   rpc Archive(ArchiveRequest) returns (ArchiveResponse);
   // ImportRepo migrates an EXTERNAL git repository into an org (admin).
   rpc ImportRepo(ImportRepoRequest) returns (ImportRepoResponse);
+  // push mirrors (admin): push this repo to external remotes continuously
+  rpc SetPushMirror(SetPushMirrorRequest) returns (SetPushMirrorResponse);
+  rpc ListPushMirrors(ListPushMirrorsRequest) returns (ListPushMirrorsResponse);
+  rpc DeletePushMirror(DeletePushMirrorRequest) returns (DeletePushMirrorResponse);
   // change requests (read-only in this surface: List/Get/diff/comments)
   rpc ListMRs(ListMRsRequest) returns (ListMRsResponse);
   rpc GetMR(GetMRRequest) returns (GetMRResponse);
@@ -740,6 +1028,7 @@ service BranchSessionService {
   // OCI images
   rpc ListOCIImages(ListOCIImagesRequest) returns (ListOCIImagesResponse);
   rpc BuildSandboxImage(BuildSandboxImageRequest) returns (BuildSandboxImageResponse);
+  rpc ImportImage(ImportImageRequest) returns (ImportImageResponse);
   // sandboxes
   rpc ListSandboxes(ListSandboxesRequest) returns (ListSandboxesResponse);
   rpc CreateSandbox(CreateSandboxRequest) returns (CreateSandboxResponse);
@@ -752,15 +1041,24 @@ service BranchSessionService {
   rpc WatchSandboxJob(WatchSandboxJobRequest) returns (stream WatchSandboxJobResponse);
   // services (long-lived Deployments)
   rpc DeployService(DeployServiceRequest) returns (DeployServiceResponse);
+  // PreviewService deploys a session-bound, cluster-only preview (developer).
+  rpc PreviewService(PreviewServiceRequest) returns (PreviewServiceResponse);
   rpc ListServices(ListServicesRequest) returns (ListServicesResponse);
   rpc DeleteService(DeleteServiceRequest) returns (DeleteServiceResponse);
+  // service logs (read a service's container logs; seam for a log backend)
+  rpc ServiceLogs(ServiceLogsRequest) returns (ServiceLogsResponse);
+  rpc WatchServiceLogs(WatchServiceLogsRequest) returns (stream WatchServiceLogsResponse);
+  // BuildPreviewImage builds a preview-tagged image (forced name/tag).
+  rpc BuildPreviewImage(BuildPreviewImageRequest) returns (BuildPreviewImageResponse);
 
   // ---- forwarded agent surface (minimal; no policy RPCs) ----
   rpc Health(agent.v1.HealthRequest) returns (agent.v1.HealthResponse);
   rpc GetIdentity(agent.v1.GetIdentityRequest) returns (agent.v1.GetIdentityResponse);
   rpc ListSessions(agent.v1.ListSessionsRequest) returns (agent.v1.ListSessionsResponse);
   rpc GetSession(agent.v1.GetSessionRequest) returns (agent.v1.GetSessionResponse);
-  rpc DeleteSession(agent.v1.DeleteSessionRequest) returns (agent.v1.DeleteSessionResponse);
+  // NOTE: session deletion is NOT forwarded verbatim. Use DeleteBranchSession
+  // (the single, authorized, cascading entry point) so ownership is checked and
+  // sandboxes/free-session rows are reclaimed consistently.
   rpc ListMessages(agent.v1.ListMessagesRequest) returns (agent.v1.ListMessagesResponse);
   rpc Prompt(agent.v1.PromptRequest) returns (stream agent.v1.PromptResponse);
   rpc WatchSession(agent.v1.WatchSessionRequest) returns (stream agent.v1.WatchSessionResponse);

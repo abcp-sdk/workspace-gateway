@@ -67,6 +67,15 @@ func (s *Store) OwnsRepo(tenant, org, repo string) (bool, error) {
 	return n > 0, err
 }
 
+// RemoveRepo drops tenant's ownership of org/repo (idempotent).
+func (s *Store) RemoveRepo(tenant, org, repo string) error {
+	_, err := s.db.Exec(
+		`DELETE FROM repo_owners WHERE tenant=? AND org=? AND repo=?`,
+		tenant, org, repo,
+	)
+	return err
+}
+
 // AddOrg records that tenant owns org (idempotent).
 func (s *Store) AddOrg(tenant, org string) error {
 	_, err := s.db.Exec(
@@ -84,6 +93,20 @@ func (s *Store) OwnsOrg(tenant, org string) (bool, error) {
 		tenant, org,
 	).Scan(&n)
 	return n > 0, err
+}
+
+// OrgOwner returns the tenant that owns org ("" when unowned). An org is
+// globally unique, so at most one row matches.
+func (s *Store) OrgOwner(org string) (string, error) {
+	var tenant string
+	err := s.db.QueryRow(`SELECT tenant FROM org_owners WHERE org=? LIMIT 1`, org).Scan(&tenant)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return tenant, nil
 }
 
 // ListOrgs returns every org tenant owns.

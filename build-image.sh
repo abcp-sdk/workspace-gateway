@@ -28,7 +28,7 @@ buildctl --addr "${BUILDKIT}" build \
   --opt "build-arg:REGISTRY=${REGISTRY}/root" \
   --opt "build-arg:HTTP_PROXY=${PROXY}" \
   --opt "build-arg:HTTPS_PROXY=${PROXY}" \
-  --opt "build-arg:NO_PROXY=localhost,127.0.0.1,.svc.cluster.local,.svc,git.agent.fenjin.org,10.199.64.20" \
+  --opt "build-arg:NO_PROXY=localhost,127.0.0.1,.svc.cluster.local,.svc,10.199.64.20" \
   --output "type=docker,name=${NAMESPACE}/${NAME}:${TAG},dest=${WORK}/image.tar" \
   --progress plain
 

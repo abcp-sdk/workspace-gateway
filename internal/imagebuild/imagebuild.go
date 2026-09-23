@@ -11,7 +11,9 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -27,8 +29,11 @@ import (
 type Builder struct {
 	// Addr is the buildkitd address, e.g. tcp://buildkitd.agent.svc.cluster.local:1234.
 	Addr string
-	// RegistryHost is the registry host, e.g. git.agent.fenjin.org.
+	// RegistryHost is the registry host, e.g. git.agent.svc.cluster.local.
 	RegistryHost string
+	// RegistryScheme is the scheme for the registry host ("https" default;
+	// "http" for the in-cluster plaintext registry).
+	RegistryScheme string
 	// DeriveRepo is the repo path for derived sandbox images (default
 	// "root/sandbox"), pushed as <host>/<DeriveRepo>:<hash>.
 	DeriveRepo string
@@ -76,6 +81,14 @@ const deriveVersion = "v2" // v2: use the worker's default ~/workspace
 // FullRef is the destination reference for a repo path + tag.
 func (b *Builder) FullRef(repo, tag string) string {
 	return strings.TrimRight(b.RegistryHost, "/") + "/" + strings.Trim(repo, "/") + ":" + tag
+}
+
+// scheme is the registry scheme (https unless explicitly set to http).
+func (b *Builder) scheme() string {
+	if b.RegistryScheme != "" {
+		return b.RegistryScheme
+	}
+	return "https"
 }
 
 // Build runs buildctl and pushes the image. It returns the destination ref and
@@ -174,9 +187,171 @@ func (b *Builder) Derive(ctx context.Context, baseImage string) (ref string, bui
 	return ref, true, nil
 }
 
+// ImportRequest mirrors one upstream image into the deployment registry.
+type ImportRequest struct {
+	// Source is the upstream image ref (e.g. docker.io/library/redis:7.4.2).
+	Source string
+	// Repo is the destination repo path under the registry host, e.g.
+	// "<org>/<image>".
+	Repo string
+	// Tag is the destination tag.
+	Tag string
+	// AuthUser/AuthToken authenticate a PRIVATE source registry (optional).
+	AuthUser  string
+	AuthToken string
+}
+
+// Import re-serves an upstream image under the deployment registry with a no-op
+// `FROM <Source>` build, preserving the upstream config (entrypoint, env, ...).
+// The source may be private: its credentials are merged into a temporary Docker
+// config alongside the deployment's own, so the push still authenticates.
+func (b *Builder) Import(ctx context.Context, req ImportRequest) (Result, error) {
+	if req.Source == "" || req.Repo == "" || req.Tag == "" {
+		return Result{}, errors.New("source, repo and tag required")
+	}
+	ref := b.FullRef(req.Repo, req.Tag)
+	dir, err := os.MkdirTemp("", "import-")
+	if err != nil {
+		return Result{}, err
+	}
+	defer os.RemoveAll(dir)
+	cf := "ARG BASE_IMAGE\nFROM ${BASE_IMAGE}\n"
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte(cf), 0o644); err != nil {
+		return Result{}, err
+	}
+
+	args := []string{
+		"--frontend", "dockerfile.v0",
+		"--local", "context=" + dir,
+		"--local", "dockerfile=" + dir,
+		"--opt", "filename=Dockerfile",
+		"--opt", "build-arg:BASE_IMAGE=" + req.Source,
+		"--output", "type=image,name=" + ref + ",push=true",
+	}
+
+	// A private source needs credentials the buildkit client can present. Merge
+	// the source registry's Basic auth into a copy of the deployment's Docker
+	// config (which carries the destination push creds), and run THIS build with
+	// DOCKER_CONFIG pointed at the copy.
+	env := []string(nil)
+	cleanup := func() {}
+	if req.AuthUser != "" || req.AuthToken != "" {
+		merged, err := b.mergeDockerConfig(req.Source, req.AuthUser, req.AuthToken)
+		if err != nil {
+			return Result{}, err
+		}
+		cleanup = func() { _ = os.RemoveAll(merged) }
+		env = append(env, "DOCKER_CONFIG="+merged)
+	}
+	defer cleanup()
+	log, err := b.runEnv(ctx, env, args)
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{ImageRef: ref, Log: log}, nil
+}
+
+// dockerConfigAuth reads Basic-auth for a registry host from the client's
+// Docker config (DOCKER_CONFIG/config.json), which the gateway mounts. It lets
+// ImageExists authenticate against the in-cluster registry without a separate
+// credential env.
+func (b *Builder) dockerConfigAuth(host string) (user, pass string, ok bool) {
+	dir := os.Getenv("DOCKER_CONFIG")
+	if dir == "" {
+		return "", "", false
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "config.json"))
+	if err != nil {
+		return "", "", false
+	}
+	var cfg struct {
+		Auths map[string]struct {
+			Auth string `json:"auth"`
+		} `json:"auths"`
+	}
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return "", "", false
+	}
+	// The key may be the bare host or include a scheme/path; match either.
+	for _, key := range []string{host, "https://" + host, "http://" + host, "https://" + host + "/v1/", "https://" + host + "/v2/", "http://" + host + "/v2/"} {
+		entry, found := cfg.Auths[key]
+		if !found || entry.Auth == "" {
+			continue
+		}
+		dec, err := base64.StdEncoding.DecodeString(entry.Auth)
+		if err != nil {
+			return "", "", false
+		}
+		u, p, found := strings.Cut(string(dec), ":")
+		if !found {
+			return "", "", false
+		}
+		return u, p, true
+	}
+	return "", "", false
+}
+
+// registryHostOf derives the registry host from an image ref (docker.io when no
+// explicit host is present). The first path segment is a registry host only
+// when it contains a '.' or ':' AND a path follows; `redis:7` is a tag, not a
+// host.
+func registryHostOf(ref string) string {
+	slash := strings.Index(ref, "/")
+	if slash < 0 {
+		return "docker.io"
+	}
+	first := ref[:slash]
+	if strings.ContainsAny(first, ".:") || first == "localhost" {
+		return first
+	}
+	return "docker.io"
+}
+
+// mergeDockerConfig writes a temp DOCKER_CONFIG whose config.json is the
+// deployment's own plus a Basic-auth entry for the source registry. It returns
+// the temp dir (to be removed by the caller).
+func (b *Builder) mergeDockerConfig(srcRef, user, token string) (string, error) {
+	cfg := map[string]any{"auths": map[string]any{}}
+	if p := os.Getenv("DOCKER_CONFIG"); p != "" {
+		if raw, err := os.ReadFile(filepath.Join(p, "config.json")); err == nil {
+			_ = json.Unmarshal(raw, &cfg)
+		}
+	}
+	auths, _ := cfg["auths"].(map[string]any)
+	if auths == nil {
+		auths = map[string]any{}
+		cfg["auths"] = auths
+	}
+	host := registryHostOf(srcRef)
+	enc := base64.StdEncoding.EncodeToString([]byte(user + ":" + token))
+	for _, key := range []string{host, "https://" + host, "https://" + host + "/v1/", "https://" + host + "/v2/"} {
+		auths[key] = map[string]any{"auth": enc}
+	}
+	dir, err := os.MkdirTemp("", "dockerconfig-")
+	if err != nil {
+		return "", err
+	}
+	out, err := json.Marshal(cfg)
+	if err != nil {
+		_ = os.RemoveAll(dir)
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), out, 0o600); err != nil {
+		_ = os.RemoveAll(dir)
+		return "", err
+	}
+	return dir, nil
+}
+
 // run executes buildctl with the given args (after --addr build) and returns
 // the captured log tail.
 func (b *Builder) run(ctx context.Context, args []string) (string, error) {
+	return b.runEnv(ctx, nil, args)
+}
+
+// runEnv is run with extra environment variables (e.g. a per-build
+// DOCKER_CONFIG for private-source credentials).
+func (b *Builder) runEnv(ctx context.Context, env []string, args []string) (string, error) {
 	buildctl := b.Buildctl
 	if buildctl == "" {
 		buildctl = "buildctl"
@@ -196,6 +371,9 @@ func (b *Builder) run(ctx context.Context, args []string) (string, error) {
 
 	var out bytes.Buffer
 	cmd := exec.CommandContext(bctx, buildctl, full...)
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	if err := cmd.Run(); err != nil {
@@ -222,13 +400,15 @@ func (b *Builder) ImageExists(ctx context.Context, ref string) bool {
 	if host == "" {
 		host = strings.SplitN(ref, "/", 2)[0]
 	}
-	u := "https://" + host + "/v2/" + repo + "/manifests/" + tag
+	u := b.scheme() + "://" + host + "/v2/" + repo + "/manifests/" + tag
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, u, nil)
 	if err != nil {
 		return false
 	}
 	if b.RegistryUser != "" {
 		req.SetBasicAuth(b.RegistryUser, b.RegistryPass)
+	} else if user, pass, ok := b.dockerConfigAuth(host); ok {
+		req.SetBasicAuth(user, pass)
 	}
 	req.Header.Set("Accept", "application/vnd.docker.distribution.manifest.v2+json")
 	hc := &http.Client{Timeout: 15 * time.Second}

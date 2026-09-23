@@ -7,10 +7,36 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/abcp-sdk/workspace-gateway/internal/runtimeprofiles"
 )
 
 func newTestClient() *Client {
 	return NewWithClientset(fake.NewSimpleClientset(), Config{Namespace: "worker"})
+}
+
+func TestCreateSetsRuntimeClass(t *testing.T) {
+	c := newTestClient()
+	ctx := context.Background()
+	// A GPU profile renders a RuntimeClass; the pod must carry it, or the
+	// driver devices are never mounted.
+	_, _, err := c.Create(ctx, Spec{
+		Name: "gpu", Image: "img:1", Creator: "alice",
+		Runtime: runtimeprofiles.DefaultSettings().Render(false, 1),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	pod, err := c.cs.CoreV1().Pods("worker").Get(ctx, resourceName("gpu"), metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pod.Spec.RuntimeClassName == nil || *pod.Spec.RuntimeClassName != "nvidia" {
+		t.Fatalf("runtimeClassName = %v, want nvidia", pod.Spec.RuntimeClassName)
+	}
+	if got := pod.Spec.Containers[0].Resources.Limits["nvidia.com/gpu"]; got.String() != "1" {
+		t.Fatalf("gpu limit = %v", got)
+	}
 }
 
 func TestCreateListResolveDelete(t *testing.T) {

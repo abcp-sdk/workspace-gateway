@@ -60,8 +60,13 @@ func TestDeveloperProposesNotMerges(t *testing.T) {
 
 func TestExplorer(t *testing.T) {
 	e := ToolsFor(Explorer)
-	if has(e, "sandbox-exec") || has(e, "repo-write") {
-		t.Fatal("explorer: no sandbox, no write")
+	// Explorer MAY run a sandbox for analysis...
+	if !has(e, "sandbox-exec") || !has(e, "sandbox-checkout") {
+		t.Fatal("explorer: sandbox analysis tools missing")
+	}
+	// ...but has NO path back into a repository.
+	if has(e, "sandbox-port") || has(e, "repo-write") || has(e, "repo-edit") || has(e, "repo-commit") {
+		t.Fatal("explorer: must have no repo write path")
 	}
 	if !has(e, "repo-read") {
 		t.Fatal("explorer must read")
@@ -73,8 +78,73 @@ func TestAdminCreatesRepoNoSandbox(t *testing.T) {
 	if !has(a, "repo-create-org") || !has(a, "repo-create-repo") {
 		t.Fatal("admin must create org/repo")
 	}
+	// Admin may run long-lived services but has NO sandbox and no repo writes.
+	if !has(a, "service-deploy") || !has(a, "service-list") {
+		t.Fatal("admin must deploy/list services")
+	}
+	if !has(a, "oci-import") || !has(a, "repo-import") {
+		t.Fatal("admin must import repos and images")
+	}
+	if !has(a, "repo-set-push-mirror") || !has(a, "repo-list-push-mirrors") || !has(a, "repo-delete-push-mirror") {
+		t.Fatal("admin must manage push mirrors")
+	}
 	if has(a, "sandbox-exec") || has(a, "repo-write") {
 		t.Fatal("admin: no sandbox, no writes")
+	}
+}
+
+func TestPreviewAndLogsAvailability(t *testing.T) {
+	// developer: may build a preview image + run a preview service + read logs.
+	d := ToolsFor(Developer)
+	for _, want := range []string{"repo-build-preview", "service-preview", "service-logs"} {
+		if !has(d, want) {
+			t.Fatalf("developer must have %q", want)
+		}
+	}
+	// developer must NOT deploy a release service.
+	if has(d, "service-deploy") {
+		t.Fatal("developer must not deploy a release service")
+	}
+	// explorer: read-only observability.
+	e := ToolsFor(Explorer)
+	if !has(e, "service-list") || !has(e, "service-logs") {
+		t.Fatal("explorer must list services and read logs")
+	}
+	if has(e, "service-preview") || has(e, "service-deploy") || has(e, "repo-build-preview") {
+		t.Fatal("explorer must not deploy or build")
+	}
+	// maintainer keeps release deploy + logs.
+	m := ToolsFor(Maintainer)
+	if !has(m, "service-deploy") || !has(m, "service-logs") {
+		t.Fatal("maintainer must deploy release services and read logs")
+	}
+}
+
+func TestOnlyAdminRemovesRepo(t *testing.T) {
+	if !has(ToolsFor(Admin), "repo-remove") {
+		t.Fatal("admin must remove repos")
+	}
+	for _, r := range []Role{Maintainer, Developer, Explorer} {
+		if has(ToolsFor(r), "repo-remove") {
+			t.Fatalf("%s must not remove repos (admin-only)", r)
+		}
+	}
+}
+
+func TestOnlyAdminManagesPushMirrors(t *testing.T) {
+	mirrorTools := []string{"repo-set-push-mirror", "repo-list-push-mirrors", "repo-delete-push-mirror"}
+	a := ToolsFor(Admin)
+	for _, want := range mirrorTools {
+		if !has(a, want) {
+			t.Fatalf("admin must have %q", want)
+		}
+	}
+	for _, r := range []Role{Maintainer, Developer, Explorer} {
+		for _, forbidden := range mirrorTools {
+			if has(ToolsFor(r), forbidden) {
+				t.Fatalf("%s must not have %q (admin-only)", r, forbidden)
+			}
+		}
 	}
 }
 
@@ -94,6 +164,21 @@ func TestNoToolsNeverEmpty(t *testing.T) {
 	for _, r := range []Role{Admin, Maintainer, Developer, Explorer} {
 		if len(ToolsFor(r)) == 0 {
 			t.Fatalf("%s tools must not be empty (empty == all)", r)
+		}
+	}
+}
+
+func TestValidServiceName(t *testing.T) {
+	good := []string{"app", "my-app", "a1", "web2-3"}
+	for _, s := range good {
+		if !ValidServiceName(s) {
+			t.Fatalf("%q should be a valid service name", s)
+		}
+	}
+	bad := []string{"", "App", "a_b", "a.b", "a/b", "-a", "a-", "a b", strings.Repeat("a", 64)}
+	for _, s := range bad {
+		if ValidServiceName(s) {
+			t.Fatalf("%q should NOT be a valid service name", s)
 		}
 	}
 }

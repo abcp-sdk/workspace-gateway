@@ -5,7 +5,7 @@
 # (see /home/user/easylab-platform/easyworker/images). It differs on purpose:
 #
 #   * Registry/namespace default to the workspace stack
-#     (git.agent.fenjin.org/agent-toolchain) with NATIVE `<lang>:<distro>` tags.
+#     (git.agent.svc.cluster.local/agent-toolchain) with NATIVE `<lang>:<distro>` tags.
 #   * NO egress MITM CA and NO worker binary are baked in. The workspace has no
 #     easylab egress sidecar, and the gateway injects easyworker into ANY base
 #     image at sandbox launch time (derive-on-launch). These are plain dev
@@ -34,11 +34,11 @@ BUILD_PROXY="${BUILD_PROXY:-http://mihomo.develop.svc.cluster.local:7890}"
 FORGEJO_USER="${FORGEJO_USER:-root}"
 FORGEJO_PASS="${FORGEJO_PASS:-devpassword}"
 
-# The registry and buildkitd MUST bypass the HTTP proxy: skopeo pushing to
-# git.agent.fenjin.org through mihomo returns a bogus 530, and buildkitd is an
+# The registry and buildkitd MUST bypass the HTTP proxy: skopeo pushing to the
+# in-cluster registry through mihomo returns a bogus 530, and buildkitd is an
 # in-cluster ClusterIP. Force these onto NO_PROXY regardless of the ambient
-# value (which here does NOT contain fenjin.org).
-for _h in git.agent.fenjin.org .fenjin.org .nip.io 10.199.64.20; do
+# value.
+for _h in .svc.cluster.local .svc 10.199.64.20; do
   case ",${NO_PROXY}," in *",${_h},"*) ;; *) NO_PROXY="${NO_PROXY:+${NO_PROXY},}${_h}" ;; esac
 done
 no_proxy="${NO_PROXY}"

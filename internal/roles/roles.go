@@ -69,12 +69,15 @@ var repoReadTools = []string{
 
 // Repo propose tools: write to a NON-main branch and open/comment MRs. Includes
 // syncing the branch with main (`repo-branch-sync`) and restoring a file
-// (`repo-restore`) so a developer can resolve conflicts in place.
+// (`repo-restore`) so a developer can resolve conflicts in place. A developer
+// can also build a PREVIEW image of its branch and run a PREVIEW service to
+// verify it, and read that service's logs.
 var repoProposeTools = []string{
 	"repo-write", "repo-edit", "repo-delete", "repo-commit",
 	"repo-branch-create", "repo-branch-sync", "repo-restore",
 	"repo-mr-create", "repo-mr-list", "repo-mr-comment",
 	"repo-mail-send",
+	"repo-build-preview", "service-preview", "service-logs",
 }
 
 // Repo review tools: the maintainer reviews and merges MRs, creates the
@@ -84,11 +87,20 @@ var repoReviewTools = []string{
 	"repo-branch-create", "repo-tag-create", "repo-build-image",
 	"repo-mr-list", "repo-mr-comment", "repo-mr-merge",
 	"repo-mail-send",
-	"service-deploy", "service-list", "service-delete",
+	"service-deploy", "service-list", "service-delete", "service-logs",
+	"repo-build-preview", "service-preview",
 }
 
-// Admin tools: create org/repo only.
-var adminTools = []string{"repo-create-org", "repo-create-repo", "repo-import"}
+// Admin tools: create org/repo, import repos AND images, configure push
+// mirrors, deploy services, and browse the image catalog (an admin has no
+// sandbox but manages the tenant's shared resources).
+var adminTools = []string{
+	"repo-create-org", "repo-create-repo", "repo-import", "repo-remove",
+	"repo-set-push-mirror", "repo-list-push-mirrors", "repo-delete-push-mirror",
+	"list-oci-images", "oci-import",
+	"service-deploy", "service-list", "service-delete", "service-logs",
+	"repo-build-preview", "service-preview",
+}
 
 // ToolsFor returns a role's preset whitelist. The agent treats an EMPTY
 // whitelist as "all tools", so every role returns a non-empty list.
@@ -105,8 +117,10 @@ func ToolsFor(r Role) []string {
 		// Work on its branch (incl. sandbox-port), propose MRs, sandbox.
 		return concat(generalTools, repoReadTools, repoProposeTools, sandboxBase, []string{"sandbox-port"})
 	case Explorer:
-		// Read every visible repo only; no sandbox, no writes.
-		return concat(generalTools, repoReadTools)
+		// Read every visible repo; may run a sandbox for analysis, but has NO
+		// tool that writes back to a repo (no repo-write/edit/commit, no
+		// sandbox-port). May read services + their logs (observability only).
+		return concat(generalTools, repoReadTools, sandboxBase, []string{"service-list", "service-logs"})
 	}
 	return concat(generalTools, repoReadTools)
 }
@@ -124,6 +138,17 @@ func CanMerge(r Role) bool { return r == Maintainer }
 
 // CanCreateRepo reports whether a role may create org/repo.
 func CanCreateRepo(r Role) bool { return r == Admin }
+
+// ---- service naming ----
+
+// dnsLabelRe is a DNS-1123 label (RFC 1123): lowercase alphanumerics and '-',
+// starting/ending with an alphanumeric, at most 63 chars. Service names must
+// satisfy this because a service is exposed publicly as
+// `<name>.<ns>.<domain>` — an invalid label breaks DNS/TLS for that host.
+var dnsLabelRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
+
+// ValidServiceName reports whether s is a legal service name (a DNS-1123 label).
+func ValidServiceName(s string) bool { return dnsLabelRe.MatchString(s) }
 
 // ---- session naming ----
 

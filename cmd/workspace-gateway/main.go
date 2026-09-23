@@ -16,6 +16,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"connectrpc.com/connect"
@@ -23,6 +24,7 @@ import (
 	wsv1connect "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1/wsv1connect"
 	"github.com/abcp-sdk/workspace-gateway/internal/agentclient"
 	"github.com/abcp-sdk/workspace-gateway/internal/forgejo"
+	"github.com/abcp-sdk/workspace-gateway/internal/idlewatch"
 	"github.com/abcp-sdk/workspace-gateway/internal/imagebuild"
 	"github.com/abcp-sdk/workspace-gateway/internal/members"
 	"github.com/abcp-sdk/workspace-gateway/internal/provision"
@@ -31,6 +33,8 @@ import (
 	"github.com/abcp-sdk/workspace-gateway/internal/sandboxreaper"
 	"github.com/abcp-sdk/workspace-gateway/internal/servicesmgr"
 	"github.com/abcp-sdk/workspace-gateway/internal/workspacesvc"
+
+	natstransport "github.com/abcp-sdk/abc-protocol-go/v2/transport/nats"
 )
 
 func envOr(k, def string) string {
@@ -38,6 +42,20 @@ func envOr(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// envOrInt parses an int env var; unset/invalid falls back to def.
+func envOrInt(k string, def int) int {
+	v := os.Getenv(k)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		log.Printf("warn: invalid int %s=%q, using %d", k, v, def)
+		return def
+	}
+	return n
 }
 
 // envOrDuration parses a duration env var (Go syntax, e.g. "24h", "10m"); an
@@ -62,7 +80,8 @@ func main() {
 	gitToken := os.Getenv("FORGEJO_TOKEN")
 	db := envOr("GATEWAY_DB", "workspace-gateway.db")
 	sandboxNS := envOr("SANDBOX_NAMESPACE", "worker")
-	registryHost := envOr("IMAGE_REGISTRY_HOST", "git.agent.fenjin.org")
+	registryHost := envOr("IMAGE_REGISTRY_HOST", "git.agent.svc.cluster.local")
+	registryScheme := envOr("IMAGE_REGISTRY_SCHEME", "http")
 	toolchainOrg := envOr("TOOLCHAIN_ORG", "agent-toolchain")
 	defaultBase := envOr("DEFAULT_BASE_IMAGE", registryHost+"/"+toolchainOrg+"/toolchain-base:debian-trixie")
 
@@ -115,18 +134,24 @@ func main() {
 		Sandbox:  sbx,
 		Services: services,
 		Builder: &imagebuild.Builder{
-			Addr:         envOr("BUILDKIT_ADDR", "tcp://buildkitd.agent.svc.cluster.local:1234"),
-			RegistryHost: registryHost,
-			DeriveRepo:   envOr("DERIVE_REPO", "root/sandbox"),
-			WorkerBin:    envOr("WORKER_BIN", "/usr/local/lib/easyworker/easyworker"),
-			RegistryUser: os.Getenv("FORGEJO_USER"),
-			RegistryPass: os.Getenv("FORGEJO_PASSWORD"),
+			Addr:           envOr("BUILDKIT_ADDR", "tcp://buildkitd.agent.svc.cluster.local:1234"),
+			RegistryHost:   registryHost,
+			RegistryScheme: registryScheme,
+			DeriveRepo:     envOr("DERIVE_REPO", "root/sandbox"),
+			WorkerBin:      envOr("WORKER_BIN", "/usr/local/lib/easyworker/easyworker"),
+			RegistryUser:   os.Getenv("FORGEJO_USER"),
+			RegistryPass:   os.Getenv("FORGEJO_PASSWORD"),
 		},
-		Runtime:       runtime,
-		DefaultBase:   defaultBase,
-		ToolchainOrg:  toolchainOrg,
-		ServiceToken:  os.Getenv("GATEWAY_SERVICE_TOKEN"),
-		ServiceTenant: envOr("GATEWAY_SERVICE_TENANT", "workspace-extension"),
+		Runtime:             runtime,
+		DefaultBase:         defaultBase,
+		ToolchainOrg:        toolchainOrg,
+		ServiceToken:        os.Getenv("GATEWAY_SERVICE_TOKEN"),
+		ServiceTenant:       envOr("GATEWAY_SERVICE_TENANT", "workspace-extension"),
+		GitCloneDir:         envOr("GIT_CLONE_DIR", "/data/git-clones"),
+		SandboxNamespace:    sandboxNS,
+		PublicServiceDomain: os.Getenv("PUBLIC_SERVICE_DOMAIN"),
+		PreviewTTL:          envOrDuration("SERVICE_PREVIEW_TTL", 2*time.Hour),
+		ServiceLogTail:      int64(envOrInt("SERVICE_LOG_TAIL", 500)),
 	})
 
 	// Reclaim idle sandboxes: no worker jobs for SANDBOX_IDLE_TTL (default 24h).
@@ -137,6 +162,46 @@ func main() {
 			Interval: envOrDuration("SANDBOX_REAP_INTERVAL", 10*time.Minute),
 		}
 		go reaper.Run(context.Background())
+	}
+
+	// Reclaim expired PREVIEW services (developer verification environments).
+	if ttl := envOrDuration("SERVICE_PREVIEW_TTL", 2*time.Hour); ttl > 0 {
+		interval := envOrDuration("SERVICE_PREVIEW_REAP_INTERVAL", 10*time.Minute)
+		go func() {
+			t := time.NewTicker(interval)
+			defer t.Stop()
+			for range t.C {
+				if names, err := svc.ReapPreviewServices(context.Background()); err != nil {
+					log.Printf("warn: preview reaper: %v", err)
+				} else if len(names) > 0 {
+					log.Printf("preview reaper: reclaimed %v", names)
+				}
+			}
+		}()
+	}
+
+	// Nudge stalled sessions: a session that is idle, quiet for IDLEWATCH_AFTER
+	// (default 1h) and still has unfinished todos gets a mailbox `trigger`.
+	if envOr("IDLEWATCH_ENABLED", "true") == "true" {
+		if natsURL := os.Getenv("NATS_URL"); natsURL != "" {
+			if nbus, err := natstransport.Connect(natsURL); err != nil {
+				log.Printf("warn: idlewatch: nats connect: %v", err)
+			} else {
+				watch := &idlewatch.Watchdog{
+					Agent:        ac.Raw(),
+					Admin:        ac.Admin(),
+					AdminToken:   os.Getenv("AGENT_ADMIN_TOKEN"),
+					ServiceToken: os.Getenv("GATEWAY_SERVICE_TOKEN"),
+					Bus:          nbus,
+					IdleAfter:    envOrDuration("IDLEWATCH_AFTER", time.Hour),
+					Interval:     envOrDuration("IDLEWATCH_INTERVAL", 5*time.Minute),
+					Cooldown:     envOrDuration("IDLEWATCH_COOLDOWN", 30*time.Minute),
+				}
+				go watch.Run(context.Background())
+			}
+		} else {
+			log.Printf("idlewatch: disabled (NATS_URL unset)")
+		}
 	}
 
 	mux := http.NewServeMux()

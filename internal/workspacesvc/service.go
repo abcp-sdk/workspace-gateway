@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -21,6 +23,7 @@ import (
 	wsv1 "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1"
 	"github.com/abcp-sdk/workspace-gateway/gen/workspace/v1/wsv1connect"
 	"github.com/abcp-sdk/workspace-gateway/internal/forgejo"
+	"github.com/abcp-sdk/workspace-gateway/internal/gitcommit"
 	"github.com/abcp-sdk/workspace-gateway/internal/gitimport"
 	"github.com/abcp-sdk/workspace-gateway/internal/gitmerge"
 	"github.com/abcp-sdk/workspace-gateway/internal/imagebuild"
@@ -45,6 +48,15 @@ type Service struct {
 	toolchainOrg string // default owner for ListOCIImages
 	svcToken     string // shared service token (sandbox-only service-to-service)
 	svcTenant    string // tenant the service token resolves to (sandbox ownership)
+	commits      *gitcommit.Manager
+	sandboxNS    string // namespace services/sandboxes live in (public-host inference)
+	// previewTTL reclaims a preview service after this long (0 = no TTL).
+	previewTTL time.Duration
+	// serviceLogTail is the default number of log lines returned.
+	serviceLogTail int64
+	// publicServiceDomain, when set, forces the domain services are published
+	// under (`<name>.<ns>.<domain>`). Empty = infer from the request Host.
+	publicServiceDomain string
 }
 
 // Deps configures the service.
@@ -68,16 +80,44 @@ type Deps struct {
 	// disables it.
 	ServiceToken  string
 	ServiceTenant string
+	// GitCloneDir is where branch-staging clones are cached (empty = temp).
+	GitCloneDir string
+	// SandboxNamespace is the namespace services/sandboxes live in; used to
+	// build the public host `<name>.<ns>.<domain>`.
+	SandboxNamespace string
+	// PublicServiceDomain forces the domain services are published under. Empty
+	// = infer from the request Host (see publicDomainFor).
+	PublicServiceDomain string
+	// PreviewTTL reclaims a preview service after this long (0 = no TTL).
+	PreviewTTL time.Duration
+	// ServiceLogTail is the default number of service-log lines returned.
+	ServiceLogTail int64
 }
 
 // New builds the service.
 func New(d Deps) *Service {
+	commits := gitcommit.NewManager()
+	commits.SetBaseDir(d.GitCloneDir)
 	return &Service{
 		agent: d.Agent, members: d.Members, git: d.Forgejo, sbx: d.Sandbox,
 		services: d.Services,
 		builder:  d.Builder, runtime: d.Runtime, defaultBase: d.DefaultBase, toolchainOrg: d.ToolchainOrg,
 		svcToken: d.ServiceToken, svcTenant: d.ServiceTenant,
+		commits:             commits,
+		sandboxNS:           d.SandboxNamespace,
+		publicServiceDomain: d.PublicServiceDomain,
+		previewTTL:          d.PreviewTTL,
+		serviceLogTail:      d.ServiceLogTail,
 	}
+}
+
+// ReapPreviewServices deletes expired preview services. Exposed so the
+// deployment can run it on a ticker.
+func (s *Service) ReapPreviewServices(ctx context.Context) ([]string, error) {
+	if s.services == nil {
+		return nil, nil
+	}
+	return s.services.ReapExpired(ctx, time.Now().UnixMilli())
 }
 
 // renderRuntime maps the caller's (kvm, gpuCount) to pod-level settings using
@@ -131,6 +171,15 @@ func headerValue(hdr map[string][]string, name string) string {
 		}
 	}
 	return ""
+}
+
+// forwardedHost returns the public host the client used: X-Forwarded-Host
+// (set by the edge) when present, else the Host header.
+func forwardedHost(hdr map[string][]string) string {
+	if h := headerValue(hdr, "X-Forwarded-Host"); h != "" {
+		return h
+	}
+	return headerValue(hdr, "Host")
 }
 
 func bearerToken(hdr map[string][]string) string {
@@ -203,7 +252,7 @@ func (s *Service) EnsureBranchSession(ctx context.Context, req *connect.Request[
 	// Idempotent: create only when absent. The agent refuses a duplicate, so we
 	// probe first (GetSession -> NotFound means absent).
 	if !s.sessionExists(ctx, req.Header(), session) {
-		if err := s.createSession(ctx, req.Header(), session, roles.PresetFor(role), req.Msg.GetModel()); err != nil {
+		if err := s.createSession(ctx, req.Header(), session, roles.PresetFor(role), req.Msg.GetModel(), req.Msg.GetLocale()); err != nil {
 			return nil, err
 		}
 	}
@@ -230,6 +279,13 @@ func (s *Service) claimOrg(ctx context.Context, tenant, org string) error {
 	}
 	if owned {
 		return nil
+	}
+	// An org is GLOBALLY unique: if another tenant already owns it (or it exists
+	// in Forgejo under a different owner), refuse rather than double-book it.
+	if other, err := s.members.OrgOwner(org); err != nil {
+		return connect.NewError(connect.CodeInternal, err)
+	} else if other != "" && other != tenant {
+		return connect.NewError(connect.CodePermissionDenied, errors.New("organization is owned by another tenant"))
 	}
 	if err := s.git.EnsureOrg(ctx, org); err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("ensure org: %w", err))
@@ -337,19 +393,32 @@ func (s *Service) CreateFreeSession(ctx context.Context, req *connect.Request[ws
 	if err := s.members.AddFreeSession(tenant, name, string(role)); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	if err := s.createSession(ctx, req.Header(), name, roles.PresetFor(role), req.Msg.GetModel()); err != nil {
+	if err := s.createSession(ctx, req.Header(), name, roles.PresetFor(role), req.Msg.GetModel(), req.Msg.GetLocale()); err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&wsv1.CreateFreeSessionResponse{Session: name, Preset: roles.PresetFor(role)}), nil
 }
 
-// createSession forwards a trusted CreateSession to the agent.
-func (s *Service) createSession(ctx context.Context, hdr map[string][]string, name, preset, model string) error {
-	msg := &agentv1.CreateSessionRequest{Name: name, Preset: preset, Model: model}
+// createSession forwards a trusted CreateSession to the agent. `locale`, when
+// non-empty ("zh"/"en"), pins the session's agent language for its lifetime.
+func (s *Service) createSession(ctx context.Context, hdr map[string][]string, name, preset, model, locale string) error {
+	msg := &agentv1.CreateSessionRequest{Name: name, Preset: preset, Model: model, Locale: normalizeLocale(locale)}
 	r := connect.NewRequest(msg)
 	copyHeaders(r, hdr)
 	_, err := s.agent.CreateSession(ctx, r)
 	return err
+}
+
+// normalizeLocale keeps only a valid pinned language ("zh"/"en"); anything else
+// (including empty) becomes "" so the agent falls back to the tenant default.
+func normalizeLocale(l string) string {
+	switch strings.ToLower(strings.TrimSpace(l)) {
+	case "zh":
+		return "zh"
+	case "en":
+		return "en"
+	}
+	return ""
 }
 
 // ListBranchSessions lists the tenant's repo-bound branch sessions + free
@@ -449,7 +518,7 @@ func (s *Service) DeleteBranchSession(ctx context.Context, req *connect.Request[
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("branch session not found"))
 	}
 	// Best-effort sandbox cleanup + session delete.
-	s.deleteSessionAndSandbox(ctx, req.Header(), tenant, session)
+	s.deleteSessionCascade(ctx, req.Header(), tenant, session)
 	return connect.NewResponse(&wsv1.DeleteBranchSessionResponse{Ok: true}), nil
 }
 
@@ -478,16 +547,93 @@ func (s *Service) DeleteBranch(ctx context.Context, req *connect.Request[wsv1.De
 	}
 	// Delete the branch session (session + sandboxes) first, then the git branch.
 	session := roles.SessionName(org, repo, branch)
-	s.deleteSessionAndSandbox(ctx, req.Header(), tenant, session)
+	s.deleteSessionCascade(ctx, req.Header(), tenant, session)
 	if err := s.git.DeleteBranch(ctx, org, repo, branch); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&wsv1.DeleteBranchResponse{Ok: true}), nil
 }
 
-// deleteSessionAndSandbox deletes a session's sandbox(es) and the agent session.
-func (s *Service) deleteSessionAndSandbox(ctx context.Context, hdr map[string][]string, tenant, session string) {
-	_, _ = s.sbx.Delete(ctx, session)
+// DeleteRepo removes a repository AND every one of its branch sessions (each
+// cascading to its sandboxes), then drops the git repo + ownership row. Only
+// the owning tenant may delete. The org is left in place. Admin action.
+func (s *Service) DeleteRepo(ctx context.Context, req *connect.Request[wsv1.DeleteRepoRequest]) (*connect.Response[wsv1.DeleteRepoResponse], error) {
+	tenant, err := s.resolveTenant(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	org, repo := req.Msg.GetOrg(), req.Msg.GetRepo()
+	if !roles.ValidComponent(org) || !roles.ValidComponent(repo) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org/repo must be simple names"))
+	}
+	owned, err := s.members.OwnsRepo(tenant, org, repo)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if !owned {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("repository not found"))
+	}
+	// Cascade every branch session of this repo (the agent is the source of
+	// truth for which sessions exist). Best-effort per session.
+	prefix := org + ":" + repo + ":"
+	lr := connect.NewRequest(&agentv1.ListSessionsRequest{})
+	copyHeaders(lr, req.Header())
+	if res, err := s.agent.ListSessions(ctx, lr); err == nil {
+		for _, sess := range res.Msg.GetSessions() {
+			if name := sess.GetName(); strings.HasPrefix(name, prefix) {
+				s.deleteSessionCascade(ctx, req.Header(), tenant, name)
+			}
+		}
+	}
+	// Deleting a REPO removes ALL of its services — preview AND release — whose
+	// session belongs to this repo (a release service normally outlives its
+	// session, but not its repo).
+	if s.services != nil {
+		if all, err := s.services.List(ctx); err == nil {
+			for _, svc := range all {
+				if strings.HasPrefix(svc.Session, prefix) {
+					_, _ = s.services.Delete(ctx, svc.Name)
+				}
+			}
+		}
+	}
+	// Delete the git repo (idempotent) and the ownership row.
+	if err := s.git.DeleteRepo(ctx, org, repo); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if err := s.members.RemoveRepo(tenant, org, repo); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.DeleteRepoResponse{Ok: true}), nil
+}
+
+// deleteSessionCascade is the SINGLE session-deletion path: it reclaims the
+// session's sandboxes, deletes the agent session, and clears a free-session row.
+// Every delete entry point (DeleteBranchSession / DeleteBranch / DeleteRepo)
+// funnels through here so the semantics never drift.
+//
+// Sandboxes are matched by their `worker-manager/session` annotation (the ONLY
+// reliable key: the creator annotation holds just the tenant). A sandbox with
+// no session annotation falls back to a name match for legacy sandboxes.
+func (s *Service) deleteSessionCascade(ctx context.Context, hdr map[string][]string, tenant, session string) {
+	if s.sbx != nil {
+		if sbxs, err := s.sbx.List(ctx); err == nil {
+			for _, sb := range sbxs {
+				owned := sb.Creator == "" || sb.Creator == tenant
+				if !owned {
+					continue
+				}
+				if sb.Session == session || (sb.Session == "" && sb.Name == session) {
+					_, _ = s.sbx.Delete(ctx, sb.Name)
+				}
+			}
+		}
+	}
+	// Reclaim the session's PREVIEW services (a release service outlives its
+	// session). Best-effort.
+	if s.services != nil && session != "" {
+		_, _ = s.services.DeleteBySession(ctx, session, true)
+	}
 	r := connect.NewRequest(&agentv1.DeleteSessionRequest{Id: session})
 	copyHeaders(r, hdr)
 	_, _ = s.agent.DeleteSession(ctx, r)
@@ -961,16 +1107,17 @@ func (s *Service) ensureMainSession(ctx context.Context, hdr map[string][]string
 	if s.sessionExists(ctx, hdr, session) {
 		return
 	}
-	if err := s.createSession(ctx, hdr, session, roles.PresetFor(roles.Maintainer), ""); err != nil {
+	if err := s.createSession(ctx, hdr, session, roles.PresetFor(roles.Maintainer), "", ""); err != nil {
 		log.Printf("warn: ensure main session %s: %v", session, err)
 	}
 }
 
 // ImportRepo migrates an EXTERNAL git repository into `org` (which must belong
-// to the caller's tenant). Forgejo clones the FULL repository; when `ref` is
-// given, that ref becomes the default branch and every OTHER branch is deleted
-// (single-branch import). The imported repo's default-branch session is ensured.
-// An existing repo is refused (never overwritten).
+// to the caller's tenant). `ref` selects the SOURCE ref to import — a branch,
+// a tag, or any revision — and ALWAYS lands on the new repo's `main`; an empty
+// `ref` imports the source's HEAD branch. Only `main` is created (no other
+// branches/tags are carried over). The imported repo is PUBLIC and its main
+// branch session is ensured. An existing repo is refused (never overwritten).
 func (s *Service) ImportRepo(ctx context.Context, req *connect.Request[wsv1.ImportRepoRequest]) (*connect.Response[wsv1.ImportRepoResponse], error) {
 	tenant, err := s.resolveTenant(ctx, req.Header())
 	if err != nil {
@@ -1002,11 +1149,12 @@ func (s *Service) ImportRepo(ctx context.Context, req *connect.Request[wsv1.Impo
 		return nil, connect.NewError(connect.CodeAlreadyExists, errors.New("repository already exists"))
 	}
 
-	// Create an EMPTY destination repo (no auto-init): the import push will
-	// establish the branches. Never use Forgejo's mirror-migrate here — it
+	// Create an EMPTY, PUBLIC destination repo (no auto-init): the import push
+	// will establish `main`. Never use Forgejo's mirror-migrate here — it
 	// fetches every `refs/pull/*`, which is multi-GB/multi-minute on a popular
-	// upstream (e.g. octocat/Spoon-Knife with 63k pull refs).
-	if _, err := s.git.CreateEmptyRepo(ctx, org, repo, m.GetDescription(), m.GetPrivate()); err != nil {
+	// upstream (e.g. octocat/Spoon-Knife with 63k pull refs). Every repo this
+	// deployment creates is public.
+	if _, err := s.git.CreateEmptyRepo(ctx, org, repo, m.GetDescription()); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create repo: %w", err))
 	}
 	// From here a failure must not leave an empty orphan behind.
@@ -1051,13 +1199,110 @@ func (s *Service) ImportRepo(ctx context.Context, req *connect.Request[wsv1.Impo
 		}
 	}
 	if !s.sessionExists(ctx, req.Header(), roles.SessionName(org, repo, branch)) {
-		if err := s.createSession(ctx, req.Header(), roles.SessionName(org, repo, branch), roles.PresetFor(roles.RoleForBranch(branch)), ""); err != nil {
+		if err := s.createSession(ctx, req.Header(), roles.SessionName(org, repo, branch), roles.PresetFor(roles.RoleForBranch(branch)), "", ""); err != nil {
 			log.Printf("warn: ensure imported session %s/%s:%s: %v", org, repo, branch, err)
 		}
 	}
 	return connect.NewResponse(&wsv1.ImportRepoResponse{Repo: &wsv1.RepoInfo{
-		Org: org, Repo: repo, DefaultBranch: branch, Private: m.GetPrivate(),
+		Org: org, Repo: repo, DefaultBranch: branch, Private: false,
 	}}), nil
+}
+
+// ---- push mirrors (admin) ----
+
+// SetPushMirror registers a push mirror on a repo the caller's tenant owns.
+// HTTPS only. A repo may hold multiple mirrors (Forgejo assigns each a
+// remote_name, returned to the caller). Admin action.
+func (s *Service) SetPushMirror(ctx context.Context, req *connect.Request[wsv1.SetPushMirrorRequest]) (*connect.Response[wsv1.SetPushMirrorResponse], error) {
+	m := req.Msg
+	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+		return nil, err
+	}
+	addr := strings.TrimSpace(m.GetRemoteAddress())
+	if !validPushMirrorAddress(addr) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("remote_address must be an http(s) git URL"))
+	}
+	if iv := strings.TrimSpace(m.GetInterval()); iv != "" && !validInterval(iv) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("interval must be a duration like 8h or 30m"))
+	}
+	mirror, err := s.git.SetPushMirror(ctx, m.GetOrg(), m.GetRepo(), forgejo.PushMirrorOptions{
+		RemoteAddress:  addr,
+		RemoteUsername: m.GetRemoteUsername(),
+		RemotePassword: m.GetRemotePassword(),
+		SyncOnCommit:   m.GetSyncOnCommit(),
+		Interval:       strings.TrimSpace(m.GetInterval()),
+		BranchFilter:   strings.TrimSpace(m.GetBranchFilter()),
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.SetPushMirrorResponse{Mirror: toPushMirrorInfo(mirror)}), nil
+}
+
+// ListPushMirrors lists the push mirrors of a repo the caller's tenant owns.
+func (s *Service) ListPushMirrors(ctx context.Context, req *connect.Request[wsv1.ListPushMirrorsRequest]) (*connect.Response[wsv1.ListPushMirrorsResponse], error) {
+	m := req.Msg
+	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+		return nil, err
+	}
+	mirrors, err := s.git.ListPushMirrors(ctx, m.GetOrg(), m.GetRepo())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	out := make([]*wsv1.PushMirrorInfo, 0, len(mirrors))
+	for _, pm := range mirrors {
+		out = append(out, toPushMirrorInfo(pm))
+	}
+	return connect.NewResponse(&wsv1.ListPushMirrorsResponse{Mirrors: out}), nil
+}
+
+// DeletePushMirror removes a push mirror (by remote_name) from a repo the
+// caller's tenant owns. Admin action.
+func (s *Service) DeletePushMirror(ctx context.Context, req *connect.Request[wsv1.DeletePushMirrorRequest]) (*connect.Response[wsv1.DeletePushMirrorResponse], error) {
+	m := req.Msg
+	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+		return nil, err
+	}
+	name := strings.TrimSpace(m.GetRemoteName())
+	if name == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("remote_name is required"))
+	}
+	if err := s.git.DeletePushMirror(ctx, m.GetOrg(), m.GetRepo(), name); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.DeletePushMirrorResponse{Ok: true}), nil
+}
+
+// validPushMirrorAddress accepts an http(s) git URL (SSH mirrors are not
+// exposed by this surface).
+func validPushMirrorAddress(s string) bool {
+	if s == "" || strings.ContainsAny(s, " \t\n") {
+		return false
+	}
+	u, err := url.Parse(s)
+	if err != nil {
+		return false
+	}
+	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+}
+
+// validInterval accepts a Go duration string with a unit (e.g. 8h, 30m, 1h30m).
+func validInterval(s string) bool {
+	d, err := time.ParseDuration(s)
+	return err == nil && d > 0
+}
+
+func toPushMirrorInfo(pm forgejo.PushMirror) *wsv1.PushMirrorInfo {
+	return &wsv1.PushMirrorInfo{
+		RemoteName:    pm.RemoteName,
+		RemoteAddress: pm.RemoteAddress,
+		Interval:      pm.Interval,
+		SyncOnCommit:  pm.SyncOnCommit,
+		BranchFilter:  pm.BranchFilter,
+		LastError:     pm.LastError,
+		LastUpdate:    pm.LastUpdate,
+		Created:       pm.Created,
+	}
 }
 
 // deriveRepoName takes the last path segment of a git URL (strips `.git`).
@@ -1112,6 +1357,9 @@ func (s *Service) CreateMR(ctx context.Context, req *connect.Request[wsv1.Create
 			"branch %s has unresolved conflict markers in: %s; resolve them (see the ABCP-CONFLICT blocks) before opening an MR",
 			m.GetHead(), strings.Join(conflicts, ", ")))
 	}
+	if err := s.stagingGate(ctx, m.GetOrg(), m.GetRepo(), m.GetHead()); err != nil {
+		return nil, err
+	}
 	index, url, err := s.git.CreateMR(ctx, m.GetOrg(), m.GetRepo(), m.GetTitle(), m.GetHead(), base, m.GetBody())
 	if err != nil {
 		return nil, mrError(err)
@@ -1154,10 +1402,47 @@ func (s *Service) MergeMR(ctx context.Context, req *connect.Request[wsv1.MergeMR
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"change request #%d still has unresolved conflict markers in: %s", m.GetIndex(), strings.Join(conflicts, ", ")))
 	}
-	if err := s.git.MergeMR(ctx, m.GetOrg(), m.GetRepo(), m.GetIndex()); err != nil {
+	if err := s.stagingGate(ctx, m.GetOrg(), m.GetRepo(), mr.Head); err != nil {
+		return nil, err
+	}
+	// Pin the merge to the reviewed content: strip a trailing empty placeholder
+	// from the head branch (the gateway force-pushes the FEATURE branch, which
+	// is unprotected), then let Forgejo merge. Forgejo bypasses main's
+	// protection for an MR merge; a direct gateway push to main would be refused.
+	pin, err := s.mergeTipFor(ctx, m.GetOrg(), m.GetRepo(), mr.Head)
+	if err != nil {
+		return nil, err
+	}
+	if pin != "" && pin != mr.HeadSHA {
+		opts, oerr := s.commitOpts(ctx, m.GetOrg(), m.GetRepo(), mr.Head)
+		if oerr != nil {
+			return nil, oerr
+		}
+		if rerr := s.commits.ResetTo(ctx, opts, pin); rerr != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("pin head: %w", rerr))
+		}
+	}
+	if err := s.git.MergeMR(ctx, m.GetOrg(), m.GetRepo(), m.GetIndex(), pin); err != nil {
 		return nil, mrError(err)
 	}
 	return connect.NewResponse(&wsv1.MergeMRResponse{Ok: true}), nil
+}
+
+// mergeTipFor returns the sha a merge of `branch` should pin (the parent of a
+// placeholder HEAD, else the tip). Empty when the branch cannot be inspected.
+func (s *Service) mergeTipFor(ctx context.Context, org, repo, branch string) (string, error) {
+	opts, err := s.commitOpts(ctx, org, repo, branch)
+	if err != nil {
+		return "", nil
+	}
+	st, err := s.commits.Status(ctx, opts)
+	if err != nil {
+		return "", connect.NewError(connect.CodeInternal, err)
+	}
+	if st.Placeholder {
+		return st.MergeTip, nil
+	}
+	return st.Tip, nil
 }
 
 // SyncBranch (re)integrates `main` into a NON-MAIN branch with a two-parent
@@ -1175,6 +1460,9 @@ func (s *Service) SyncBranch(ctx context.Context, req *connect.Request[wsv1.Sync
 	}
 	if branch == roles.MainBranch {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("refusing to sync the default branch"))
+	}
+	if err := s.stagingGate(ctx, m.GetOrg(), m.GetRepo(), branch); err != nil {
+		return nil, err
 	}
 	res, err := gitmerge.Sync(ctx, gitmerge.Options{
 		RepoURL: s.git.GitURL(m.GetOrg(), m.GetRepo()),
@@ -1224,6 +1512,111 @@ func (s *Service) unresolvedConflicts(ctx context.Context, org, repo, branch str
 
 // mrError maps a Forgejo error to a connect error, surfacing conflicts as
 // FailedPrecondition instead of an opaque Internal.
+// BranchStatus reports a branch's staging state (placeholder present / carries
+// staged changes / the sha an MR should merge).
+func (s *Service) BranchStatus(ctx context.Context, req *connect.Request[wsv1.BranchStatusRequest]) (*connect.Response[wsv1.BranchStatusResponse], error) {
+	m := req.Msg
+	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+		return nil, err
+	}
+	opts, err := s.commitOpts(ctx, m.GetOrg(), m.GetRepo(), m.GetBranch())
+	if err != nil {
+		return nil, err
+	}
+	st, err := s.commits.Status(ctx, opts)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.BranchStatusResponse{
+		Placeholder: st.Placeholder, Staged: st.Staged, Tip: st.Tip, MergeTip: st.MergeTip,
+	}), nil
+}
+
+// CommitStaged rewinds the branch's staging placeholder to `message` and opens a
+// fresh empty placeholder (the staging area).
+func (s *Service) CommitStaged(ctx context.Context, req *connect.Request[wsv1.CommitStagedRequest]) (*connect.Response[wsv1.CommitStagedResponse], error) {
+	m := req.Msg
+	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(m.GetMessage()) == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("message is required"))
+	}
+	opts, err := s.commitOpts(ctx, m.GetOrg(), m.GetRepo(), m.GetBranch())
+	if err != nil {
+		return nil, err
+	}
+	sha, err := s.commits.Commit(ctx, opts, m.GetMessage())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return connect.NewResponse(&wsv1.CommitStagedResponse{Sha: sha}), nil
+}
+
+// ApplyFiles applies file operations to a branch's staging commit (amending the
+// placeholder when open). It is the write path for repo-write/edit/delete/port.
+func (s *Service) ApplyFiles(ctx context.Context, req *connect.Request[wsv1.ApplyFilesRequest]) (*connect.Response[wsv1.ApplyFilesResponse], error) {
+	m := req.Msg
+	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+		return nil, err
+	}
+	if len(m.GetFiles()) == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("files is required"))
+	}
+	opts, err := s.commitOpts(ctx, m.GetOrg(), m.GetRepo(), m.GetBranch())
+	if err != nil {
+		return nil, err
+	}
+	ops := make([]gitcommit.FileOp, 0, len(m.GetFiles()))
+	for _, f := range m.GetFiles() {
+		content := f.GetContentBytes()
+		if len(content) == 0 {
+			content = []byte(f.GetContent())
+		}
+		ops = append(ops, gitcommit.FileOp{Path: f.GetPath(), Op: f.GetOperation(), Content: content})
+	}
+	sha, err := s.commits.ApplyFiles(ctx, opts, ops)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.ApplyFilesResponse{Sha: sha}), nil
+}
+
+// commitOpts builds the gitcommit options for one branch of a visible repo.
+func (s *Service) commitOpts(ctx context.Context, org, repo, branch string) (gitcommit.Options, error) {
+	if branch == "" || !roles.ValidComponent(branch) {
+		return gitcommit.Options{}, connect.NewError(connect.CodeInvalidArgument, errors.New("branch must be a simple name"))
+	}
+	if branch == roles.MainBranch {
+		return gitcommit.Options{}, connect.NewError(connect.CodeInvalidArgument, errors.New("refusing to rewrite the default branch"))
+	}
+	return gitcommit.Options{
+		RepoURL: s.git.GitURL(org, repo),
+		Branch:  branch,
+		User:    "root",
+		Token:   s.git.Token(),
+	}, nil
+}
+
+// stagingGate refuses an action when the branch still has staged changes (a
+// placeholder carrying a diff). A clean branch — including a fresh branch or an
+// empty placeholder — passes.
+func (s *Service) stagingGate(ctx context.Context, org, repo, branch string) error {
+	opts, err := s.commitOpts(ctx, org, repo, branch)
+	if err != nil {
+		return err
+	}
+	st, err := s.commits.Status(ctx, opts)
+	if err != nil {
+		return nil // best-effort: never block on an inspection failure
+	}
+	if st.Placeholder && st.Staged {
+		return connect.NewError(connect.CodeFailedPrecondition, errors.New(
+			"branch has staged changes; run repo-commit with a message to finalize them before this action"))
+	}
+	return nil
+}
+
 func mrError(err error) error {
 	var conflict *forgejo.ErrConflict
 	if errors.As(err, &conflict) {
@@ -1253,9 +1646,14 @@ func (s *Service) ListSandboxes(ctx context.Context, req *connect.Request[wsv1.L
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	out := make([]*wsv1.SandboxInfo, 0, len(sbxs))
+	want := req.Msg.GetSession()
 	for _, sb := range sbxs {
 		// Visibility: only sandboxes this tenant created.
 		if sb.Creator != "" && sb.Creator != tenant {
+			continue
+		}
+		// Optional session filter: only this session's sandboxes.
+		if want != "" && sb.Session != want {
 			continue
 		}
 		out = append(out, toSandboxInfo(sb))
@@ -1290,7 +1688,7 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 	}
 	sb, _, err := s.sbx.Create(ctx, sandboxmgr.Spec{
 		Name: name, Image: derived, CPU: req.Msg.GetCpu(), Memory: req.Msg.GetMemory(),
-		Env: req.Msg.GetEnv(), Creator: tenant,
+		Env: req.Msg.GetEnv(), Creator: tenant, Session: req.Msg.GetSession(),
 		Runtime: s.renderRuntime(req.Msg.GetKvm(), req.Msg.GetGpuCount()),
 	})
 	if err != nil {
@@ -1477,8 +1875,10 @@ func (s *Service) DeployService(ctx context.Context, req *connect.Request[wsv1.D
 	if name == "" {
 		name = servicesmgr.ServiceName(sessionFromHeaders(req.Header()))
 	}
-	if !roles.ValidComponent(name) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name must be simple"))
+	// A service is published publicly as `<name>.<ns>.<domain>`, so its name
+	// must be a DNS-1123 label (lowercase letters/digits/'-').
+	if !roles.ValidServiceName(name) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name must be a DNS-1123 label (lowercase letters, digits, '-')"))
 	}
 	// Ownership guard: only the creator may update an existing service.
 	if existing, gerr := s.services.Get(ctx, name); gerr == nil {
@@ -1487,11 +1887,20 @@ func (s *Service) DeployService(ctx context.Context, req *connect.Request[wsv1.D
 		}
 	}
 
+	// Resolve the exposed ports. Empty `services` = the default single public
+	// port (tcp80 -> container_port). Entries sharing a suffix form ONE Service.
+	ports, err := servicePorts(m.GetServices(), m.GetContainerPort())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
 	spec := servicesmgr.Spec{
 		Name: name, Image: m.GetImage(), Command: m.GetCommand(),
 		Env: m.GetEnv(), CPU: m.GetCpu(), Memory: m.GetMemory(),
 		Replicas: m.GetReplicas(), ContainerPort: m.GetContainerPort(),
 		ServicePort: m.GetServicePort(), Creator: tenant,
+		Session: sessionFromHeaders(req.Header()),
+		Ports:   ports,
 		Runtime: s.renderRuntime(m.GetKvm(), m.GetGpuCount()),
 	}
 	if spec.Image == "" {
@@ -1501,7 +1910,49 @@ func (s *Service) DeployService(ctx context.Context, req *connect.Request[wsv1.D
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&wsv1.DeployServiceResponse{Service: toServiceInfo(svc)}), nil
+	return connect.NewResponse(&wsv1.DeployServiceResponse{Service: toServiceInfo(svc, s.servicePublicURLs(svc, req.Header()))}), nil
+}
+
+// servicePorts resolves the requested ports into servicesmgr.Port values. With
+// no explicit ports it returns the default (tcp80 -> containerPort). Each
+// distinct suffix becomes one k8s Service; the primary (empty suffix) must not
+// repeat the public tcp80 (only one public endpoint per Service name).
+func servicePorts(specs []*wsv1.ServicePortSpec, containerPort int32) ([]servicesmgr.Port, error) {
+	if len(specs) == 0 {
+		target := containerPort
+		if target == 0 {
+			target = 8080
+		}
+		return []servicesmgr.Port{{Port: 80, Protocol: "tcp", TargetPort: target}}, nil
+	}
+	out := make([]servicesmgr.Port, 0, len(specs))
+	// tcp80 is the public ingress; only one per suffix (port collision).
+	publicPerSuffix := map[string]int{}
+	for i, sp := range specs {
+		port, proto, ok := servicesmgr.PresetPorts(sp.GetPreset())
+		if !ok {
+			return nil, fmt.Errorf("services[%d]: preset must be tcp80|tcp443|udp443", i)
+		}
+		suffix := sp.GetName()
+		if suffix != "" && !roles.ValidServiceName(suffix) {
+			return nil, fmt.Errorf("services[%d]: name must be a DNS-1123 label", i)
+		}
+		if port == 80 {
+			publicPerSuffix[suffix]++
+			if publicPerSuffix[suffix] > 1 {
+				return nil, fmt.Errorf("services[%d]: only one tcp80 per service name", i)
+			}
+		}
+		target := sp.GetTargetPort()
+		if target == 0 {
+			target = containerPort
+		}
+		if target == 0 {
+			target = 8080
+		}
+		out = append(out, servicesmgr.Port{Suffix: suffix, Port: port, Protocol: proto, TargetPort: target})
+	}
+	return out, nil
 }
 
 // ListServices lists the tenant's services.
@@ -1522,7 +1973,7 @@ func (s *Service) ListServices(ctx context.Context, req *connect.Request[wsv1.Li
 		if svc.Creator != "" && svc.Creator != tenant {
 			continue
 		}
-		out = append(out, toServiceInfo(svc))
+		out = append(out, toServiceInfo(svc, s.servicePublicURLs(svc, req.Header())))
 	}
 	return connect.NewResponse(&wsv1.ListServicesResponse{Services: out}), nil
 }
@@ -1550,6 +2001,270 @@ func (s *Service) DeleteService(ctx context.Context, req *connect.Request[wsv1.D
 	return connect.NewResponse(&wsv1.DeleteServiceResponse{Ok: ok}), nil
 }
 
+// PreviewService deploys a session-bound, cluster-only PREVIEW service for
+// developer verification. The name is prefixed with the session slug, no public
+// URL is produced, and the service carries a TTL for reclamation.
+func (s *Service) PreviewService(ctx context.Context, req *connect.Request[wsv1.PreviewServiceRequest]) (*connect.Response[wsv1.PreviewServiceResponse], error) {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	if s.services == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+	}
+	m := req.Msg
+	if m.GetImage() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("image is required"))
+	}
+	session := sessionFromHeaders(req.Header())
+	base := m.GetName()
+	if base == "" {
+		base = "app"
+	}
+	if !roles.ValidServiceName(base) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name must be a DNS-1123 label"))
+	}
+	// Prefix with the session slug so a preview never collides with a release
+	// service, and stays under 63 chars (DNS-1123 label).
+	name := previewName(session, base)
+	// Ports: previews are CLUSTER-ONLY. Even a tcp80 entry maps to a Service
+	// with no public URL (the gateway never publishes it).
+	ports, err := servicePorts(m.GetServices(), m.GetContainerPort())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	ttl := time.Duration(m.GetTtlSeconds()) * time.Second
+	if ttl <= 0 {
+		ttl = s.previewTTL
+	}
+	expires := int64(0)
+	if ttl > 0 {
+		expires = time.Now().Add(ttl).UnixMilli()
+	}
+	svc, err := s.services.Deploy(ctx, servicesmgr.Spec{
+		Name: name, Image: m.GetImage(), Command: m.GetCommand(),
+		Env: m.GetEnv(), CPU: m.GetCpu(), Memory: m.GetMemory(),
+		Replicas: 1, ContainerPort: m.GetContainerPort(),
+		Creator: tenant, Session: session, Ports: ports,
+		Stage:     servicesmgr.StagePreview,
+		ExpiresAt: expires,
+		Runtime:   s.renderRuntime(m.GetKvm(), m.GetGpuCount()),
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	// No public URLs: a preview is reachable only in-cluster.
+	return connect.NewResponse(&wsv1.PreviewServiceResponse{Service: toServiceInfo(svc, nil)}), nil
+}
+
+// previewName prefixes a base name with the session slug, keeping it a legal
+// DNS-1123 label. A free session (no branch) still gets a stable slug.
+func previewName(session, base string) string {
+	slug := servicesmgr.ServiceName(session)
+	// Leave room for "-" + base, capped at 63 chars total.
+	maxSlug := 63 - 1 - len(base)
+	if maxSlug < 1 {
+		maxSlug = 1
+	}
+	if len(slug) > maxSlug {
+		slug = slug[:maxSlug]
+	}
+	slug = strings.Trim(slug, "-")
+	name := slug + "-" + base
+	if len(name) > 63 {
+		name = name[:63]
+	}
+	return strings.Trim(name, "-")
+}
+
+// ServiceLogs reads a bounded window of a service's container log.
+func (s *Service) ServiceLogs(ctx context.Context, req *connect.Request[wsv1.ServiceLogsRequest]) (*connect.Response[wsv1.ServiceLogsResponse], error) {
+	if _, err := s.ownedService(ctx, req.Header(), req.Msg.GetName()); err != nil {
+		return nil, err
+	}
+	tail := req.Msg.GetTailLines()
+	if tail <= 0 {
+		tail = s.serviceLogTail
+	}
+	lines, err := s.services.LogSource().Tail(ctx, req.Msg.GetName(), servicesmgr.LogOptions{
+		TailLines: tail, Previous: req.Msg.GetPrevious(),
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.ServiceLogsResponse{Lines: lines}), nil
+}
+
+// WatchServiceLogs streams a service's container log until the stream ends or
+// the client disconnects.
+func (s *Service) WatchServiceLogs(ctx context.Context, req *connect.Request[wsv1.WatchServiceLogsRequest], st *connect.ServerStream[wsv1.WatchServiceLogsResponse]) error {
+	if _, err := s.ownedService(ctx, req.Header(), req.Msg.GetName()); err != nil {
+		return err
+	}
+	lines, errc := s.services.LogSource().Follow(ctx, req.Msg.GetName(), servicesmgr.LogOptions{
+		Previous: req.Msg.GetPrevious(),
+	})
+	for l := range lines {
+		if err := st.Send(&wsv1.WatchServiceLogsResponse{Output: l + "\n"}); err != nil {
+			return err
+		}
+	}
+	if err := <-errc; err != nil {
+		return st.Send(&wsv1.WatchServiceLogsResponse{Done: true, Error: err.Error()})
+	}
+	return st.Send(&wsv1.WatchServiceLogsResponse{Done: true})
+}
+
+// ownedService resolves a service and enforces tenant/creator ownership.
+func (s *Service) ownedService(ctx context.Context, hdr map[string][]string, name string) (servicesmgr.Service, error) {
+	tenant, err := s.sandboxAuth(ctx, hdr)
+	if err != nil {
+		return servicesmgr.Service{}, err
+	}
+	if s.services == nil {
+		return servicesmgr.Service{}, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+	}
+	svc, gerr := s.services.Get(ctx, name)
+	if gerr != nil {
+		return servicesmgr.Service{}, connect.NewError(connect.CodeNotFound, errors.New("service not found"))
+	}
+	if svc.Creator != "" && svc.Creator != tenant {
+		return servicesmgr.Service{}, connect.NewError(connect.CodePermissionDenied, errors.New("service belongs to another tenant"))
+	}
+	return svc, nil
+}
+
+// BuildPreviewImage builds a preview image: the image NAME is forced to the
+// repo, and the TAG is forced to `preview-<branch>-<sha>` (+ optional suffix),
+// so a preview build can never overwrite a release tag. Admin/maintainer/
+// developer may build; the destination is always under the source repo's org.
+func (s *Service) BuildPreviewImage(ctx context.Context, req *connect.Request[wsv1.BuildPreviewImageRequest]) (*connect.Response[wsv1.BuildPreviewImageResponse], error) {
+	if _, err := s.sandboxAuth(ctx, req.Header()); err != nil {
+		return nil, err
+	}
+	m := req.Msg
+	org, repo, ref := m.GetOrg(), m.GetRepo(), m.GetRef()
+	if !roles.ValidComponent(org) || !roles.ValidComponent(repo) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org/repo must be simple names"))
+	}
+	if ref == "" {
+		ref = roles.MainBranch
+	}
+	if !roles.ValidComponent(ref) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("ref must be a simple name"))
+	}
+	if s.builder == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("image builder not configured"))
+	}
+	// The image NAME is the repo (not caller-chosen): a preview never writes to
+	// another image path.
+	if !imageNameRe.MatchString(repo) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("repo must be a single simple name to derive the image"))
+	}
+	// The tag is FORCED to a preview prefix; a short ref sha keeps builds
+	// distinct. The caller may append a suffix.
+	sha, err := s.git.BranchTip(ctx, org, repo, ref)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	short := sha
+	if len(short) > 12 {
+		short = short[:12]
+	}
+	tag := "preview-" + sanitizeTag(ref) + "-" + short
+	if sfx := m.GetTagSuffix(); sfx != "" {
+		if !roles.ValidComponent(sfx) {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("tag_suffix must be simple"))
+		}
+		tag += "-" + sanitizeTag(sfx)
+	}
+
+	archive, err := s.git.ArchiveTarGz(ctx, org, repo, ref)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("fetch repo archive: %w", err))
+	}
+	dir, cleanup, err := imagebuild.Extract(archive, 0)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	defer cleanup()
+	res, err := s.builder.Build(ctx, imagebuild.Request{
+		ContextDir: dir,
+		Dockerfile: m.GetDockerfile(),
+		Context:    m.GetContext(),
+		Repo:       org + "/" + repo,
+		Tag:        tag,
+		BuildArgs:  m.GetBuildArgs(),
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.BuildPreviewImageResponse{ImageRef: res.ImageRef, Log: res.Log, Tag: tag}), nil
+}
+
+// sanitizeTag lowercases and replaces tag-illegal chars with '-'.
+func sanitizeTag(s string) string {
+	s = strings.ToLower(s)
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('-')
+		}
+	}
+	out := strings.Trim(b.String(), "-.")
+	if out == "" {
+		return "x"
+	}
+	return out
+}
+
+// Blame returns per-line authorship of one file at a ref (go-git over a bare
+// clone; Forgejo has no blame API).
+func (s *Service) Blame(ctx context.Context, req *connect.Request[wsv1.BlameRequest]) (*connect.Response[wsv1.BlameResponse], error) {
+	m := req.Msg
+	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+		return nil, err
+	}
+	if m.GetPath() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("path is required"))
+	}
+	ref := m.GetRef()
+	if ref == "" {
+		ref = roles.MainBranch
+	}
+	lines, err := gitcommit.Blame(ctx, s.git.GitURL(m.GetOrg(), m.GetRepo()), "root", s.git.Token(), ref, m.GetPath(), 0)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	out := make([]*wsv1.BlameLine, 0, len(lines))
+	for _, l := range lines {
+		out = append(out, &wsv1.BlameLine{
+			Line: int32(l.Line), Sha: l.SHA, Author: l.Author,
+			AuthorEmail: l.AuthorEmail, Date: l.Date, Content: l.Content,
+		})
+	}
+	return connect.NewResponse(&wsv1.BlameResponse{Lines: out}), nil
+}
+
+// FileDiff returns the unified diff of one file between two refs (go-git;
+// Forgejo's compare `patch` is empty on 1.22).
+func (s *Service) FileDiff(ctx context.Context, req *connect.Request[wsv1.FileDiffRequest]) (*connect.Response[wsv1.FileDiffResponse], error) {
+	m := req.Msg
+	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+		return nil, err
+	}
+	if m.GetPath() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("path is required"))
+	}
+	diff, err := gitcommit.FileDiff(ctx, s.git.GitURL(m.GetOrg(), m.GetRepo()), "root", s.git.Token(), m.GetBase(), m.GetHead(), m.GetPath(), 0)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.FileDiffResponse{Diff: diff}), nil
+}
+
 // sessionFromHeaders extracts the caller's session name (used to derive a
 // default service name). The extension passes it via X-Session-Name.
 func sessionFromHeaders(hdr map[string][]string) string {
@@ -1561,11 +2276,107 @@ func sessionFromHeaders(hdr map[string][]string) string {
 	return ""
 }
 
-func toServiceInfo(svc servicesmgr.Service) *wsv1.ServiceInfo {
+func toServiceInfo(svc servicesmgr.Service, publicURLs map[string]string) *wsv1.ServiceInfo {
+	ports := make([]*wsv1.ServicePortInfo, 0, len(svc.Ports))
+	primary := ""
+	for _, p := range svc.Ports {
+		key := presetKey(p.Port, p.Protocol)
+		// Only a tcp80 ingress has a public URL.
+		publicURL := ""
+		if key == "tcp80" {
+			publicURL = publicURLs[p.Suffix]
+		}
+		info := &wsv1.ServicePortInfo{
+			Name: p.Suffix, Preset: key, Port: p.Port, Protocol: p.Protocol,
+			TargetPort: p.TargetPort, PublicUrl: publicURL,
+		}
+		ports = append(ports, info)
+		if p.Suffix == "" && key == "tcp80" {
+			primary = publicURL
+		}
+	}
 	return &wsv1.ServiceInfo{
 		Name: svc.Name, Image: svc.Image, Phase: svc.Phase, Ready: svc.Ready,
-		Replicas: svc.Replicas, Url: svc.URL,
+		Replicas: svc.Replicas, Url: svc.URL, Creator: svc.Creator, Session: svc.Session,
+		PublicUrl: primary, Ports: ports,
+		Stage: svc.Stage, PodPhase: svc.PodPhase, Restarts: svc.Restarts,
+		Message: svc.Message, ExpiresAt: svc.ExpiresAt,
 	}
+}
+
+// presetKey maps a (port, protocol) back to its preset name.
+func presetKey(port int32, proto string) string {
+	switch {
+	case port == 80 && proto == "tcp":
+		return "tcp80"
+	case port == 443 && proto == "tcp":
+		return "tcp443"
+	case port == 443 && proto == "udp":
+		return "udp443"
+	}
+	return fmt.Sprintf("%s%d", proto, port)
+}
+
+// servicePublicURLs returns, per port-suffix, the anonymous public URL for
+// tcp80 ingress ports (`https://<name>[-<suffix>].<ns>.<domain>`). Only tcp80 is
+// publicly reachable (the edge maps hosts to a service's port 80).
+func (s *Service) servicePublicURLs(svc servicesmgr.Service, hdr map[string][]string) map[string]string {
+	domain := s.publicDomainFor(hdr)
+	if domain == "" {
+		return nil
+	}
+	ns := s.sandboxNS
+	if ns == "" {
+		ns = "worker"
+	}
+	out := map[string]string{}
+	for _, p := range svc.Ports {
+		if p.Port == 80 && p.Protocol == "tcp" {
+			out[p.Suffix] = "https://" + siblingName(svc.Name, p.Suffix) + "." + ns + "." + domain
+		}
+	}
+	return out
+}
+
+// siblingName mirrors servicesmgr's service naming (primary vs `<name>-<suffix>`).
+func siblingName(name, suffix string) string {
+	if suffix == "" {
+		return name
+	}
+	return name + "-" + suffix
+}
+
+// publicDomainFor returns the domain a service is published under, so its
+// public URL is `https://<name>.<ns>.<domain>`. An explicit configured domain
+// wins; otherwise it is INFERRED from the request's forwarded host by dropping
+// the first two labels (the edge convention is `<svc>.<ns>.<domain>`), e.g.
+// `workspace.agent.10.199.64.20.nip.io` -> `10.199.64.20.nip.io`. Empty when it
+// cannot be determined (e.g. an in-cluster caller with no public host).
+func (s *Service) publicDomainFor(hdr map[string][]string) string {
+	if s.publicServiceDomain != "" {
+		return s.publicServiceDomain
+	}
+	host := forwardedHost(hdr)
+	if host == "" {
+		return ""
+	}
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	// An in-cluster caller's Host is a Service DNS name (`*.svc.cluster.local`)
+	// or a bare address; those never carry a public domain. A bare IP host
+	// (e.g. a ClusterIP) has no domain to derive either.
+	if host == "localhost" || strings.HasSuffix(host, ".svc.cluster.local") || strings.HasSuffix(host, ".svc") {
+		return ""
+	}
+	if net.ParseIP(host) != nil {
+		return ""
+	}
+	parts := strings.Split(host, ".")
+	if len(parts) < 3 {
+		return ""
+	}
+	return strings.Join(parts[2:], ".")
 }
 
 // ---- sandbox images ----
@@ -1574,7 +2385,8 @@ func toServiceInfo(svc servicesmgr.Service) *wsv1.ServiceInfo {
 // namespace (default: the deployment toolchain org); `name` narrows to one
 // image, listing its tags.
 func (s *Service) ListOCIImages(ctx context.Context, req *connect.Request[wsv1.ListOCIImagesRequest]) (*connect.Response[wsv1.ListOCIImagesResponse], error) {
-	if _, err := s.sandboxAuth(ctx, req.Header()); err != nil {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
 		return nil, err
 	}
 	owner := req.Msg.GetOwner()
@@ -1583,6 +2395,17 @@ func (s *Service) ListOCIImages(ctx context.Context, req *connect.Request[wsv1.L
 	}
 	if !roles.ValidComponent(owner) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("owner must be a simple name"))
+	}
+	// A tenant may browse the SHARED catalog namespaces (the toolchain org and
+	// the system `root`), but any other namespace must be one it owns.
+	if owner != s.toolchainOrg && owner != "root" {
+		owned, err := s.members.OwnsOrg(tenant, owner)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		if !owned {
+			return nil, connect.NewError(connect.CodeNotFound, errors.New("namespace not found"))
+		}
 	}
 	name := req.Msg.GetName()
 	pkgs, err := s.git.ListContainerPackages(ctx, owner, name)
@@ -1660,10 +2483,54 @@ func (s *Service) BuildSandboxImage(ctx context.Context, req *connect.Request[ws
 // imageNameRe: a single path segment (no '/', no ':').
 var imageNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
 
+// ImportImage mirrors an upstream image (public or private) into the registry
+// under an org the caller owns, with a no-op `FROM <source>` rebuild. It is the
+// OCI analogue of repo-import: the caller names the destination org and the new
+// image is recorded under that org (which must belong to the tenant).
+func (s *Service) ImportImage(ctx context.Context, req *connect.Request[wsv1.ImportImageRequest]) (*connect.Response[wsv1.ImportImageResponse], error) {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	m := req.Msg
+	org, name, tag, source := m.GetOrg(), m.GetName(), m.GetTag(), m.GetSource()
+	if !roles.ValidComponent(org) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org must be a simple name"))
+	}
+	if !imageNameRe.MatchString(name) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name must be a single simple name"))
+	}
+	if !roles.ValidComponent(tag) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("tag must be a simple name"))
+	}
+	if source == "" || strings.ContainsAny(source, " \t\n") {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("source must be an image ref"))
+	}
+	if s.builder == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("image builder not configured"))
+	}
+	// The destination org must belong to the caller (creating it if needed).
+	if err := s.claimOrg(ctx, tenant, org); err != nil {
+		return nil, err
+	}
+	res, err := s.builder.Import(ctx, imagebuild.ImportRequest{
+		Source:    source,
+		Repo:      org + "/" + name,
+		Tag:       tag,
+		AuthUser:  m.GetAuthUser(),
+		AuthToken: m.GetAuthToken(),
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.ImportImageResponse{ImageRef: res.ImageRef, Log: res.Log}), nil
+}
+
 func toSandboxInfo(sb sandboxmgr.Sandbox) *wsv1.SandboxInfo {
 	return &wsv1.SandboxInfo{
 		Name: sb.Name, Image: sb.Image, Phase: sb.Phase, Ready: sb.Ready,
 		Url: sb.URL, Creator: sb.Creator, CreatedAt: sb.CreatedAt,
+		Session: sb.Session,
 	}
 }
 

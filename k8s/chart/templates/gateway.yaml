@@ -31,6 +31,9 @@ spec:
             - { name: GATEWAY_DB, value: /data/workspace-gateway.db }
             - { name: AGENT_URL, value: {{ include "workspace.agentUrl" . | quote }} }
             - { name: SANDBOX_NAMESPACE, value: {{ .Values.gateway.sandbox.namespace | quote }} }
+            # Public domain for services. Empty = infer from the request Host
+            # (drop the first two labels of the webui host).
+            - { name: PUBLIC_SERVICE_DOMAIN, value: {{ .Values.gateway.publicServiceDomain | quote }} }
             - { name: FORGEJO_URL, value: {{ .Values.infra.forgejo.url | quote }} }
             - name: FORGEJO_TOKEN
               valueFrom:
@@ -42,12 +45,22 @@ spec:
             - name: AGENT_ADMIN_TOKEN
               valueFrom:
                 secretKeyRef: { name: workspace-gateway-secrets, key: agent-admin-token }
+            # Stalled-session watchdog: needs NATS + the service/admin tokens
+            # (all present above), so it is wired independently of provisioning.
+            - { name: NATS_URL, value: {{ include "workspace.natsUrl" . | quote }} }
+            - { name: IDLEWATCH_ENABLED, value: {{ .Values.gateway.idlewatch.enabled | quote }} }
+            - { name: IDLEWATCH_AFTER, value: {{ .Values.gateway.idlewatch.after | quote }} }
+            - { name: IDLEWATCH_INTERVAL, value: {{ .Values.gateway.idlewatch.interval | quote }} }
+            - { name: IDLEWATCH_COOLDOWN, value: {{ .Values.gateway.idlewatch.cooldown | quote }} }
+            # Preview services (developer verification) + service logs.
+            - { name: SERVICE_PREVIEW_TTL, value: {{ .Values.gateway.preview.ttl | quote }} }
+            - { name: SERVICE_PREVIEW_REAP_INTERVAL, value: {{ .Values.gateway.preview.reapInterval | quote }} }
+            - { name: SERVICE_LOG_TAIL, value: {{ .Values.gateway.serviceLogTail | quote }} }
             # Convergence (idempotent): seed per-tenant providers + force-set
             # the deployment-owned extension config so a stale value cannot win.
             {{- if .Values.gateway.provision.enabled }}
             - { name: PROVISION_ON_BOOT, value: "true" }
             - { name: PROVISION_DEFAULT_PROFILE, value: {{ .Values.gateway.provision.defaultProfile | quote }} }
-            - { name: NATS_URL, value: {{ include "workspace.natsUrl" . | quote }} }
             - name: PROVISION_RETIRED_PRESETS
               value: {{ .Values.gateway.provision.retiredPresets | toJson | quote }}
             - name: PROVISION_TENANT_PROFILE
@@ -60,6 +73,7 @@ spec:
                 | toJson | quote }}
             {{- end }}
             - { name: IMAGE_REGISTRY_HOST, value: {{ .Values.infra.registry.host | quote }} }
+            - { name: IMAGE_REGISTRY_SCHEME, value: {{ .Values.infra.registry.scheme | quote }} }
             - { name: TOOLCHAIN_ORG, value: {{ .Values.infra.registry.toolchainOrg | quote }} }
             - { name: DEFAULT_BASE_IMAGE, value: {{ .Values.gateway.registry.defaultBaseImage | quote }} }
             - { name: DERIVE_REPO, value: {{ .Values.gateway.registry.deriveRepo | quote }} }

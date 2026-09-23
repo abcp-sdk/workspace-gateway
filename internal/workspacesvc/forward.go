@@ -35,40 +35,6 @@ func (s *Service) GetSession(ctx context.Context, r *connect.Request[agentv1.Get
 	return s.agent.GetSession(ctx, fwd(r))
 }
 
-func (s *Service) DeleteSession(ctx context.Context, r *connect.Request[agentv1.DeleteSessionRequest]) (*connect.Response[agentv1.DeleteSessionResponse], error) {
-	res, err := s.agent.DeleteSession(ctx, fwd(r))
-	if err != nil {
-		return res, err
-	}
-	// Cascade: a deleted session's sandboxes (creator == tenant/session) are
-	// reclaimed too. Best-effort; the idle reaper is the backstop.
-	s.deleteSessionSandboxes(ctx, r.Header(), r.Msg.GetId())
-	return res, nil
-}
-
-// deleteSessionSandboxes removes every sandbox created by `tenant/session`.
-// Failures are logged, never surfaced: session deletion must not depend on
-// sandbox cleanup.
-func (s *Service) deleteSessionSandboxes(ctx context.Context, hdr map[string][]string, session string) {
-	if session == "" || s.sbx == nil {
-		return
-	}
-	tenant, err := s.resolveTenant(ctx, hdr)
-	if err != nil {
-		return
-	}
-	creator := tenant + "/" + session
-	sbxs, err := s.sbx.List(ctx)
-	if err != nil {
-		return
-	}
-	for _, sb := range sbxs {
-		if sb.Creator == creator {
-			_, _ = s.sbx.Delete(ctx, sb.Name)
-		}
-	}
-}
-
 func (s *Service) ListMessages(ctx context.Context, r *connect.Request[agentv1.ListMessagesRequest]) (*connect.Response[agentv1.ListMessagesResponse], error) {
 	return s.agent.ListMessages(ctx, fwd(r))
 }

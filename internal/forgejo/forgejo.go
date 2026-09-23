@@ -192,7 +192,7 @@ func (c *Client) EnsureRepo(ctx context.Context, org, repo string) (bool, error)
 		if err := c.EnsureOrg(ctx, org); err != nil {
 			return false, err
 		}
-		body := map[string]any{"name": repo, "auto_init": true, "default_branch": "main", "private": true}
+		body := map[string]any{"name": repo, "auto_init": true, "default_branch": "main", "private": false}
 		if err := c.do(ctx, "POST", "/orgs/"+seg(org)+"/repos", nil, body, nil); err != nil {
 			// The owner may be a user, not an org; fall back to the user endpoint.
 			if e := c.do(ctx, "POST", "/user/repos", nil, body, nil); e != nil {
@@ -213,12 +213,13 @@ func (c *Client) EnsureRepo(ctx context.Context, org, repo string) (bool, error)
 // default branch) so a subsequent git PUSH establishes the branches. It is the
 // destination step of an import: the external content is fetched by the
 // gateway's git client and pushed, never by Forgejo's mirror-migrate (which
-// would drag in every `refs/pull/*`). The org is created when absent.
-func (c *Client) CreateEmptyRepo(ctx context.Context, org, repo, description string, private bool) (RepoInfo, error) {
+// would drag in every `refs/pull/*`). The org is created when absent. Every
+// repository this deployment creates is PUBLIC.
+func (c *Client) CreateEmptyRepo(ctx context.Context, org, repo, description string) (RepoInfo, error) {
 	if err := c.EnsureOrg(ctx, org); err != nil {
 		return RepoInfo{}, err
 	}
-	body := map[string]any{"name": repo, "auto_init": false, "private": private}
+	body := map[string]any{"name": repo, "auto_init": false, "private": false}
 	if description != "" {
 		body["description"] = description
 	}
@@ -264,6 +265,97 @@ func (c *Client) ProtectMain(ctx context.Context, org, repo string) error {
 		return nil
 	}
 	return err
+}
+
+// ---- push mirrors ----
+
+// PushMirror is one configured push mirror of a repository.
+type PushMirror struct {
+	RemoteName    string
+	RemoteAddress string
+	Interval      string
+	SyncOnCommit  bool
+	BranchFilter  string
+	LastError     string
+	LastUpdate    string
+	Created       string
+	PublicKey     string
+}
+
+// PushMirrorOptions configures a new push mirror. HTTPS only (SSH mirrors are
+// not exposed).
+type PushMirrorOptions struct {
+	// RemoteAddress is the destination git URL (https).
+	RemoteAddress string
+	// RemoteUsername + RemotePassword authenticate a private destination.
+	RemoteUsername string
+	RemotePassword string
+	// SyncOnCommit pushes immediately on every commit to the repository.
+	SyncOnCommit bool
+	// Interval is the periodic sync interval as a Go duration (e.g. "8h").
+	// Empty = Forgejo's default.
+	Interval string
+	// BranchFilter restricts which branches are mirrored (e.g. "main").
+	BranchFilter string
+}
+
+// SetPushMirror registers a push mirror on `org/repo` and returns it. A repo
+// may hold MULTIPLE push mirrors; Forgejo assigns each a unique remote_name.
+func (c *Client) SetPushMirror(ctx context.Context, org, repo string, opt PushMirrorOptions) (PushMirror, error) {
+	body := map[string]any{
+		"remote_address": opt.RemoteAddress,
+		"sync_on_commit": opt.SyncOnCommit,
+		"use_ssh":        false,
+	}
+	if opt.RemoteUsername != "" {
+		body["remote_username"] = opt.RemoteUsername
+	}
+	if opt.RemotePassword != "" {
+		body["remote_password"] = opt.RemotePassword
+	}
+	if opt.Interval != "" {
+		body["interval"] = opt.Interval
+	}
+	if opt.BranchFilter != "" {
+		body["branch_filter"] = opt.BranchFilter
+	}
+	var raw map[string]any
+	if err := c.do(ctx, "POST", "/repos/"+seg(org)+"/"+seg(repo)+"/push_mirrors", nil, body, &raw); err != nil {
+		return PushMirror{}, err
+	}
+	return toPushMirror(raw), nil
+}
+
+// ListPushMirrors returns every push mirror configured on `org/repo`.
+func (c *Client) ListPushMirrors(ctx context.Context, org, repo string) ([]PushMirror, error) {
+	var rows []map[string]any
+	if err := c.do(ctx, "GET", "/repos/"+seg(org)+"/"+seg(repo)+"/push_mirrors", nil, nil, &rows); err != nil {
+		return nil, err
+	}
+	out := make([]PushMirror, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, toPushMirror(r))
+	}
+	return out, nil
+}
+
+// DeletePushMirror removes the push mirror named `name` from `org/repo`.
+func (c *Client) DeletePushMirror(ctx context.Context, org, repo, name string) error {
+	return c.do(ctx, "DELETE", "/repos/"+seg(org)+"/"+seg(repo)+"/push_mirrors/"+seg(name), nil, nil, nil)
+}
+
+func toPushMirror(raw map[string]any) PushMirror {
+	return PushMirror{
+		RemoteName:    str(raw["remote_name"]),
+		RemoteAddress: str(raw["remote_address"]),
+		Interval:      str(raw["interval"]),
+		SyncOnCommit:  boolv(raw["sync_on_commit"]),
+		BranchFilter:  str(raw["branch_filter"]),
+		LastError:     str(raw["last_error"]),
+		LastUpdate:    str(raw["last_update"]),
+		Created:       str(raw["created"]),
+		PublicKey:     str(raw["public_key"]),
+	}
 }
 
 // ---- container packages (OCI images) ----
@@ -391,6 +483,7 @@ type MRInfo struct {
 	Title        string `json:"title"`
 	State        string `json:"state"`
 	Head         string `json:"head"`
+	HeadSHA      string `json:"head_sha"`
 	Base         string `json:"base"`
 	Body         string `json:"body"`
 	Author       string `json:"author"`
@@ -489,11 +582,18 @@ func (c *Client) CommentMR(ctx context.Context, org, repo string, index int32, b
 }
 
 // MergeMR merges a pull request (maintainer action; the only path to main).
-// MergeMR merges a pull request (maintainer action; the only path to main).
 // Forgejo requires the merge style (`Do`); "merge" preserves the branch
 // commits and records a merge commit on main.
-func (c *Client) MergeMR(ctx context.Context, org, repo string, index int32) error {
-	return c.do(ctx, "POST", "/repos/"+seg(org)+"/"+seg(repo)+"/pulls/"+fmt.Sprint(index)+"/merge", nil, map[string]any{"Do": "merge"}, nil)
+//
+// When headSHA is set it is pinned as `head_commit_id`: Forgejo refuses the
+// merge (409) if the head branch no longer sits on that commit, so a branch
+// that moved after review cannot change what lands on main.
+func (c *Client) MergeMR(ctx context.Context, org, repo string, index int32, headSHA string) error {
+	in := map[string]any{"Do": "merge"}
+	if headSHA != "" {
+		in["head_commit_id"] = headSHA
+	}
+	return c.do(ctx, "POST", "/repos/"+seg(org)+"/"+seg(repo)+"/pulls/"+fmt.Sprint(index)+"/merge", nil, in, nil)
 }
 
 // GetMR returns one pull request's detail (full MRInfo).
@@ -756,6 +856,7 @@ func mrFromJSON(r map[string]any) MRInfo {
 		Title:        str(r["title"]),
 		State:        str(r["state"]),
 		Head:         str(head["ref"]),
+		HeadSHA:      str(head["sha"]),
 		Base:         str(base["ref"]),
 		Body:         str(r["body"]),
 		Author:       str(user["login"]),
@@ -882,6 +983,16 @@ func (c *Client) Branches(ctx context.Context, org, repo string) ([]BranchInfo, 
 		out = append(out, BranchInfo{Name: str(r["name"]), SHA: str(commit["id"])})
 	}
 	return out, nil
+}
+
+// BranchTip returns the commit sha at a branch's tip.
+func (c *Client) BranchTip(ctx context.Context, org, repo, branch string) (string, error) {
+	var raw map[string]any
+	if err := c.do(ctx, "GET", "/repos/"+seg(org)+"/"+seg(repo)+"/branches/"+seg(branch), nil, nil, &raw); err != nil {
+		return "", err
+	}
+	commit, _ := raw["commit"].(map[string]any)
+	return str(commit["id"]), nil
 }
 
 // ListRepos lists every repo the shared credential can see (used to seed the
