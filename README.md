@@ -54,9 +54,9 @@ speaks `agent.v1` directly. The `agent.v1` handler is deliberately NOT mounted.
   worker-bundled image** from the deployment's dedicated sandbox org
   (`SANDBOX_ORG`, default `sandbox`). The gateway does **NOT** inject the
   worker at launch: an image outside that org is refused, because it would have
-  no worker. Build/refresh those images with
-  `sandbox-images/build.sh` (bakes agent-worker into the
-  `agent-toolchain/toolchain-<lang>` images).
+  no worker. Build/refresh those images with `abcp-sdk/worker`'s
+  `sandbox-images/build.sh` (compiles agent-worker from that repo into the
+  `agent-toolchain/toolchain-<lang>` bases).
 - **OCI images**: `ListOCIImages` (browse a namespace; pass `name` to list one
   image's tags), `BuildSandboxImage` (repo Dockerfile -> `<org>/<image>:<tag>`
   via buildkitd).

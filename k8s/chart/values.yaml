@@ -193,7 +193,7 @@ gateway:
     token: "8a582a2d295a7d19f089b449bc29e5e4e34b3039"
   registry:
     # Sandboxes run a PRE-BUILT, worker-bundled image from SANDBOX_ORG (built by
-    # sandbox-images/build.sh). The gateway no longer injects the worker.
+    # abcp-sdk/worker's sandbox-images/build.sh). The gateway never injects the worker.
     sandboxOrg: "sandbox"
     defaultSandboxImage: "git.agent.svc.cluster.local/sandbox/sandbox-base:debian-trixie"
   # Optional JSON overriding KVM/GPU device names, the GPU RuntimeClass (needed
