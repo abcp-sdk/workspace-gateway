@@ -34,8 +34,9 @@ done
 no_proxy="${NO_PROXY}"
 export NO_PROXY no_proxy
 
-# Default set: the base plus the common languages.
-LANGS="${*:-base node python go java rust}"
+# Default set: every toolchain image the deployment publishes (mirrors the
+# `agent-toolchain` catalog). Pass explicit names to build a subset.
+LANGS="${*:-base node python go rust java java25 kotlin scala clang dotnet ruby php elixir dart swift zig}"
 
 echo "==> cross-compiling agent-worker (linux/amd64)"
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
