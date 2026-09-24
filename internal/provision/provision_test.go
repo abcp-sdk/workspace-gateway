@@ -19,6 +19,7 @@ type fakeAgent struct {
 	tenants   []string
 	providers []string // "<tenant>|Authorization"
 	configs   []string // "<tenant>|<extId>.<name>=<value>"
+	deleted   []string // provider ids deleted
 }
 
 func (f *fakeAgent) start(t *testing.T) *httptest.Server {
@@ -55,6 +56,13 @@ func (f *fakeAgent) start(t *testing.T) *httptest.Server {
 			_ = json.Unmarshal([]byte(body), &req)
 			f.providers = append(f.providers, req.Provider.ProviderID+"|"+auth+"|"+req.Provider.BaseURL)
 			_, _ = w.Write([]byte(`{"ok":true}`))
+		case strings.HasSuffix(r.URL.Path, "AgentService/DeleteProvider"):
+			var req struct {
+				ProviderID string `json:"providerId"`
+			}
+			_ = json.Unmarshal([]byte(body), &req)
+			f.deleted = append(f.deleted, req.ProviderID)
+			_, _ = w.Write([]byte(`{"ok":true}`))
 		case strings.HasSuffix(r.URL.Path, "AgentService/SetExtensionConfig"):
 			f.configs = append(f.configs, auth+"|"+body)
 			_, _ = w.Write([]byte(`{"ok":true}`))
@@ -75,29 +83,59 @@ func TestRunSeedsProvidersPerProfile(t *testing.T) {
 		AgentURL:       srv.URL,
 		AdminToken:     "admin",
 		DefaultProfile: "std",
-		TenantProfile:  map[string]string{"myuser": "full"},
+		// A stale `myuser: full` override must NOT strand the tenant: the run
+		// warns and falls back to the default profile.
+		TenantProfile: map[string]string{"myuser": "full"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Providers != 16 {
-		t.Fatalf("providers = %d, want 16 (2 tenants x 8)", res.Providers)
+	// workspace + myuser each get the (7-provider) gray profile.
+	if res.Providers != 14 {
+		t.Fatalf("providers = %d, want 14 (2 tenants x 7)", res.Providers)
 	}
-	// workspace -> std (gray); myuser -> full (dev004).
-	var wsGray, myDev bool
-	for _, p := range fa.providers {
-		if strings.HasPrefix(p, "gateway-text|Bearer tok-workspace|") && strings.Contains(p, grayBase) {
-			wsGray = true
+	// BOTH tenants must be on the gray gateway.
+	for _, tenant := range []string{"workspace", "myuser"} {
+		want := "gateway-text|Bearer tok-" + tenant + "|"
+		found := false
+		for _, p := range fa.providers {
+			if strings.HasPrefix(p, want) && strings.Contains(p, grayBase) {
+				found = true
+			}
 		}
-		if strings.HasPrefix(p, "gateway-text|Bearer tok-myuser|") && strings.Contains(p, dev004Base) {
-			myDev = true
+		if !found {
+			t.Fatalf("%s must use the gray (std) profile", tenant)
 		}
 	}
-	if !wsGray {
-		t.Fatal("workspace must use the std (gray) profile")
+	// NO registered provider may carry a `local/` model.
+	if strings.Contains(strings.Join(fa.providers, ";"), "local/") {
+		t.Fatalf("no local/* models may be registered: %v", fa.providers)
 	}
-	if !myDev {
-		t.Fatal("myuser must use the full (dev004) profile")
+	// The retired override produced a warning (not a hard skip).
+	if len(res.Warnings) == 0 {
+		t.Fatal("expected a warning for the unknown `full` profile")
+	}
+}
+
+func TestRunDeletesRetiredProviders(t *testing.T) {
+	fa := &fakeAgent{tenants: []string{"workspace"}}
+	srv := fa.start(t)
+	defer srv.Close()
+
+	res, err := Run(context.Background(), Config{
+		AgentURL:         srv.URL,
+		AdminToken:       "admin",
+		DefaultProfile:   "std",
+		RetiredProviders: []string{"gateway-video"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ProvidersRemoved != 1 {
+		t.Fatalf("providers_removed = %d, want 1", res.ProvidersRemoved)
+	}
+	if len(fa.deleted) != 1 || fa.deleted[0] != "gateway-video" {
+		t.Fatalf("deleted = %v, want [gateway-video]", fa.deleted)
 	}
 }
 

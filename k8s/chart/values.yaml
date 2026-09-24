@@ -178,11 +178,10 @@ gateway:
   # values the agent's seed uses.
   provision:
     enabled: true
-    # tenant override -> profile name. Tenants not listed use `defaultProfile`.
-    # `full` = the dev004 gateway (includes local/* models); `std` = the gray
-    # gateway (no local/*).
-    tenantProfile:
-      myuser: full
+    # ONE profile for EVERY tenant: the gray gateway (`std`), which serves no
+    # `local/*` models and no video model. Kept as an empty map so a per-tenant
+    # override can still be added without a chart change.
+    tenantProfile: {}
     defaultProfile: std
     # Retired system presets removed from every tenant's KV bucket on boot (the
     # agent refuses to delete system presets through its API).

@@ -2,12 +2,16 @@
 // deployment's expected state, IDEMPOTENTLY:
 //
 //   - PROVIDERS: the workspace agent starts with none. Sessions need a
-//     `provider_id/model_id` to run, so every tenant must be seeded with the
-//     platform gateway providers. There are TWO profiles, mirroring the
-//     standalone agent:
-//     myuser -> the dev004 gateway (key Hzfsls...) whose model set includes the
-//     `local/*` extras; every OTHER tenant -> the gray gateway (key
-//     sk-code...) without `local/*`.
+//     `provider_id/model_id` to run, so every tenant is seeded with the
+//     platform gateway providers. There is ONE profile — the gray gateway
+//     (key sk-code...) — for EVERY tenant, including myuser. It carries NO
+//     `local/*` models and NO video provider (the gray gateway serves no video
+//     model).
+//
+//   - RETIRED PROVIDERS: provisions are upserts, so a provider dropped from the
+//     profile would otherwise linger forever (e.g. the old `gateway-video`
+//     holding `local/minimax-h3-video`). `RetiredProviders` are DELETED from
+//     every tenant after the profile is registered.
 //
 //   - CALIBRATION: the agent seeds extension config with CREATE-IF-ABSENT, so a
 //     value written early (or migrated from an older deployment) silently wins
@@ -16,7 +20,8 @@
 //     stale value cannot strand a tenant.
 //
 // It talks to the agent over h2c as the ADMIN (to mint a per-tenant token),
-// then acts AS each tenant for RegisterProvider / SetExtensionConfig.
+// then acts AS each tenant for RegisterProvider / DeleteProvider /
+// SetExtensionConfig.
 package provision
 
 import (
@@ -78,15 +83,20 @@ type Config struct {
 	// PresetCleanup removes retired system presets (direct KV delete; the
 	// agent refuses to delete system presets via its API).
 	PresetCleanup PresetCleanup
+	// RetiredProviders are provider ids DELETED from every tenant after the
+	// profile is registered. A profile is an upsert set, so a provider removed
+	// from it (e.g. the old `gateway-video`) would otherwise linger.
+	RetiredProviders []string
 	// Timeout bounds the whole run. Zero = 5 minutes.
 	Timeout time.Duration
 }
 
 // Result summarizes a run.
 type Result struct {
-	Tenants      []string
-	Providers    int
-	Calibrations int
+	Tenants          []string
+	Providers        int
+	ProvidersRemoved int
+	Calibrations     int
 	// PresetsRemoved counts retired system presets deleted from KV.
 	PresetsRemoved int
 	// Warnings are non-fatal (a single provider/knob that failed). The run
@@ -94,26 +104,23 @@ type Result struct {
 	Warnings []string
 }
 
-// Gateway credentials for the two platform gateways. Kept here (not in chart
-// values) because they are dev fixtures already tracked in tools/rebind-gateway.py.
+// Gateway credentials for the platform gateway. Kept here (not in chart
+// values) because they are dev fixtures already tracked in
+// tools/rebind-gateway.py.
 const (
 	grayBase = "https://api-gray.xueersi.com/ai-multimodal-gateway/v4/ai"
 	grayKey  = "sk-code-dAeG7zpfYuusoIA0Z9LYumE6oDb7BNArqxTkk4th37lYtzRokkkvoY5Y"
 
-	dev004Base = "https://ai-gateway-dev004.develop.fenjin.org/v4/ai"
-	dev004Key  = "Hzfsls978665#"
-
 	// Hosted tal-coding text models advertise a 1M context window (the gateway
-	// `/config` reports context_window=1000000); the local llama.cpp
-	// `local-text` model is a real 262144.
-	textCtx      = int64(1000000)
-	localTextCtx = int64(262144)
+	// `/config` reports context_window=1000000).
+	textCtx = int64(1000000)
 
 	apiType = "vercel-compatible-gateway"
 )
 
-// sharedProviders is the model set every tenant gets (the gray gateway's
-// visibility: no `local/*` models).
+// sharedProviders is the model set every tenant gets: the gray gateway's
+// visibility. NO `local/*` models and NO video provider (the gray gateway
+// serves no video model).
 func sharedProviders() []Provider {
 	return []Provider{
 		{ID: "gateway-text", Capability: "text", Models: []Model{
@@ -125,9 +132,6 @@ func sharedProviders() []Provider {
 			{"tal-coding-gptimage/gpt-image-2", "GPT Image 2", 0},
 			{"tal-coding-gptimage/gpt-image-2.5-flare", "GPT Image 2.5 Flare", 0},
 			{"tal-coding-gptimage/gpt-image-2.5-sunburst", "GPT Image 2.5 Sunburst", 0},
-		}},
-		{ID: "gateway-video", Capability: "video", Models: []Model{
-			{"local/minimax-h3-video", "MiniMax H3 Video", 0},
 		}},
 		{ID: "gateway-speech", Capability: "speech", Models: []Model{
 			{"mlops-tts-customvoice/qwen3-tts-customvoice", "Qwen3 TTS CustomVoice", 0},
@@ -148,30 +152,18 @@ func sharedProviders() []Provider {
 	}
 }
 
-// ProfileStd is the default deployment profile (the gray gateway).
+// ProfileStd is the deployment profile: the gray gateway. Every tenant uses it.
 var ProfileStd = Profile{BaseURL: grayBase, APIKey: grayKey, Providers: sharedProviders()}
 
-// ProfileFull is myuser's profile (the dev004 gateway + the local/* extras).
-var ProfileFull = func() Profile {
-	ps := sharedProviders()
-	for i := range ps {
-		switch ps[i].ID {
-		case "gateway-text":
-			ps[i].Models = append(ps[i].Models, Model{"local/local-text", "Local Text", localTextCtx})
-		case "gateway-image":
-			ps[i].Models = append(ps[i].Models,
-				Model{"local/local-image", "Local Image", 0},
-				Model{"local/local-image-edit", "Local Image Edit", 0})
-		case "gateway-video":
-			ps[i].Models = append(ps[i].Models, Model{"local/local-video", "Local Video", 0})
-		}
-	}
-	return Profile{BaseURL: dev004Base, APIKey: dev004Key, Providers: ps}
-}()
+// RetiredProviderIDs are provider ids removed from every tenant on provision
+// (upsert never deletes, so a provider dropped from the profile must be named
+// here once). `gateway-video` held only `local/minimax-h3-video`, which the
+// gray gateway does not serve.
+var RetiredProviderIDs = []string{"gateway", "gateway-video"}
 
-// BuiltinProfiles returns a fresh map of the two built-in profiles.
+// BuiltinProfiles returns a fresh map of the built-in profiles.
 func BuiltinProfiles() map[string]Profile {
-	return map[string]Profile{"std": ProfileStd, "full": ProfileFull}
+	return map[string]Profile{"std": ProfileStd}
 }
 
 // Run provisions the agent. It is safe to run repeatedly.
@@ -223,8 +215,14 @@ func Run(ctx context.Context, cfg Config) (Result, error) {
 		}
 		profile, ok := cfg.Profiles[profileName]
 		if !ok {
-			res.Warnings = append(res.Warnings, fmt.Sprintf("tenant %s: unknown profile %q", tenant, profileName))
-			continue
+			// A stale override (e.g. the retired `full`) must never strand a
+			// tenant: warn and fall back to the default profile.
+			res.Warnings = append(res.Warnings, fmt.Sprintf("tenant %s: unknown profile %q; using %q", tenant, profileName, cfg.DefaultProfile))
+			profile, ok = cfg.Profiles[cfg.DefaultProfile]
+			if !ok {
+				res.Warnings = append(res.Warnings, fmt.Sprintf("tenant %s: unknown default profile %q", tenant, cfg.DefaultProfile))
+				continue
+			}
 		}
 		for _, p := range profile.Providers {
 			if err := registerProvider(ctx, c, token, profile, p); err != nil {
@@ -232,6 +230,16 @@ func Run(ctx context.Context, cfg Config) (Result, error) {
 				continue
 			}
 			res.Providers++
+		}
+		// A provider dropped from the profile must be deleted explicitly
+		// (upsert never removes), else a stale row keeps serving e.g. the old
+		// `local/minimax-h3-video` under `gateway-video`.
+		for _, pid := range cfg.RetiredProviders {
+			if err := deleteProvider(ctx, c, token, pid); err != nil {
+				res.Warnings = append(res.Warnings, fmt.Sprintf("tenant %s: delete retired provider %s: %v", tenant, pid, err))
+				continue
+			}
+			res.ProvidersRemoved++
 		}
 	}
 
@@ -299,6 +307,15 @@ func registerProvider(ctx context.Context, c *client, token string, profile Prof
 	}})
 	req.Header().Set("Authorization", "Bearer "+token)
 	_, err := c.agent.RegisterProvider(ctx, req)
+	return err
+}
+
+// deleteProvider removes a provider row by id. A missing provider is fine
+// (idempotent re-runs): the agent returns success either way.
+func deleteProvider(ctx context.Context, c *client, token, providerID string) error {
+	req := connect.NewRequest(&agentv1.DeleteProviderRequest{ProviderId: providerID})
+	req.Header().Set("Authorization", "Bearer "+token)
+	_, err := c.agent.DeleteProvider(ctx, req)
 	return err
 }
 

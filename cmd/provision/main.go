@@ -14,8 +14,10 @@
 //
 //	PROVISION_CALIBRATIONS  JSON [{tenant,extId,name,value}] force-set values
 //	                        (tenant "*" = every known tenant).
-//	PROVISION_TENANT_PROFILE JSON {"myuser":"full"} per-tenant profile override.
+//	PROVISION_TENANT_PROFILE JSON {"tenant":"profile"} per-tenant profile override.
 //	PROVISION_DEFAULT_PROFILE profile for tenants without an override (default "std").
+//	PROVISION_RETIRED_PROVIDERS JSON ["gateway-video"] extra provider ids to
+//	                        DELETE from every tenant (upsert never removes).
 package main
 
 import (
@@ -39,6 +41,8 @@ func main() {
 		AgentURL:       envOr("AGENT_URL", "http://workspace-agent.agent.svc.cluster.local"),
 		AdminToken:     os.Getenv("AGENT_ADMIN_TOKEN"),
 		DefaultProfile: envOr("PROVISION_DEFAULT_PROFILE", "std"),
+		// Providers dropped from the profile are deleted from every tenant.
+		RetiredProviders: provision.RetiredProviderIDs,
 	}
 	if cfg.AdminToken == "" {
 		log.Fatal("AGENT_ADMIN_TOKEN is required")
@@ -53,6 +57,13 @@ func main() {
 			log.Fatalf("PROVISION_TENANT_PROFILE: %v", err)
 		}
 	}
+	if raw := os.Getenv("PROVISION_RETIRED_PROVIDERS"); raw != "" {
+		var ids []string
+		if err := json.Unmarshal([]byte(raw), &ids); err != nil {
+			log.Fatalf("PROVISION_RETIRED_PROVIDERS: %v", err)
+		}
+		cfg.RetiredProviders = append(cfg.RetiredProviders, ids...)
+	}
 	if raw := os.Getenv("PROVISION_RETIRED_PRESETS"); raw != "" {
 		var ids []string
 		if err := json.Unmarshal([]byte(raw), &ids); err != nil {
@@ -65,8 +76,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("provision: %v", err)
 	}
-	log.Printf("provision: tenants=%v providers=%d calibrations=%d presets_removed=%d warnings=%d",
-		res.Tenants, res.Providers, res.Calibrations, res.PresetsRemoved, len(res.Warnings))
+	log.Printf("provision: tenants=%v providers=%d providers_removed=%d calibrations=%d presets_removed=%d warnings=%d",
+		res.Tenants, res.Providers, res.ProvidersRemoved, res.Calibrations, res.PresetsRemoved, len(res.Warnings))
 	for _, w := range res.Warnings {
 		log.Printf("warn: %s", w)
 	}
