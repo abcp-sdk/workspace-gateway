@@ -20,6 +20,13 @@ option go_package = "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1;wsv1
 
 // ---- branch sessions (repo:branch <-> session, 1:1) ----
 
+// SandboxRef is one sandbox owned by a session.
+message SandboxRef {
+  string name = 1;  // sandbox logical name
+  string phase = 2; // Running/Pending/... ('' when unknown)
+  bool ready = 3;
+}
+
 message BranchSession {
   string session = 1; // session name = org:repo:branch
   string org = 2;
@@ -27,9 +34,14 @@ message BranchSession {
   string branch = 4;
   string role = 5;   // maintainer (branch=main) | developer
   string preset = 6; // the immutable preset bound at creation
-  string sandbox = 7; // sandbox logical name (== session)
+  // The session's REPRESENTATIVE sandbox (prefer Running/Ready, else newest):
+  // its name + phase. Empty when the session owns no sandbox. A session may own
+  // SEVERAL sandboxes; the full set is `sandboxes`.
+  string sandbox = 7;
   string sandbox_url = 8;
-  string phase = 9;  // sandbox phase (Running/Pending/...)
+  string phase = 9;  // representative sandbox phase (Running/Pending/...)
+  // Every sandbox the session owns, representative first then newest-first.
+  repeated SandboxRef sandboxes = 10;
 }
 
 message EnsureBranchSessionRequest {

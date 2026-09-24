@@ -12,6 +12,7 @@ import (
 	"github.com/abcp-sdk/workspace-gateway/gen/agent/v1/agentv1connect"
 	wsv1 "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1"
 	"github.com/abcp-sdk/workspace-gateway/internal/forgejo"
+	"github.com/abcp-sdk/workspace-gateway/internal/sandboxmgr"
 	"github.com/abcp-sdk/workspace-gateway/internal/servicesmgr"
 )
 
@@ -268,5 +269,40 @@ func TestValidateSandboxImage(t *testing.T) {
 	none := &Service{}
 	if err := none.validateSandboxImage("docker.io/library/debian:trixie"); err != nil {
 		t.Errorf("unset sandboxOrg should accept anything, got %v", err)
+	}
+}
+
+func TestSessionSandboxesOrdering(t *testing.T) {
+	mk := func(name, phase string, ready bool, created int64) sandboxmgr.Sandbox {
+		return sandboxmgr.Sandbox{Name: name, Phase: phase, Ready: ready, CreatedAt: created, Session: "s"}
+	}
+	// A Running sandbox is the representative even if an older Failed one exists;
+	// the rest follow newest-first.
+	refs := sessionSandboxes([]sandboxmgr.Sandbox{
+		mk("failed-new", "Failed", false, 300),
+		mk("running", "Running", true, 100),
+		mk("pending", "Pending", false, 200),
+	}, "s")
+	if len(refs) != 3 {
+		t.Fatalf("want 3 refs, got %d", len(refs))
+	}
+	if refs[0].GetName() != "running" || refs[0].GetPhase() != "Running" {
+		t.Fatalf("representative = %q/%q, want running/Running", refs[0].GetName(), refs[0].GetPhase())
+	}
+	// Remaining two: newest-first (failed-new 300, pending 200).
+	if refs[1].GetName() != "failed-new" || refs[2].GetName() != "pending" {
+		t.Fatalf("tail order = %q,%q", refs[1].GetName(), refs[2].GetName())
+	}
+	// With no Running/Ready, the newest is representative.
+	refs = sessionSandboxes([]sandboxmgr.Sandbox{
+		mk("old", "Pending", false, 1),
+		mk("new", "Failed", false, 9),
+	}, "s")
+	if refs[0].GetName() != "new" {
+		t.Fatalf("fallback representative = %q, want new", refs[0].GetName())
+	}
+	// Another session's sandboxes are ignored.
+	if got := sessionSandboxes([]sandboxmgr.Sandbox{mk("x", "Running", true, 1)}, "other"); got != nil {
+		t.Fatalf("want nil for foreign session, got %v", got)
 	}
 }

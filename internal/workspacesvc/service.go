@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -278,10 +279,11 @@ func (s *Service) EnsureBranchSession(ctx context.Context, req *connect.Request[
 			return nil, err
 		}
 	}
-	sbName, sbPhase := s.representativeSandbox(ctx, session)
+	sbName, sbPhase, refs := s.sandboxFields(ctx, session)
 	return connect.NewResponse(&wsv1.EnsureBranchSessionResponse{BranchSession: &wsv1.BranchSession{
 		Session: session, Org: org, Repo: repo, Branch: branch,
-		Role: string(role), Preset: roles.PresetFor(role), Sandbox: sbName, Phase: sbPhase,
+		Role: string(role), Preset: roles.PresetFor(role),
+		Sandbox: sbName, Phase: sbPhase, Sandboxes: refs,
 	}}), nil
 }
 
@@ -390,10 +392,11 @@ func (s *Service) ForkBranchSession(ctx context.Context, req *connect.Request[ws
 	if _, err := s.agent.Fork(ctx, fr); err != nil {
 		return nil, err
 	}
-	sbName, sbPhase := s.representativeSandbox(ctx, session)
+	sbName, sbPhase, refs := s.sandboxFields(ctx, session)
 	return connect.NewResponse(&wsv1.ForkBranchSessionResponse{BranchSession: &wsv1.BranchSession{
 		Session: session, Org: org, Repo: repo, Branch: branch,
-		Role: string(role), Preset: roles.PresetFor(role), Sandbox: sbName, Phase: sbPhase,
+		Role: string(role), Preset: roles.PresetFor(role),
+		Sandbox: sbName, Phase: sbPhase, Sandboxes: refs,
 	}}), nil
 }
 
@@ -482,26 +485,28 @@ func (s *Service) ListBranchSessions(ctx context.Context, req *connect.Request[w
 	}
 
 	// Sandbox per session (best effort). A session may own SEVERAL sandboxes
-	// (named freely by the model), so map by the sandbox's SESSION annotation —
-	// never by its name — and keep one representative (prefer Running/Ready,
-	// else the newest).
-	bySession := map[string]sandboxPick{}
+	// (named freely by the model), so attribute by the sandbox's SESSION
+	// annotation — never by its name — and return the full list (representative
+	// first). ONE list call, reused for every session.
+	var all []sandboxmgr.Sandbox
 	if sbxs, err := s.sbx.List(ctx); err == nil {
-		for _, sb := range sbxs {
-			key := sb.Session
-			if key == "" {
-				key = sb.Name
-			}
-			if pickRepresentative(bySession[key], sb) {
-				bySession[key] = sandboxPick{name: sb.Name, phase: sb.Phase, ready: sb.Ready, created: sb.CreatedAt}
-			}
+		all = sbxs
+	}
+	refsFor := func(session string) []*wsv1.SandboxRef {
+		return sessionSandboxes(all, session)
+	}
+	repOf := func(refs []*wsv1.SandboxRef) (string, string) {
+		if len(refs) == 0 {
+			return "", ""
 		}
+		return refs[0].GetName(), refs[0].GetPhase()
 	}
 
 	out := []*wsv1.BranchSession{}
 	for _, sess := range res.Msg.GetSessions() {
 		name := sess.GetName()
-		pick := bySession[name]
+		refs := refsFor(name)
+		sbName, sbPhase := repOf(refs)
 		if org, repo, branch, ok := roles.ParseSession(name); ok {
 			owned, err := s.members.OwnsRepo(tenant, org, repo)
 			if err != nil {
@@ -514,13 +519,14 @@ func (s *Service) ListBranchSessions(ctx context.Context, req *connect.Request[w
 			out = append(out, &wsv1.BranchSession{
 				Session: name, Org: org, Repo: repo, Branch: branch,
 				Role: string(role), Preset: roles.PresetFor(role),
-				Sandbox: pick.name, Phase: pick.phase,
+				Sandbox: sbName, Phase: sbPhase, Sandboxes: refs,
 			})
 			continue
 		}
 		if role, ok, _ := s.members.FreeRole(tenant, name); ok {
 			out = append(out, &wsv1.BranchSession{
-				Session: name, Role: role, Preset: role, Sandbox: pick.name, Phase: pick.phase,
+				Session: name, Role: role, Preset: role,
+				Sandbox: sbName, Phase: sbPhase, Sandboxes: refs,
 			})
 		}
 	}
@@ -543,19 +549,21 @@ func (s *Service) GetBranchSession(ctx context.Context, req *connect.Request[wsv
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("branch session not found"))
 		}
 		role := roles.RoleForBranch(branch)
-		sbName, sbPhase := s.representativeSandbox(ctx, session)
+		sbName, sbPhase, refs := s.sandboxFields(ctx, session)
 		return connect.NewResponse(&wsv1.GetBranchSessionResponse{BranchSession: &wsv1.BranchSession{
 			Session: session, Org: org, Repo: repo, Branch: branch,
-			Role: string(role), Preset: roles.PresetFor(role), Sandbox: sbName, Phase: sbPhase,
+			Role: string(role), Preset: roles.PresetFor(role),
+			Sandbox: sbName, Phase: sbPhase, Sandboxes: refs,
 		}}), nil
 	}
 	role, ok, _ := s.members.FreeRole(tenant, session)
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("branch session not found"))
 	}
-	sbName, sbPhase := s.representativeSandbox(ctx, session)
+	sbName, sbPhase, refs := s.sandboxFields(ctx, session)
 	return connect.NewResponse(&wsv1.GetBranchSessionResponse{BranchSession: &wsv1.BranchSession{
-		Session: session, Role: role, Preset: role, Sandbox: sbName, Phase: sbPhase,
+		Session: session, Role: role, Preset: role,
+		Sandbox: sbName, Phase: sbPhase, Sandboxes: refs,
 	}}), nil
 }
 
@@ -1787,24 +1795,55 @@ func pickRepresentative(prev sandboxPick, sb sandboxmgr.Sandbox) bool {
 	return sb.CreatedAt > prev.created
 }
 
-// representativeSandbox returns the best sandbox owned by `session` (prefer
-// Running/Ready, else the newest) as (name, phase). Empty when none. A session
-// may own several sandboxes; callers want one representative for a status chip.
-func (s *Service) representativeSandbox(ctx context.Context, session string) (string, string) {
+// sessionSandboxes returns every sandbox owned by `session`, REPRESENTATIVE
+// first (prefer Running/Ready, else newest), then the rest newest-first. Empty
+// when none. Used to fill BranchSession.sandboxes; the head is the
+// representative (BranchSession.sandbox / .phase).
+func sessionSandboxes(sbxs []sandboxmgr.Sandbox, session string) []*wsv1.SandboxRef {
+	mine := make([]sandboxmgr.Sandbox, 0, 2)
+	for _, sb := range sbxs {
+		if sb.Session == session {
+			mine = append(mine, sb)
+		}
+	}
+	if len(mine) == 0 {
+		return nil
+	}
+	// Newest-first, then move the representative to the head — the rest keep
+	// their newest-first order.
+	sort.SliceStable(mine, func(i, j int) bool { return mine[i].CreatedAt > mine[j].CreatedAt })
+	rep := 0
+	for i := 1; i < len(mine); i++ {
+		if pickRepresentative(
+			sandboxPick{name: mine[rep].Name, phase: mine[rep].Phase, ready: mine[rep].Ready, created: mine[rep].CreatedAt},
+			mine[i],
+		) {
+			rep = i
+		}
+	}
+	ordered := make([]sandboxmgr.Sandbox, 0, len(mine))
+	ordered = append(ordered, mine[rep])
+	ordered = append(ordered, mine[:rep]...)
+	ordered = append(ordered, mine[rep+1:]...)
+	out := make([]*wsv1.SandboxRef, 0, len(ordered))
+	for _, sb := range ordered {
+		out = append(out, &wsv1.SandboxRef{Name: sb.Name, Phase: sb.Phase, Ready: sb.Ready})
+	}
+	return out
+}
+
+// sandboxFields loads the session's sandboxes and returns the representative
+// (name, phase) plus the full ordered list, for filling a BranchSession.
+func (s *Service) sandboxFields(ctx context.Context, session string) (string, string, []*wsv1.SandboxRef) {
 	sbxs, err := s.sbx.List(ctx)
 	if err != nil {
-		return "", ""
+		return "", "", nil
 	}
-	var pick sandboxPick
-	for _, sb := range sbxs {
-		if sb.Session != session {
-			continue
-		}
-		if pickRepresentative(pick, sb) {
-			pick = sandboxPick{name: sb.Name, phase: sb.Phase, ready: sb.Ready, created: sb.CreatedAt}
-		}
+	refs := sessionSandboxes(sbxs, session)
+	if len(refs) == 0 {
+		return "", "", nil
 	}
-	return pick.name, pick.phase
+	return refs[0].GetName(), refs[0].GetPhase(), refs
 }
 
 // validateSandboxImage enforces that a sandbox image comes from the
