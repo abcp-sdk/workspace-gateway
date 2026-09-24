@@ -44,8 +44,13 @@ type Service struct {
 	services     *servicesmgr.Client
 	builder      *imagebuild.Builder
 	runtime      runtimeprofiles.Settings
-	defaultBase  string // default sandbox base image (empty = required)
-	toolchainOrg string // default owner for ListOCIImages
+	// sandboxOrg is the ONLY registry org a sandbox image may come from. The
+	// deployment pre-imports worker-bundled images there (see sandbox-images/),
+	// so a sandbox can never run an arbitrary upstream image.
+	sandboxOrg string
+	// defaultSandboxImage is used when CreateSandbox omits an image.
+	defaultSandboxImage string
+	toolchainOrg        string // default owner for ListOCIImages
 	svcToken     string // shared service token (sandbox-only service-to-service)
 	svcTenant    string // tenant the service token resolves to (sandbox ownership)
 	commits      *gitcommit.Manager
@@ -76,8 +81,11 @@ type Deps struct {
 	Builder *imagebuild.Builder
 	// Runtime holds the deployment's runtime knobs (KVM/GPU devices).
 	Runtime runtimeprofiles.Settings
-	// DefaultBase is the sandbox base image used when CreateSandbox omits one.
-	DefaultBase string
+	// SandboxOrg is the registry org sandbox images MUST come from. A sandbox
+	// request naming an image outside it is refused.
+	SandboxOrg string
+	// DefaultSandboxImage is used when CreateSandbox omits an image.
+	DefaultSandboxImage string
 	// ToolchainOrg is the default owner ListOCIImages browses.
 	ToolchainOrg string
 	// ServiceToken + ServiceTenant enable the sandbox-only service-to-service
@@ -111,7 +119,9 @@ func New(d Deps) *Service {
 	return &Service{
 		agent: d.Agent, members: d.Members, git: d.Forgejo, sbx: d.Sandbox,
 		services: d.Services,
-		builder:  d.Builder, runtime: d.Runtime, defaultBase: d.DefaultBase, toolchainOrg: d.ToolchainOrg,
+		builder: d.Builder, runtime: d.Runtime,
+		sandboxOrg: d.SandboxOrg, defaultSandboxImage: d.DefaultSandboxImage,
+		toolchainOrg: d.ToolchainOrg,
 		svcToken: d.ServiceToken, svcTenant: d.ServiceTenant,
 		commits:             commits,
 		sandboxNS:           d.SandboxNamespace,
@@ -268,9 +278,10 @@ func (s *Service) EnsureBranchSession(ctx context.Context, req *connect.Request[
 			return nil, err
 		}
 	}
+	sbName, sbPhase := s.representativeSandbox(ctx, session)
 	return connect.NewResponse(&wsv1.EnsureBranchSessionResponse{BranchSession: &wsv1.BranchSession{
 		Session: session, Org: org, Repo: repo, Branch: branch,
-		Role: string(role), Preset: roles.PresetFor(role), Sandbox: session,
+		Role: string(role), Preset: roles.PresetFor(role), Sandbox: sbName, Phase: sbPhase,
 	}}), nil
 }
 
@@ -379,9 +390,10 @@ func (s *Service) ForkBranchSession(ctx context.Context, req *connect.Request[ws
 	if _, err := s.agent.Fork(ctx, fr); err != nil {
 		return nil, err
 	}
+	sbName, sbPhase := s.representativeSandbox(ctx, session)
 	return connect.NewResponse(&wsv1.ForkBranchSessionResponse{BranchSession: &wsv1.BranchSession{
 		Session: session, Org: org, Repo: repo, Branch: branch,
-		Role: string(role), Preset: roles.PresetFor(role), Sandbox: session,
+		Role: string(role), Preset: roles.PresetFor(role), Sandbox: sbName, Phase: sbPhase,
 	}}), nil
 }
 
@@ -469,17 +481,27 @@ func (s *Service) ListBranchSessions(ctx context.Context, req *connect.Request[w
 		return nil, err
 	}
 
-	// Sandbox phase per session (best effort).
-	phase := map[string]string{}
+	// Sandbox per session (best effort). A session may own SEVERAL sandboxes
+	// (named freely by the model), so map by the sandbox's SESSION annotation —
+	// never by its name — and keep one representative (prefer Running/Ready,
+	// else the newest).
+	bySession := map[string]sandboxPick{}
 	if sbxs, err := s.sbx.List(ctx); err == nil {
 		for _, sb := range sbxs {
-			phase[sb.Name] = sb.Phase
+			key := sb.Session
+			if key == "" {
+				key = sb.Name
+			}
+			if pickRepresentative(bySession[key], sb) {
+				bySession[key] = sandboxPick{name: sb.Name, phase: sb.Phase, ready: sb.Ready, created: sb.CreatedAt}
+			}
 		}
 	}
 
 	out := []*wsv1.BranchSession{}
 	for _, sess := range res.Msg.GetSessions() {
 		name := sess.GetName()
+		pick := bySession[name]
 		if org, repo, branch, ok := roles.ParseSession(name); ok {
 			owned, err := s.members.OwnsRepo(tenant, org, repo)
 			if err != nil {
@@ -492,13 +514,13 @@ func (s *Service) ListBranchSessions(ctx context.Context, req *connect.Request[w
 			out = append(out, &wsv1.BranchSession{
 				Session: name, Org: org, Repo: repo, Branch: branch,
 				Role: string(role), Preset: roles.PresetFor(role),
-				Sandbox: name, Phase: phase[name],
+				Sandbox: pick.name, Phase: pick.phase,
 			})
 			continue
 		}
 		if role, ok, _ := s.members.FreeRole(tenant, name); ok {
 			out = append(out, &wsv1.BranchSession{
-				Session: name, Role: role, Preset: role, Sandbox: name, Phase: phase[name],
+				Session: name, Role: role, Preset: role, Sandbox: pick.name, Phase: pick.phase,
 			})
 		}
 	}
@@ -521,17 +543,19 @@ func (s *Service) GetBranchSession(ctx context.Context, req *connect.Request[wsv
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("branch session not found"))
 		}
 		role := roles.RoleForBranch(branch)
+		sbName, sbPhase := s.representativeSandbox(ctx, session)
 		return connect.NewResponse(&wsv1.GetBranchSessionResponse{BranchSession: &wsv1.BranchSession{
 			Session: session, Org: org, Repo: repo, Branch: branch,
-			Role: string(role), Preset: roles.PresetFor(role), Sandbox: session,
+			Role: string(role), Preset: roles.PresetFor(role), Sandbox: sbName, Phase: sbPhase,
 		}}), nil
 	}
 	role, ok, _ := s.members.FreeRole(tenant, session)
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("branch session not found"))
 	}
+	sbName, sbPhase := s.representativeSandbox(ctx, session)
 	return connect.NewResponse(&wsv1.GetBranchSessionResponse{BranchSession: &wsv1.BranchSession{
-		Session: session, Role: role, Preset: role, Sandbox: session,
+		Session: session, Role: role, Preset: role, Sandbox: sbName, Phase: sbPhase,
 	}}), nil
 }
 
@@ -1708,24 +1732,22 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 	if !roles.ValidComponent(name) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name must be simple"))
 	}
-	// Any base image is accepted. Derive a runnable sandbox by injecting the
-	// agent-worker binary (easylab's model). Empty = the deployment default base.
-	base := req.Msg.GetImage()
-	if base == "" {
-		base = s.defaultBase
+	// Sandboxes run a PRE-BUILT, worker-bundled image from the deployment's
+	// dedicated sandbox org. The gateway no longer injects the worker at launch,
+	// so an image outside that org would have no worker and could never become
+	// ready. Empty = the configured default sandbox image.
+	image := req.Msg.GetImage()
+	if image == "" {
+		image = s.defaultSandboxImage
 	}
-	if base == "" {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("no base image given and no default configured"))
+	if image == "" {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("no sandbox image given and no default configured"))
 	}
-	if s.builder == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("image builder not configured"))
-	}
-	derived, _, err := s.builder.Derive(ctx, base)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("derive sandbox image: %w", err))
+	if err := s.validateSandboxImage(image); err != nil {
+		return nil, err
 	}
 	sb, _, err := s.sbx.Create(ctx, sandboxmgr.Spec{
-		Name: name, Image: derived, CPU: req.Msg.GetCpu(), Memory: req.Msg.GetMemory(),
+		Name: name, Image: image, CPU: req.Msg.GetCpu(), Memory: req.Msg.GetMemory(),
 		Env: req.Msg.GetEnv(), Creator: tenant, Session: req.Msg.GetSession(),
 		Runtime: s.renderRuntime(req.Msg.GetKvm(), req.Msg.GetGpuCount()),
 	})
@@ -1741,6 +1763,85 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 		sb = cur
 	}
 	return connect.NewResponse(&wsv1.CreateSandboxResponse{Sandbox: toSandboxInfo(sb)}), nil
+}
+
+// sandboxPick is one session's representative sandbox.
+type sandboxPick struct {
+	name    string
+	phase   string
+	ready   bool
+	created int64
+}
+
+// pickRepresentative reports whether candidate `sb` should replace `prev`
+// (prefer Running/Ready, then newest; any first entry wins).
+func pickRepresentative(prev sandboxPick, sb sandboxmgr.Sandbox) bool {
+	if prev.name == "" {
+		return true
+	}
+	candUp := sb.Phase == "Running" || sb.Ready
+	prevUp := prev.phase == "Running" || prev.ready
+	if candUp != prevUp {
+		return candUp
+	}
+	return sb.CreatedAt > prev.created
+}
+
+// representativeSandbox returns the best sandbox owned by `session` (prefer
+// Running/Ready, else the newest) as (name, phase). Empty when none. A session
+// may own several sandboxes; callers want one representative for a status chip.
+func (s *Service) representativeSandbox(ctx context.Context, session string) (string, string) {
+	sbxs, err := s.sbx.List(ctx)
+	if err != nil {
+		return "", ""
+	}
+	var pick sandboxPick
+	for _, sb := range sbxs {
+		if sb.Session != session {
+			continue
+		}
+		if pickRepresentative(pick, sb) {
+			pick = sandboxPick{name: sb.Name, phase: sb.Phase, ready: sb.Ready, created: sb.CreatedAt}
+		}
+	}
+	return pick.name, pick.phase
+}
+
+// validateSandboxImage enforces that a sandbox image comes from the
+// deployment's dedicated sandbox org. The image may be a full ref
+// (`<registry>/<org>/<name>:<tag>`) or a bare name; in both cases the FIRST
+// path segment after an optional registry host must equal the sandbox org. The
+// registry host is matched loosely (with or without scheme) because callers
+// may echo back either form.
+func (s *Service) validateSandboxImage(image string) error {
+	if s.sandboxOrg == "" {
+		// Not configured: accept as-is (the deployment opted out of the guard).
+		return nil
+	}
+	path := image
+	if i := strings.Index(path, "://"); i >= 0 {
+		path = path[i+3:]
+	}
+	// Strip the registry host (first segment containing '.' or ':' or equal to
+	// localhost), then the tag/digest.
+	seg := strings.SplitN(path, "/", 2)
+	rest := path
+	if len(seg) == 2 && (strings.ContainsAny(seg[0], ".:") || seg[0] == "localhost") {
+		rest = seg[1]
+	}
+	if i := strings.LastIndex(rest, "@"); i >= 0 {
+		rest = rest[:i]
+	}
+	// Drop a tag only when it is in the LAST path segment (not an org:port).
+	if i := strings.LastIndex(rest, ":"); i >= 0 && !strings.Contains(rest[i:], "/") {
+		rest = rest[:i]
+	}
+	org := strings.SplitN(rest, "/", 2)[0]
+	if org != s.sandboxOrg {
+		return connect.NewError(connect.CodePermissionDenied,
+			fmt.Errorf("sandbox image must come from the %q org", s.sandboxOrg))
+	}
+	return nil
 }
 
 func (s *Service) GetSandbox(ctx context.Context, req *connect.Request[wsv1.GetSandboxRequest]) (*connect.Response[wsv1.GetSandboxResponse], error) {
@@ -2651,9 +2752,10 @@ func (s *Service) ListOCIImages(ctx context.Context, req *connect.Request[wsv1.L
 	if !roles.ValidComponent(owner) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("owner must be a simple name"))
 	}
-	// A tenant may browse the SHARED catalog namespaces (the toolchain org and
-	// the system `root`), but any other namespace must be one it owns.
-	if owner != s.toolchainOrg && owner != "root" {
+	// A tenant may browse the SHARED catalog namespaces (the toolchain org, the
+	// sandbox org and the system `root`), but any other namespace must be one it
+	// owns.
+	if owner != s.toolchainOrg && owner != s.sandboxOrg && owner != "root" {
 		owned, err := s.members.OwnsOrg(tenant, owner)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)

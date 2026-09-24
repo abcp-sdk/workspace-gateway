@@ -50,10 +50,13 @@ speaks `agent.v1` directly. The `agent.v1` handler is deliberately NOT mounted.
 - **Git browse**: `ListRepos`, `Tree`, `ReadBlob`, `Log`, `Branches`,
   `EnsureRepo`, `ListMRs`, `CreateMR`, `CommentMR`, `MergeMR`.
 - **Sandboxes**: `ListSandboxes`, `CreateSandbox`, `GetSandbox`,
-  `DeleteSandbox`, `ResolveSandbox`. A sandbox may be launched from **ANY base
-  image**: the gateway derives a runnable image by injecting the agent-worker
-  binary into the base at launch time (`FROM <base>` + COPY worker + worker
-  entrypoint), pushed content-addressed to `root/sandbox:<hash>`.
+  `DeleteSandbox`, `ResolveSandbox`. A sandbox runs a **pre-built,
+  worker-bundled image** from the deployment's dedicated sandbox org
+  (`SANDBOX_ORG`, default `sandbox`). The gateway does **NOT** inject the
+  worker at launch: an image outside that org is refused, because it would have
+  no worker. Build/refresh those images with
+  `sandbox-images/build.sh` (bakes agent-worker into the
+  `agent-toolchain/toolchain-<lang>` images).
 - **OCI images**: `ListOCIImages` (browse a namespace; pass `name` to list one
   image's tags), `BuildSandboxImage` (repo Dockerfile -> `<org>/<image>:<tag>`
   via buildkitd).
@@ -94,10 +97,9 @@ folded in under `internal/sandboxmgr`).
 | `IMAGE_REGISTRY_HOST` | registry host (default `git.agent.svc.cluster.local`) |
 | `IMAGE_REGISTRY_SCHEME` | registry scheme (default `http`; the in-cluster registry is plaintext) |
 | `TOOLCHAIN_ORG` | default owner `ListOCIImages` browses (default `agent-toolchain`) |
-| `DEFAULT_BASE_IMAGE` | base image used when `CreateSandbox` omits one |
-| `DERIVE_REPO` | repo for derived sandbox images (default `root/sandbox`) |
-| `WORKER_BIN` | agent-worker binary injected into derived images |
-| `BUILDKIT_ADDR` | buildkitd address for `BuildSandboxImage` + derive |
+| `SANDBOX_ORG` | the ONLY registry org a sandbox image may come from (default `sandbox`) |
+| `DEFAULT_SANDBOX_IMAGE` | image used when `CreateSandbox` omits one |
+| `BUILDKIT_ADDR` | buildkitd address for `BuildSandboxImage` |
 | `WORKSPACE_RUNTIME` | optional JSON overriding KVM/GPU device names + KVM security context |
 | `SANDBOX_IDLE_TTL` | reclaim sandboxes idle this long (default `24h`; `0` disables) |
 | `SANDBOX_REAP_INTERVAL` | reaper sweep period (default `10m`) |

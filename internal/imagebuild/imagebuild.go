@@ -10,14 +10,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,19 +31,13 @@ type Builder struct {
 	// RegistryScheme is the scheme for the registry host ("https" default;
 	// "http" for the in-cluster plaintext registry).
 	RegistryScheme string
-	// DeriveRepo is the repo path for derived sandbox images (default
-	// "root/sandbox"), pushed as <host>/<DeriveRepo>:<hash>.
-	DeriveRepo string
 	// Timeout bounds a build (default 30m).
 	Timeout time.Duration
 	// MaxContextBytes caps the extracted context size (default 512 MiB).
 	MaxContextBytes int64
 	// Buildctl is the buildctl binary path (default "buildctl").
 	Buildctl string
-	// WorkerBin is the path to the agent-worker linux/amd64 binary to inject
-	// into derived sandbox images (default "/usr/local/lib/agent-worker/agent-worker").
-	WorkerBin string
-	// RegistryUser/RegistryPass authenticate the ImageExists check.
+	// RegistryUser/RegistryPass authenticate registry requests.
 	RegistryUser string
 	RegistryPass string
 }
@@ -73,10 +64,6 @@ type Result struct {
 	ImageRef string
 	Log      string
 }
-
-// deriveVersion identifies the derived-sandbox Containerfile layout. Bump it
-// whenever the generated Containerfile changes so cached images are not reused.
-const deriveVersion = "v2" // v2: use the worker's default ~/workspace
 
 // FullRef is the destination reference for a repo path + tag.
 func (b *Builder) FullRef(repo, tag string) string {
@@ -129,62 +116,6 @@ func (b *Builder) Build(ctx context.Context, req Request) (Result, error) {
 		return Result{}, err
 	}
 	return Result{ImageRef: ref, Log: log}, nil
-}
-
-// Derive builds a sandbox image by injecting the agent-worker binary into an
-// arbitrary base image (easylab's model): `FROM <base>` + COPY worker + set
-// the worker env/entrypoint. The derived tag is content-addressed over
-// (base image, worker binary), so identical requests reuse one image.
-//
-// It returns the derived ref and whether it was freshly built.
-func (b *Builder) Derive(ctx context.Context, baseImage string) (ref string, built bool, err error) {
-	if baseImage == "" {
-		return "", false, errors.New("base image required")
-	}
-	bin, err := os.ReadFile(b.workerBin())
-	if err != nil {
-		return "", false, fmt.Errorf("worker binary: %w", err)
-	}
-	// deriveVersion is part of the hash: bump it whenever the Containerfile
-	// below changes, so a stale image with the same base is never reused.
-	sum := sha256.Sum256(append([]byte(baseImage+"|"+deriveVersion+"|"), bin...))
-	short := hex.EncodeToString(sum[:])[:16]
-	repo := b.DeriveRepo
-	if repo == "" {
-		repo = "root/sandbox"
-	}
-	ref = b.FullRef(repo, short)
-
-	if b.ImageExists(ctx, ref) {
-		return ref, false, nil
-	}
-
-	dir, err := os.MkdirTemp("", "derive-")
-	if err != nil {
-		return "", false, err
-	}
-	defer os.RemoveAll(dir)
-	if err := os.WriteFile(filepath.Join(dir, "agent-worker"), bin, 0o755); err != nil {
-		return "", false, err
-	}
-	// No WORKER_WORKSPACE/WORKDIR: the worker uses its own default (~/workspace)
-	// and creates it at startup.
-	cf := fmt.Sprintf("FROM %s\nCOPY agent-worker /usr/local/bin/agent-worker\nRUN mkdir -p /data\nENV WORKER_PORT=48080 \\\n    WORKER_DB=/data/jobs.db\nEXPOSE 48080\nENTRYPOINT [\"/usr/local/bin/agent-worker\"]\n", baseImage)
-	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte(cf), 0o644); err != nil {
-		return "", false, err
-	}
-
-	args := []string{
-		"--frontend", "dockerfile.v0",
-		"--local", "context=" + dir,
-		"--local", "dockerfile=" + dir,
-		"--opt", "filename=Dockerfile",
-		"--output", "type=image,name=" + ref + ",push=true",
-	}
-	if _, err := b.run(ctx, args); err != nil {
-		return "", false, err
-	}
-	return ref, true, nil
 }
 
 // ImportRequest mirrors one upstream image into the deployment registry.
@@ -380,59 +311,6 @@ func (b *Builder) runEnv(ctx context.Context, env []string, args []string) (stri
 		return tail(out.String(), 16*1024), fmt.Errorf("buildctl failed: %w\n%s", err, tail(out.String(), 16*1024))
 	}
 	return tail(out.String(), 16*1024), nil
-}
-
-func (b *Builder) workerBin() string {
-	if b.WorkerBin != "" {
-		return b.WorkerBin
-	}
-	return "/usr/local/lib/agent-worker/agent-worker"
-}
-
-// ImageExists reports whether a manifest for ref already exists in the registry
-// (a HEAD /v2/<repo>/manifests/<tag>). Auth uses RegistryUser/Pass when set.
-func (b *Builder) ImageExists(ctx context.Context, ref string) bool {
-	repo, tag, ok := splitRef(ref)
-	if !ok {
-		return false
-	}
-	host := strings.TrimRight(b.RegistryHost, "/")
-	if host == "" {
-		host = strings.SplitN(ref, "/", 2)[0]
-	}
-	u := b.scheme() + "://" + host + "/v2/" + repo + "/manifests/" + tag
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, u, nil)
-	if err != nil {
-		return false
-	}
-	if b.RegistryUser != "" {
-		req.SetBasicAuth(b.RegistryUser, b.RegistryPass)
-	} else if user, pass, ok := b.dockerConfigAuth(host); ok {
-		req.SetBasicAuth(user, pass)
-	}
-	req.Header.Set("Accept", "application/vnd.docker.distribution.manifest.v2+json")
-	hc := &http.Client{Timeout: 15 * time.Second}
-	resp, err := hc.Do(req)
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, resp.Body)
-	return resp.StatusCode == http.StatusOK
-}
-
-// splitRef splits "host/ns/name:tag" into repo ("ns/name") + tag.
-func splitRef(ref string) (repo, tag string, ok bool) {
-	i := strings.Index(ref, "/")
-	if i < 0 {
-		return "", "", false
-	}
-	rest := ref[i+1:]
-	j := strings.LastIndex(rest, ":")
-	if j < 0 {
-		return rest, "latest", true
-	}
-	return rest[:j], rest[j+1:], true
 }
 
 // Extract unpacks a tar.gz repository archive into a fresh temp directory,

@@ -80,9 +80,8 @@ spec:
             - { name: IMAGE_REGISTRY_HOST, value: {{ .Values.infra.registry.host | quote }} }
             - { name: IMAGE_REGISTRY_SCHEME, value: {{ .Values.infra.registry.scheme | quote }} }
             - { name: TOOLCHAIN_ORG, value: {{ .Values.infra.registry.toolchainOrg | quote }} }
-            - { name: DEFAULT_BASE_IMAGE, value: {{ .Values.gateway.registry.defaultBaseImage | quote }} }
-            - { name: DERIVE_REPO, value: {{ .Values.gateway.registry.deriveRepo | quote }} }
-            - { name: WORKER_BIN, value: {{ .Values.gateway.registry.workerBin | quote }} }
+            - { name: SANDBOX_ORG, value: {{ .Values.gateway.registry.sandboxOrg | quote }} }
+            - { name: DEFAULT_SANDBOX_IMAGE, value: {{ .Values.gateway.registry.defaultSandboxImage | quote }} }
             - { name: WORKSPACE_RUNTIME, value: {{ .Values.gateway.runtime | quote }} }
             - { name: BUILDKIT_ADDR, value: {{ .Values.infra.buildkit.addr | quote }} }
             - { name: DOCKER_CONFIG, value: /home/user/.docker }

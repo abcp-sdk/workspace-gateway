@@ -238,3 +238,35 @@ func TestResolveVolumesOwnership(t *testing.T) {
 		t.Fatal("expected bad mount_path refusal")
 	}
 }
+
+func TestValidateSandboxImage(t *testing.T) {
+	s := &Service{sandboxOrg: "sandbox"}
+	ok := []string{
+		"git.agent.svc.cluster.local/sandbox/sandbox-base:debian-trixie",
+		"git.agent.svc.cluster.local/sandbox/sandbox-node:debian-trixie",
+		"http://git.agent.svc.cluster.local/sandbox/sandbox-go",
+		"sandbox/sandbox-base",
+		"git.agent.fenjin.org/sandbox/sandbox-base:debian-trixie",
+	}
+	for _, img := range ok {
+		if err := s.validateSandboxImage(img); err != nil {
+			t.Errorf("expected %q to be accepted, got %v", img, err)
+		}
+	}
+	bad := []string{
+		"git.agent.svc.cluster.local/agent-toolchain/toolchain-base:debian-trixie",
+		"docker.io/library/debian:trixie",
+		"root/sandbox:abc",
+		"myuser/evil:latest",
+	}
+	for _, img := range bad {
+		if err := s.validateSandboxImage(img); err == nil {
+			t.Errorf("expected %q to be refused", img)
+		}
+	}
+	// An unset org disables the guard (deployment opt-out).
+	none := &Service{}
+	if err := none.validateSandboxImage("docker.io/library/debian:trixie"); err != nil {
+		t.Errorf("unset sandboxOrg should accept anything, got %v", err)
+	}
+}

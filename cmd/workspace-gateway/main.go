@@ -83,7 +83,11 @@ func main() {
 	registryHost := envOr("IMAGE_REGISTRY_HOST", "git.agent.svc.cluster.local")
 	registryScheme := envOr("IMAGE_REGISTRY_SCHEME", "http")
 	toolchainOrg := envOr("TOOLCHAIN_ORG", "agent-toolchain")
-	defaultBase := envOr("DEFAULT_BASE_IMAGE", registryHost+"/"+toolchainOrg+"/toolchain-base:debian-trixie")
+	// Sandboxes run a PRE-BUILT, worker-bundled image from a dedicated org
+	// (see sandbox-images/). The gateway no longer injects the worker.
+	sandboxOrg := envOr("SANDBOX_ORG", "sandbox")
+	defaultSandboxImage := envOr("DEFAULT_SANDBOX_IMAGE",
+		registryHost+"/"+sandboxOrg+"/sandbox-base:debian-trixie")
 
 	store, err := members.Open(db)
 	if err != nil {
@@ -137,13 +141,12 @@ func main() {
 			Addr:           envOr("BUILDKIT_ADDR", "tcp://buildkitd.agent.svc.cluster.local:1234"),
 			RegistryHost:   registryHost,
 			RegistryScheme: registryScheme,
-			DeriveRepo:     envOr("DERIVE_REPO", "root/sandbox"),
-			WorkerBin:      envOr("WORKER_BIN", "/usr/local/lib/agent-worker/agent-worker"),
 			RegistryUser:   os.Getenv("FORGEJO_USER"),
 			RegistryPass:   os.Getenv("FORGEJO_PASSWORD"),
 		},
 		Runtime:             runtime,
-		DefaultBase:         defaultBase,
+		SandboxOrg:          sandboxOrg,
+		DefaultSandboxImage: defaultSandboxImage,
 		ToolchainOrg:        toolchainOrg,
 		ServiceToken:        os.Getenv("GATEWAY_SERVICE_TOKEN"),
 		ServiceTenant:       envOr("GATEWAY_SERVICE_TENANT", "workspace-extension"),

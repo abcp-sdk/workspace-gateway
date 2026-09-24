@@ -7247,9 +7247,10 @@ func (x *ListSandboxesResponse) GetSandboxes() []*SandboxInfo {
 type CreateSandboxRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// Base image to launch as a sandbox. ANY image ref is accepted: the gateway
-	// derives a runnable sandbox by injecting the easyworker binary into it at
-	// launch time. Empty = the deployment default base image.
+	// Pre-built, worker-bundled sandbox image (see list-oci-images, owner = the
+	// deployment's sandbox org). The gateway does NOT inject the worker: the
+	// image MUST already contain agent-worker and come from the sandbox org.
+	// Empty = the deployment default sandbox image.
 	Image  string `protobuf:"bytes,2,opt,name=image,proto3" json:"image,omitempty"`
 	Cpu    string `protobuf:"bytes,3,opt,name=cpu,proto3" json:"cpu,omitempty"`
 	Memory string `protobuf:"bytes,4,opt,name=memory,proto3" json:"memory,omitempty"`
