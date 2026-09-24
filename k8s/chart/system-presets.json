@@ -142,7 +142,6 @@
       "repo-file-edit",
       "repo-file-delete",
       "repo-commit",
-      "repo-branch-create",
       "repo-branch-sync",
       "repo-file-restore",
       "repo-mr-create",

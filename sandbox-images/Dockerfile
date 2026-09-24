@@ -15,11 +15,15 @@ FROM ${BASE_IMAGE}
 
 # agent-worker as PID 1: it brings its own shell (mvdan/sh), so no shell is
 # needed at runtime. WORKER_PORT matches the port the gateway expects (48080).
+#
+# NO WORKER_WORKSPACE / WORKDIR: the worker uses its own default `~/workspace`
+# and creates it at startup (matching the old derive-on-launch behavior and the
+# webui's `~`-relative path model). Setting `/workspace` here would put the
+# workspace OUTSIDE the home dir, which the UI would then show as an absolute
+# `/workspace` instead of `~/workspace`.
 COPY agent-worker /usr/local/bin/agent-worker
-RUN mkdir -p /workspace /data
+RUN mkdir -p /data
 ENV WORKER_PORT=48080 \
-    WORKER_WORKSPACE=/workspace \
     WORKER_DB=/data/jobs.db
 EXPOSE 48080
-WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/agent-worker"]

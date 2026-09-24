@@ -56,6 +56,11 @@ func TestDeveloperProposesNotMerges(t *testing.T) {
 	if has(tools, "repo-mr-merge") {
 		t.Fatal("developer must NOT merge")
 	}
+	// A developer session is bound to exactly one branch and must NOT spawn
+	// more; branch creation is the maintainer's job.
+	if has(tools, "repo-branch-create") {
+		t.Fatal("developer must NOT create branches")
+	}
 }
 
 func TestExplorer(t *testing.T) {

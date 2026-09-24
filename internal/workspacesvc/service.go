@@ -361,13 +361,20 @@ func (s *Service) ForkBranchSession(ctx context.Context, req *connect.Request[ws
 	if err != nil {
 		return nil, err
 	}
-	org, repo, _, ok := roles.ParseSession(req.Msg.GetSession())
+	org, repo, parentBranch, ok := roles.ParseSession(req.Msg.GetSession())
 	if !ok {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("session must be org:repo:branch"))
 	}
 	branch := req.Msg.GetBranch()
 	if branch == "" || !roles.ValidComponent(branch) || branch == roles.MainBranch {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("branch must be a legal, non-main name"))
+	}
+	// Only a MAIN session (maintainer) may create branches. A developer session
+	// is bound to exactly one branch and must not spawn more — otherwise a
+	// feature-branch session could proliferate branches on its own.
+	if parentBranch != roles.MainBranch {
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New(
+			"only a main session can create branches; a feature branch cannot fork new branches"))
 	}
 	owned, err := s.members.OwnsRepo(tenant, org, repo)
 	if err != nil {
@@ -1411,6 +1418,12 @@ func (s *Service) ListMRs(ctx context.Context, req *connect.Request[wsv1.ListMRs
 //
 // GATE: a branch whose changed files still carry unresolved conflict markers
 // (from SyncBranch) is refused — the markers must not reach a reviewer.
+//
+// STRIP: a branch whose HEAD is the (clean) empty staging placeholder is
+// force-pushed back to its parent first, so the synthetic `ABCP_XXX` commit
+// never appears in the change request. The branch is session-exclusive and
+// unprotected, so the gateway may rewrite it; the next write simply opens a
+// fresh placeholder.
 func (s *Service) CreateMR(ctx context.Context, req *connect.Request[wsv1.CreateMRRequest]) (*connect.Response[wsv1.CreateMRResponse], error) {
 	m := req.Msg
 	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
@@ -1428,6 +1441,9 @@ func (s *Service) CreateMR(ctx context.Context, req *connect.Request[wsv1.Create
 			m.GetHead(), strings.Join(conflicts, ", ")))
 	}
 	if err := s.stagingGate(ctx, m.GetOrg(), m.GetRepo(), m.GetHead()); err != nil {
+		return nil, err
+	}
+	if err := s.stripStagingPlaceholder(ctx, m.GetOrg(), m.GetRepo(), m.GetHead()); err != nil {
 		return nil, err
 	}
 	index, url, err := s.git.CreateMR(ctx, m.GetOrg(), m.GetRepo(), m.GetTitle(), m.GetHead(), base, m.GetBody())
@@ -1496,6 +1512,34 @@ func (s *Service) MergeMR(ctx context.Context, req *connect.Request[wsv1.MergeMR
 		return nil, mrError(err)
 	}
 	return connect.NewResponse(&wsv1.MergeMRResponse{Ok: true}), nil
+}
+
+// stripStagingPlaceholder rewrites `branch` back to its parent when HEAD is the
+// synthetic staging placeholder, so the `ABCP_XXX` commit never reaches an MR
+// or the merged history. A CLEAN placeholder (no staged changes) is stripped;
+// a placeholder carrying staged work is refused by stagingGate before this runs.
+// No-op when HEAD is a real commit. Best-effort on an inspection failure.
+func (s *Service) stripStagingPlaceholder(ctx context.Context, org, repo, branch string) error {
+	opts, err := s.commitOpts(ctx, org, repo, branch)
+	if err != nil {
+		return nil // main / invalid: nothing to strip
+	}
+	st, err := s.commits.Status(ctx, opts)
+	if err != nil {
+		return nil // best-effort: never block MR creation on inspection
+	}
+	if !st.Placeholder || st.Staged {
+		return nil
+	}
+	// HEAD is the empty placeholder: drop it (force-push the branch to its
+	// parent). ResetTo forgets the cached clone, so the next write re-clones.
+	if st.MergeTip == "" || st.MergeTip == st.Tip {
+		return nil
+	}
+	if err := s.commits.ResetTo(ctx, opts, st.MergeTip); err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("strip staging placeholder: %w", err))
+	}
+	return nil
 }
 
 // mergeTipFor returns the sha a merge of `branch` should pin (the parent of a

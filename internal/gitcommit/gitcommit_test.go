@@ -216,3 +216,48 @@ func TestCommitRequiresPlaceholder(t *testing.T) {
 		t.Fatal("empty message must fail")
 	}
 }
+
+// TestStripTrailingPlaceholder verifies the MR-time rewrite: a CLEAN trailing
+// placeholder is dropped by ResetTo(mergeTip), leaving the real commit as HEAD;
+// a STAGED placeholder is NOT clean and must be preserved (the caller refuses
+// it via the staging gate).
+func TestStripTrailingPlaceholder(t *testing.T) {
+	url := setupBranch(t)
+	m := NewManager()
+	opts := Options{RepoURL: url, Branch: "feature", Timeout: 60 * time.Second}
+	ctx := context.Background()
+
+	// Stage a change, then commit it -> HEAD is a fresh CLEAN placeholder whose
+	// parent is the real "add" commit.
+	if _, err := m.ApplyFiles(ctx, opts, []FileOp{{Path: "f.txt", Op: "update", Content: []byte("l1\nl2\nl3\n")}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Commit(ctx, opts, "add l3"); err != nil {
+		t.Fatal(err)
+	}
+	st, err := m.Status(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st.Placeholder || st.Staged {
+		t.Fatalf("want clean placeholder, got %+v", st)
+	}
+	// Strip it: branch returns to the parent ("add l3"), no placeholder.
+	if err := m.ResetTo(ctx, opts, st.MergeTip); err != nil {
+		t.Fatalf("reset: %v", err)
+	}
+	st2, err := m.Status(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st2.Placeholder {
+		t.Fatalf("placeholder must be gone, got %+v", st2)
+	}
+	if st2.Tip != st.MergeTip {
+		t.Fatalf("tip %s != stripped parent %s", st2.Tip, st.MergeTip)
+	}
+	msg, parents, _ := headMessage(t, url, "feature")
+	if msg != "add l3" || parents != 1 {
+		t.Fatalf("HEAD after strip = %q (%d parents), want 'add l3' (1)", msg, parents)
+	}
+}

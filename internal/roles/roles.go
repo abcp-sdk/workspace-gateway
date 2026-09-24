@@ -67,14 +67,18 @@ var repoReadTools = []string{
 	"repo-diff", "repo-branches", "repo-tags",
 }
 
-// Repo propose tools: write to a NON-main branch and open/comment MRs. Includes
-// syncing the branch with main (`repo-branch-sync`) and restoring a file
-// (`repo-file-restore`) so a developer can resolve conflicts in place. A developer
-// can also build a PREVIEW image of its branch and run a PREVIEW service to
-// verify it, and read that service's logs.
+// Repo propose tools: write to the session's OWN branch and open/comment MRs.
+// Includes syncing the branch with main (`repo-branch-sync`) and restoring a
+// file (`repo-file-restore`) so a developer can resolve conflicts in place. A
+// developer can also build a PREVIEW image of its branch and run a PREVIEW
+// service to verify it, and read that service's logs.
+//
+// NO `repo-branch-create`: a developer session is bound to exactly ONE branch
+// and must not spawn more. Creating and dispatching branches is the
+// maintainer's job (see repoReviewTools).
 var repoProposeTools = []string{
 	"repo-file-write", "repo-file-edit", "repo-file-delete", "repo-commit",
-	"repo-branch-create", "repo-branch-sync", "repo-file-restore",
+	"repo-branch-sync", "repo-file-restore",
 	"repo-mr-create", "repo-mr-list", "repo-mr-comment",
 	"repo-mail-send",
 	"repo-build-preview", "service-preview", "service-logs",
