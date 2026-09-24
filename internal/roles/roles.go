@@ -108,8 +108,10 @@ var adminTools = []string{
 func ToolsFor(r Role) []string {
 	switch r {
 	case Admin:
-		// Create org/repo + read; no sandbox, no writes.
-		return concat(generalTools, repoReadTools, adminTools)
+		// Create org/repo + read + manage tenant resources + run a sandbox for
+		// ad-hoc work. Still NO repo writes and NO sandbox-port (admin sessions
+		// are not bound to a branch, so porting would write main).
+		return concat(generalTools, repoReadTools, adminTools, sandboxBase)
 	case Maintainer:
 		// Read, review/merge MRs, create+dispatch branches, sandbox. NOT
 		// sandbox-port (would write main) and NOT repo-file-write/edit/commit.

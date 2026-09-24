@@ -73,12 +73,12 @@ func TestExplorer(t *testing.T) {
 	}
 }
 
-func TestAdminCreatesRepoNoSandbox(t *testing.T) {
+func TestAdminCreatesRepoAndHasSandbox(t *testing.T) {
 	a := ToolsFor(Admin)
 	if !has(a, "repo-create-org") || !has(a, "repo-create-repo") {
 		t.Fatal("admin must create org/repo")
 	}
-	// Admin may run long-lived services but has NO sandbox and no repo writes.
+	// Admin may run long-lived services and an ad-hoc sandbox.
 	if !has(a, "service-deploy") || !has(a, "service-list") {
 		t.Fatal("admin must deploy/list services")
 	}
@@ -88,8 +88,13 @@ func TestAdminCreatesRepoNoSandbox(t *testing.T) {
 	if !has(a, "repo-set-push-mirror") || !has(a, "repo-list-push-mirrors") || !has(a, "repo-delete-push-mirror") {
 		t.Fatal("admin must manage push mirrors")
 	}
-	if has(a, "sandbox-exec") || has(a, "repo-file-write") {
-		t.Fatal("admin: no sandbox, no writes")
+	// Admin now HAS the sandbox tools (create/exec/files)…
+	if !has(a, "sandbox-create") || !has(a, "sandbox-exec") || !has(a, "sandbox-file-read") {
+		t.Fatal("admin must have sandbox tools")
+	}
+	// …but still NO repo writes and NO sandbox-port (admin is not branch-bound).
+	if has(a, "sandbox-port") || has(a, "repo-file-write") {
+		t.Fatal("admin: no repo writes, no sandbox-port")
 	}
 }
 

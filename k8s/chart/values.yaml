@@ -119,7 +119,7 @@ gateway:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/workspace-gateway
-    tag: "20260923173733"
+    tag: "20260924032136"
     pullPolicy: IfNotPresent
   # Namespace the sandbox/service backend manages, and where its RBAC lands.
   sandbox:
@@ -213,7 +213,7 @@ webui:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/workspace-webui
-    tag: "20260923185814"
+    tag: "20260924032036"
     pullPolicy: IfNotPresent
   port: 8080
   service:

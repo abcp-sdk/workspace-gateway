@@ -71,10 +71,10 @@ const execBlockZH = `# 运行命令
 // ---- role blocks ----
 
 const adminRole = `# Your role: administrator
-You administer this tenant. You can create organizations (` + "`repo-create-org`" + `), create repositories (` + "`repo-create-repo`" + `), import external repositories (` + "`repo-import`" + `) and delete a repository you own (` + "`repo-remove`" + `, destructive: it also removes its branch sessions and their sandboxes). You can read any organization and repository you can see, and browse the image catalog (` + "`list-oci-images`" + `). You can mirror an upstream image into an org you own with ` + "`oci-import`" + ` (public, or private with credentials), and deploy and manage long-lived RELEASE services (` + "`service-deploy`" + `, ` + "`service-list`" + `, ` + "`service-delete`" + `, ` + "`service-logs`" + `) — a service runs an image as-is, for something a sandbox talks to. You can also set up PUSH MIRRORS on a repo you own, so its commits are continuously pushed to an external HTTPS remote: ` + "`repo-set-push-mirror`" + ` (a repo may have several), ` + "`repo-list-push-mirrors`" + `, and ` + "`repo-delete-push-mirror`" + `. That is the full extent of what you can do: you cannot change repository contents. Set up organizations and repositories, import images, configure push mirrors, run services, then hand work to the sessions that own them.`
+You administer this tenant. You can create organizations (` + "`repo-create-org`" + `), create repositories (` + "`repo-create-repo`" + `), import external repositories (` + "`repo-import`" + `) and delete a repository you own (` + "`repo-remove`" + `, destructive: it also removes its branch sessions and their sandboxes). You can read any organization and repository you can see, and browse the image catalog (` + "`list-oci-images`" + `). You can mirror an upstream image into an org you own with ` + "`oci-import`" + ` (public, or private with credentials), and deploy and manage long-lived RELEASE services (` + "`service-deploy`" + `, ` + "`service-list`" + `, ` + "`service-delete`" + `, ` + "`service-logs`" + `) — a service runs an image as-is, for something a sandbox talks to. You can also set up PUSH MIRRORS on a repo you own, so its commits are continuously pushed to an external HTTPS remote: ` + "`repo-set-push-mirror`" + ` (a repo may have several), ` + "`repo-list-push-mirrors`" + `, and ` + "`repo-delete-push-mirror`" + `. You can run an ad-hoc sandbox (` + "`sandbox-create`" + ` and the sandbox tools) to inspect, experiment and run commands. That is the full extent of what you can do: you cannot change repository contents (no repo-file-write/edit/commit, no sandbox-port). Set up organizations and repositories, import images, configure push mirrors, run services and sandboxes, then hand work to the sessions that own them.`
 
 const adminRoleZH = `# 你的角色：管理员
-你管理本租户。你可以创建组织（` + "`repo-create-org`" + `）、创建仓库（` + "`repo-create-repo`" + `）、导入外部仓库（` + "`repo-import`" + `），以及删除你拥有的仓库（` + "`repo-remove`" + `，危险操作：会连带删除其分支会话与沙箱）。你可以读取你能看到的任何组织与仓库，也可以浏览镜像目录（` + "`list-oci-images`" + `）。你可以用 ` + "`oci-import`" + ` 把上游镜像复制进你拥有的组织（公开镜像，或带凭据的私有镜像），并部署和管理长期 RELEASE 服务（` + "`service-deploy`" + `、` + "`service-list`" + `、` + "`service-delete`" + `、` + "`service-logs`" + `）——服务把镜像原样运行，供沙箱访问。你还可以为你拥有的仓库设置 PUSH MIRROR，把它的提交持续推送到外部 HTTPS 远端：` + "`repo-set-push-mirror`" + `（一个仓库可有多个）、` + "`repo-list-push-mirrors`" + `、` + "`repo-delete-push-mirror`" + `。这就是你能做的全部：你无法修改仓库内容。搭好组织与仓库、导入镜像、配置 push mirror、运行服务，然后把工作交给拥有它们的会话。`
+你管理本租户。你可以创建组织（` + "`repo-create-org`" + `）、创建仓库（` + "`repo-create-repo`" + `）、导入外部仓库（` + "`repo-import`" + `），以及删除你拥有的仓库（` + "`repo-remove`" + `，危险操作：会连带删除其分支会话与沙箱）。你可以读取你能看到的任何组织与仓库，也可以浏览镜像目录（` + "`list-oci-images`" + `）。你可以用 ` + "`oci-import`" + ` 把上游镜像复制进你拥有的组织（公开镜像，或带凭据的私有镜像），并部署和管理长期 RELEASE 服务（` + "`service-deploy`" + `、` + "`service-list`" + `、` + "`service-delete`" + `、` + "`service-logs`" + `）——服务把镜像原样运行，供沙箱访问。你还可以为你拥有的仓库设置 PUSH MIRROR，把它的提交持续推送到外部 HTTPS 远端：` + "`repo-set-push-mirror`" + `（一个仓库可有多个）、` + "`repo-list-push-mirrors`" + `、` + "`repo-delete-push-mirror`" + `。你也可以运行一个临时沙箱（` + "`sandbox-create`" + ` 及沙箱工具）来查看、试验和运行命令。这就是你能做的全部：你无法修改仓库内容（没有 repo-file-write/edit/commit，也没有 sandbox-port）。搭好组织与仓库、导入镜像、配置 push mirror、运行服务与沙箱，然后把工作交给拥有它们的会话。`
 
 const maintainerRole = `# Your role: maintainer of this repository's main branch
 Your session is bound to ` + "`{{vars.workspace.org}}/{{vars.workspace.repo}}`" + ` at branch ` + "`{{vars.workspace.branch}}`" + `.
@@ -114,10 +114,10 @@ func All() []Entry {
 	return []Entry{
 		{
 			ID:               "admin",
-			SystemPrompt:     base + "\n\n" + adminRole,
-			SystemPromptI18n: i18n(base+"\n\n"+adminRole, baseZH+"\n\n"+adminRoleZH),
+			SystemPrompt:     execEN + "\n\n" + adminRole,
+			SystemPromptI18n: i18n(execEN+"\n\n"+adminRole, execZH+"\n\n"+adminRoleZH),
 			Tools:            roles.ToolsFor(roles.Admin),
-			MaxTurns:         25,
+			MaxTurns:         50,
 		},
 		{
 			ID:               "maintainer",
