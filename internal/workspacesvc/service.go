@@ -574,15 +574,19 @@ func (s *Service) GetBranchSession(ctx context.Context, req *connect.Request[wsv
 	}}), nil
 }
 
-// DeleteBranchSession deletes a branch session (its sandbox + agent session) or
-// a free session. It does NOT delete the underlying git branch.
+// DeleteBranchSession deletes a branch session (its sandbox + agent session)
+// or a free session. For a NON-MAIN branch session it ALSO deletes the
+// underlying git branch: repo:branch <-> session is 1:1, so leaving the branch
+// behind would strand an orphan branch with no session. `main` is protected —
+// deleting the main session never deletes the default branch.
 func (s *Service) DeleteBranchSession(ctx context.Context, req *connect.Request[wsv1.DeleteBranchSessionRequest]) (*connect.Response[wsv1.DeleteBranchSessionResponse], error) {
 	tenant, err := s.resolveTenant(ctx, req.Header())
 	if err != nil {
 		return nil, err
 	}
 	session := req.Msg.GetSession()
-	if org, repo, _, ok := roles.ParseSession(session); ok {
+	org, repo, branch, isBranch := roles.ParseSession(session)
+	if isBranch {
 		if owned, _ := s.members.OwnsRepo(tenant, org, repo); !owned {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("branch session not found"))
 		}
@@ -591,6 +595,13 @@ func (s *Service) DeleteBranchSession(ctx context.Context, req *connect.Request[
 	}
 	// Best-effort sandbox cleanup + session delete.
 	s.deleteSessionCascade(ctx, req.Header(), tenant, session)
+	// A branch session owns its branch 1:1: delete it too (except main, which is
+	// protected). The git deletion is idempotent.
+	if isBranch && branch != roles.MainBranch {
+		if err := s.git.DeleteBranch(ctx, org, repo, branch); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	}
 	return connect.NewResponse(&wsv1.DeleteBranchSessionResponse{Ok: true}), nil
 }
 
@@ -1646,8 +1657,10 @@ func (s *Service) BranchStatus(ctx context.Context, req *connect.Request[wsv1.Br
 	}), nil
 }
 
-// CommitStaged rewinds the branch's staging placeholder to `message` and opens a
-// fresh empty placeholder (the staging area).
+// CommitStaged rewinds the branch's staging placeholder to `message`, CLOSING
+// the staging area (HEAD becomes a normal commit; the next write opens a fresh
+// placeholder). Refused when nothing is staged, so it never makes an empty
+// commit.
 func (s *Service) CommitStaged(ctx context.Context, req *connect.Request[wsv1.CommitStagedRequest]) (*connect.Response[wsv1.CommitStagedResponse], error) {
 	m := req.Msg
 	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {

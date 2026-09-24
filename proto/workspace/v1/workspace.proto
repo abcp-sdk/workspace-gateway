@@ -63,6 +63,9 @@ message ListBranchSessionsResponse { repeated BranchSession branch_sessions = 1;
 message GetBranchSessionRequest { string session = 1; }
 message GetBranchSessionResponse { BranchSession branch_session = 1; }
 
+// DeleteBranchSession deletes a branch session (sandboxes + agent session) or
+// a free session. For a non-main branch session it ALSO deletes the underlying
+// git branch (repo:branch <-> session is 1:1); `main` is protected.
 message DeleteBranchSessionRequest { string session = 1; }
 message DeleteBranchSessionResponse { bool ok = 1; }
 
@@ -347,7 +350,8 @@ message CommitFilesResponse {
 // A branch session's writes AMEND one synthetic "staging" commit (message
 // sentinel `ABCP_XXX`) instead of appending a commit per edit. BranchStatus
 // reports whether that placeholder currently carries staged changes; CommitStaged
-// rewinds it to a real message and opens a fresh (empty) staging commit.
+// rewinds it to a real message and CLOSES the staging area (the next write opens
+// a fresh placeholder), so it never appends an empty commit.
 
 // BranchStatus reports a branch's staging state.
 message BranchStatusRequest {
@@ -366,8 +370,8 @@ message BranchStatusResponse {
   string merge_tip = 4;
 }
 
-// CommitStaged rewinds the placeholder to `message` and opens a fresh empty
-// staging commit.
+// CommitStaged rewinds the placeholder to `message`, closing the staging area.
+// Refused when nothing is staged (never makes an empty commit).
 message CommitStagedRequest {
   string org = 1;
   string repo = 2;

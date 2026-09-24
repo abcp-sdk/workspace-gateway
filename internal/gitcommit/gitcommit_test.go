@@ -137,32 +137,45 @@ func TestStagingLifecycle(t *testing.T) {
 		t.Fatalf("after second write must still be placeholder+staged: %+v", st)
 	}
 
-	// Commit: rewinds placeholder to the message, opens a fresh EMPTY placeholder.
+	// Commit: rewinds the placeholder to the message and CLOSES staging. HEAD
+	// is now a normal commit (not a placeholder); no empty commit is appended.
 	head, err := m.Commit(ctx, opts, "add l3 and g")
 	if err != nil {
 		t.Fatalf("commit: %v", err)
 	}
 	msg, parents, _ := headMessage(t, url, "feature")
-	if !IsPlaceholder(msg) {
-		t.Fatalf("HEAD after commit must be a fresh placeholder, got %q", msg)
+	if msg != "add l3 and g" {
+		t.Fatalf("HEAD after commit must be the message commit, got %q", msg)
+	}
+	if IsPlaceholder(msg) {
+		t.Fatal("HEAD after commit must NOT be a placeholder")
 	}
 	if parents != 1 {
-		t.Fatalf("fresh placeholder must have 1 parent, got %d", parents)
+		t.Fatalf("message commit must have 1 parent, got %d", parents)
 	}
 	st, _ = m.Status(ctx, opts)
-	if !st.Placeholder || st.Staged {
-		t.Fatalf("after commit must be placeholder but CLEAN: %+v", st)
+	if st.Placeholder || st.Staged {
+		t.Fatalf("after commit must be clean (no placeholder): %+v", st)
 	}
-	if st.Tip != head {
-		t.Fatalf("tip %s != returned %s", st.Tip, head)
+	if st.Tip != head || st.MergeTip != head {
+		t.Fatalf("tip %s / mergeTip %s != returned %s", st.Tip, st.MergeTip, head)
 	}
-	// The message commit must carry the caller's message.
-	repo, _ := git.PlainOpen(url)
-	ref, _ := repo.Reference(plumbing.NewBranchReferenceName("feature"), true)
-	tipC, _ := repo.CommitObject(ref.Hash())
-	parentC, _ := tipC.Parent(0)
-	if parentC.Message != "add l3 and g" {
-		t.Fatalf("parent message = %q", parentC.Message)
+	// Committing again with nothing staged must fail (never an empty commit).
+	if _, err := m.Commit(ctx, opts, "again"); err == nil {
+		t.Fatal("commit with nothing staged must fail")
+	}
+	// A further write opens a FRESH placeholder on top of the real commit.
+	sha3, err := m.ApplyFiles(ctx, opts, []FileOp{{Path: "h.txt", Op: "create", Content: []byte("more\n")}})
+	if err != nil {
+		t.Fatalf("apply3: %v", err)
+	}
+	msg, parents, _ = headMessage(t, url, "feature")
+	if !IsPlaceholder(msg) || parents != 1 {
+		t.Fatalf("after a later write HEAD must be a fresh placeholder, got %q (%d parents)", msg, parents)
+	}
+	st, _ = m.Status(ctx, opts)
+	if !st.Placeholder || !st.Staged || st.Tip != sha3 {
+		t.Fatalf("after later write must be placeholder+staged: %+v", st)
 	}
 }
 
@@ -217,24 +230,51 @@ func TestCommitRequiresPlaceholder(t *testing.T) {
 	}
 }
 
-// TestStripTrailingPlaceholder verifies the MR-time rewrite: a CLEAN trailing
-// placeholder is dropped by ResetTo(mergeTip), leaving the real commit as HEAD;
-// a STAGED placeholder is NOT clean and must be preserved (the caller refuses
-// it via the staging gate).
+// TestStripTrailingPlaceholder verifies the MR-time backstop: a CLEAN trailing
+// placeholder (only possible via a write that is later reverted) is dropped by
+// ResetTo(mergeTip), leaving the real commit as HEAD. The normal flow no longer
+// produces one, so it is built here explicitly.
 func TestStripTrailingPlaceholder(t *testing.T) {
 	url := setupBranch(t)
 	m := NewManager()
 	opts := Options{RepoURL: url, Branch: "feature", Timeout: 60 * time.Second}
 	ctx := context.Background()
 
-	// Stage a change, then commit it -> HEAD is a fresh CLEAN placeholder whose
-	// parent is the real "add" commit.
+	// A real commit via the normal write+commit path.
 	if _, err := m.ApplyFiles(ctx, opts, []FileOp{{Path: "f.txt", Op: "update", Content: []byte("l1\nl2\nl3\n")}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.Commit(ctx, opts, "add l3"); err != nil {
 		t.Fatal(err)
 	}
+	_, _, real := headMessage(t, url, "feature")
+
+	// Append a CLEAN placeholder (empty, parent = the real commit) out of band,
+	// exactly what a write-then-revert would leave behind.
+	work := t.TempDir()
+	repo, err := git.PlainClone(work, false, &git.CloneOptions{
+		URL:           url,
+		ReferenceName: plumbing.NewBranchReferenceName("feature"),
+		SingleBranch:  true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt, _ := repo.Worktree()
+	sig := &object.Signature{Name: "t", Email: "t@t", When: time.Now()}
+	if _, err := wt.Commit(PlaceholderMessage, &git.CommitOptions{
+		Author: sig, Committer: sig, AllowEmptyCommits: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Push(&git.PushOptions{
+		RemoteName: "origin",
+		RefSpecs:   []config.RefSpec{config.RefSpec("+refs/heads/feature:refs/heads/feature")},
+		Force:      true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
 	st, err := m.Status(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
@@ -242,7 +282,7 @@ func TestStripTrailingPlaceholder(t *testing.T) {
 	if !st.Placeholder || st.Staged {
 		t.Fatalf("want clean placeholder, got %+v", st)
 	}
-	// Strip it: branch returns to the parent ("add l3"), no placeholder.
+	// Strip it: branch returns to the real commit, no placeholder.
 	if err := m.ResetTo(ctx, opts, st.MergeTip); err != nil {
 		t.Fatalf("reset: %v", err)
 	}
@@ -253,8 +293,8 @@ func TestStripTrailingPlaceholder(t *testing.T) {
 	if st2.Placeholder {
 		t.Fatalf("placeholder must be gone, got %+v", st2)
 	}
-	if st2.Tip != st.MergeTip {
-		t.Fatalf("tip %s != stripped parent %s", st2.Tip, st.MergeTip)
+	if st2.Tip != real {
+		t.Fatalf("tip %s != real commit %s", st2.Tip, real)
 	}
 	msg, parents, _ := headMessage(t, url, "feature")
 	if msg != "add l3" || parents != 1 {

@@ -1802,8 +1802,8 @@ export const BranchStatusResponseSchema: GenMessage<BranchStatusResponse> = /*@_
   messageDesc(file_workspace_v1_workspace, 63);
 
 /**
- * CommitStaged rewinds the placeholder to `message` and opens a fresh empty
- * staging commit.
+ * CommitStaged rewinds the placeholder to `message`, closing the staging area.
+ * Refused when nothing is staged (never makes an empty commit).
  *
  * @generated from message workspace.v1.CommitStagedRequest
  */

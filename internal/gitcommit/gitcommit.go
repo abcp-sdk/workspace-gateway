@@ -8,17 +8,18 @@
 //
 // Semantics (the branch's HEAD is the only commit that is ever rewritten):
 //
-//	fresh branch (HEAD == main tip)
+//	fresh branch (HEAD == main tip, or a normal commit)
 //	  write/edit/delete  -> commit a new placeholder "ABCP_XXX" with the change
-//	  repo-commit(msg)   -> reword placeholder to msg, append an EMPTY placeholder
-//	staging open (HEAD == placeholder)
+//	  repo-commit(msg)   -> error: nothing is staged
+//	staging open (HEAD == placeholder with changes)
 //	  write/edit/delete  -> AMEND the placeholder with the change
-//	  repo-commit(msg)   -> reword the placeholder to msg, append an EMPTY placeholder
+//	  repo-commit(msg)   -> reword the placeholder to msg, CLOSING the staging
+//	                        area (HEAD becomes a normal commit; the next write
+//	                        opens a fresh placeholder)
 //
-// A placeholder whose tree equals its parent's tree is "clean" (no staged
-// change); a placeholder that differs carries staged work. Sync/MR refuse only
-// the latter. An MR merges the placeholder's PARENT, so the empty placeholder
-// never reaches main.
+// So `repo-commit` never appends an empty commit. A placeholder whose tree
+// equals its parent's tree is "clean" (no staged change); a placeholder that
+// differs carries staged work. Sync/MR refuse the latter.
 package gitcommit
 
 import (
@@ -376,8 +377,10 @@ func (m *Manager) ApplyFiles(ctx context.Context, o Options, ops []FileOp) (stri
 	return hash.String(), nil
 }
 
-// Commit rewinds the placeholder to `message` and appends an EMPTY placeholder
-// (opening a fresh staging area). With no placeholder at HEAD it fails.
+// Commit rewinds the placeholder to `message` (CLOSING the staging area: HEAD
+// becomes a normal commit; the next write opens a fresh placeholder). With no
+// placeholder at HEAD — or a placeholder that carries no change — it fails, so
+// it can never create an empty commit.
 func (m *Manager) Commit(ctx context.Context, o Options, message string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout(o.Timeout))
 	defer cancel()
@@ -395,32 +398,30 @@ func (m *Manager) Commit(ctx context.Context, o Options, message string) (string
 	if !place {
 		return "", errors.New("nothing to commit (no open staging area)")
 	}
+	empty, err := c.commitIsEmpty(commit)
+	if err != nil {
+		return "", err
+	}
+	if empty {
+		return "", errors.New("nothing to commit (staging area is empty)")
+	}
 	wt, err := c.repo.Worktree()
 	if err != nil {
 		return "", err
 	}
 	author := &object.Signature{Name: "workspace-gateway", Email: "gateway@workspace.local", When: time.Now()}
 	// Reword the current placeholder to the caller's message (amend, same tree).
+	// This closes the staging area: HEAD is now a normal commit.
 	tip, err := wt.Commit(message, &git.CommitOptions{
 		Author: author, Committer: author, Amend: true, AllowEmptyCommits: true,
 	})
 	if err != nil && !errors.Is(err, git.ErrEmptyCommit) {
 		return "", fmt.Errorf("commit: %w", err)
 	}
-	// Append an EMPTY placeholder whose parent is the just-committed message.
-	empty, err := wt.Commit(PlaceholderMessage, &git.CommitOptions{
-		Author: author, Committer: author,
-		Parents:           []plumbing.Hash{tip},
-		AllowEmptyCommits: true,
-	})
-	if err != nil {
-		return "", fmt.Errorf("open staging: %w", err)
-	}
 	if err := c.push(ctx, o); err != nil {
 		return "", err
 	}
-	_ = commit
-	return empty.String(), nil
+	return tip.String(), nil
 }
 
 // push force-pushes the branch (session-exclusive, so rewriting is safe).

@@ -3809,8 +3809,8 @@ func (x *BranchStatusResponse) GetMergeTip() string {
 	return ""
 }
 
-// CommitStaged rewinds the placeholder to `message` and opens a fresh empty
-// staging commit.
+// CommitStaged rewinds the placeholder to `message`, closing the staging area.
+// Refused when nothing is staged (never makes an empty commit).
 type CommitStagedRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
