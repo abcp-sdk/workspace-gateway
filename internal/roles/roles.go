@@ -42,6 +42,7 @@ func PresetFor(r Role) string { return string(r) }
 // General tools every role keeps (memory / web / history / vision).
 var generalTools = []string{
 	"todo-write",
+	"time-wait",
 	"history-search",
 	"history-range",
 	"web-fetch",
