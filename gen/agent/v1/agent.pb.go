@@ -66,7 +66,14 @@ type Session struct {
 	// ungrouped. A subsession records its parent's session name here, but the
 	// field is deliberately generic: any client may group sessions arbitrarily
 	// (project, workspace, task…). Not validated against an enum.
-	Group         string `protobuf:"bytes,24,opt,name=group,proto3" json:"group,omitempty"`
+	Group string `protobuf:"bytes,24,opt,name=group,proto3" json:"group,omitempty"`
+	// Runtime status, derived from the session's cross-replica run LEASE (not a
+	// persisted column): "busy" while a turn holds the lease, "idle" otherwise.
+	// This is the same signal the `State` RPC returns, surfaced on the list rows
+	// so a list view can show which sessions are working WITHOUT polling State
+	// per row. WatchSessions re-emits a row when this flips (it watches the lease
+	// bucket). A session that is mid-retry (429/5xx backoff) is `busy`.
+	Status        string `protobuf:"bytes,25,opt,name=status,proto3" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -265,6 +272,13 @@ func (x *Session) GetMessageSeq() int32 {
 func (x *Session) GetGroup() string {
 	if x != nil {
 		return x.Group
+	}
+	return ""
+}
+
+func (x *Session) GetStatus() string {
+	if x != nil {
+		return x.Status
 	}
 	return ""
 }
@@ -6418,7 +6432,7 @@ var File_agent_v1_agent_proto protoreflect.FileDescriptor
 
 const file_agent_v1_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x14agent/v1/agent.proto\x12\bagent.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xed\x05\n" +
+	"\x14agent/v1/agent.proto\x12\bagent.v1\x1a\x1cgoogle/protobuf/struct.proto\"\x85\x06\n" +
 	"\aSession\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x16\n" +
@@ -6448,7 +6462,8 @@ const file_agent_v1_agent_proto_rawDesc = "" +
 	"\avariant\x18\x16 \x01(\tR\avariant\x12\x1f\n" +
 	"\vmessage_seq\x18\x17 \x01(\x05R\n" +
 	"messageSeq\x12\x14\n" +
-	"\x05group\x18\x18 \x01(\tR\x05group\"\xa3\x01\n" +
+	"\x05group\x18\x18 \x01(\tR\x05group\x12\x16\n" +
+	"\x06status\x18\x19 \x01(\tR\x06status\"\xa3\x01\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04role\x18\x02 \x01(\tR\x04role\x12\x17\n" +

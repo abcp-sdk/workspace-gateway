@@ -62,7 +62,7 @@ agent:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/agent
-    tag: "20260925134926"
+    tag: "20260925151235"
     pullPolicy: IfNotPresent
   port: 8080
   service:
@@ -213,7 +213,7 @@ webui:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/workspace-webui
-    tag: "20260925124532"
+    tag: "20260925151434"
     pullPolicy: IfNotPresent
   port: 8080
   service:

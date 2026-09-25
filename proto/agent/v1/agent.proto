@@ -49,6 +49,13 @@ message Session {
   // field is deliberately generic: any client may group sessions arbitrarily
   // (project, workspace, task…). Not validated against an enum.
   string group = 24;
+  // Runtime status, derived from the session's cross-replica run LEASE (not a
+  // persisted column): "busy" while a turn holds the lease, "idle" otherwise.
+  // This is the same signal the `State` RPC returns, surfaced on the list rows
+  // so a list view can show which sessions are working WITHOUT polling State
+  // per row. WatchSessions re-emits a row when this flips (it watches the lease
+  // bucket). A session that is mid-retry (429/5xx backoff) is `busy`.
+  string status = 25;
 }
 
 // Message row (bare).
