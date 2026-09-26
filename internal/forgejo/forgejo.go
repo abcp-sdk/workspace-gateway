@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -93,6 +94,44 @@ func (e *ErrConflict) Error() string {
 
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body any, out any) error {
 	return c.doWith(c.hc, ctx, method, path, query, body, out)
+}
+
+// doCount is `do` that also returns the `X-Total-Count` response header (0 when
+// absent). Forgejo sets it on paginated list endpoints; the gateway uses it to
+// report whether a further page exists without over-fetching.
+func (c *Client) doCount(ctx context.Context, method, path string, query url.Values, out any) (int, error) {
+	u := c.base + "/api/v1" + path
+	if len(query) > 0 {
+		u += "?" + query.Encode()
+	}
+	req, err := http.NewRequestWithContext(ctx, method, u, nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Accept", "application/json")
+	if c.token != "" {
+		req.Header.Set("Authorization", "token "+c.token)
+	}
+	res, err := c.hc.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode == http.StatusNotFound {
+		return 0, &ErrNotFound{URL: u}
+	}
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		b, _ := io.ReadAll(io.LimitReader(res.Body, 512))
+		return 0, fmt.Errorf("forgejo %s %s: %d: %s", method, path, res.StatusCode, strings.TrimSpace(string(b)))
+	}
+	total := 0
+	if v := res.Header.Get("X-Total-Count"); v != "" {
+		total, _ = strconv.Atoi(strings.TrimSpace(v))
+	}
+	if out == nil {
+		return total, nil
+	}
+	return total, json.NewDecoder(res.Body).Decode(out)
 }
 
 func (c *Client) doWith(hc *http.Client, ctx context.Context, method, path string, query url.Values, body any, out any) error {
@@ -872,7 +911,11 @@ func mrFromJSON(r map[string]any) MRInfo {
 }
 
 // Tree lists a ref's tree (recursive).
-func (c *Client) Tree(ctx context.Context, org, repo, ref, path string) ([]TreeEntry, error) {
+// Tree lists a repository tree. `truncated` is true when the git host capped
+// the listing (the recursive git tree API silently truncates very large
+// repos); callers should surface it rather than present a partial tree as
+// complete.
+func (c *Client) Tree(ctx context.Context, org, repo, ref, path string) (entries []TreeEntry, truncated bool, err error) {
 	if ref == "" {
 		ref = "main"
 	}
@@ -884,11 +927,11 @@ func (c *Client) Tree(ctx context.Context, org, repo, ref, path string) ([]TreeE
 	var raw any
 	if path != "" {
 		if err := c.do(ctx, "GET", "/repos/"+seg(org)+"/"+seg(repo)+"/contents/"+encPath(path), q, nil, &raw); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		arr, ok := raw.([]any)
 		if !ok {
-			return nil, fmt.Errorf("not a directory: %s", path)
+			return nil, false, fmt.Errorf("not a directory: %s", path)
 		}
 		out := make([]TreeEntry, 0, len(arr))
 		for _, e := range arr {
@@ -901,14 +944,15 @@ func (c *Client) Tree(ctx context.Context, org, repo, ref, path string) ([]TreeE
 			}
 			out = append(out, TreeEntry{Path: str(m["path"]), Type: t, Size: int64(num(m["size"]))})
 		}
-		return out, nil
+		return out, false, nil
 	}
 	// Root: use the git tree API (recursive) for a flat listing.
 	var tree struct {
-		Tree []map[string]any `json:"tree"`
+		Tree      []map[string]any `json:"tree"`
+		Truncated bool             `json:"truncated"`
 	}
 	if err := c.do(ctx, "GET", "/repos/"+seg(org)+"/"+seg(repo)+"/git/trees/"+url.PathEscape(ref), url.Values{"recursive": {"true"}}, nil, &tree); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	out := make([]TreeEntry, 0, len(tree.Tree))
 	for _, t := range tree.Tree {
@@ -918,7 +962,7 @@ func (c *Client) Tree(ctx context.Context, org, repo, ref, path string) ([]TreeE
 		}
 		out = append(out, TreeEntry{Path: str(t["path"]), Type: typ, Size: int64(num(t["size"]))})
 	}
-	return out, nil
+	return out, tree.Truncated, nil
 }
 
 // ReadBlob reads a UTF-8 file at ref/path.
@@ -940,22 +984,77 @@ func (c *Client) ReadBlob(ctx context.Context, org, repo, ref, path string) (str
 	return content, str(raw["sha"]), nil
 }
 
-// Log lists commits (optionally path-scoped).
-func (c *Client) Log(ctx context.Context, org, repo, ref, path string, limit int) ([]CommitInfo, error) {
+// forgejoMaxPerPage is Forgejo's hard cap on list page size (larger `limit`
+// values are silently clamped to 50).
+const forgejoMaxPerPage = 50
+
+// Log lists commits (optionally path-scoped), newest first. `offset` skips the
+// first N commits (for paging); the returned bool reports whether at least one
+// more commit exists beyond this page. Forgejo caps a page at 50 entries, so
+// the requested window is fetched by walking pages (or skipping whole pages).
+func (c *Client) Log(ctx context.Context, org, repo, ref, path string, limit, offset int) ([]CommitInfo, bool, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	q := url.Values{}
-	q.Set("limit", fmt.Sprint(limit))
+	if offset < 0 {
+		offset = 0
+	}
+	base := url.Values{}
 	if ref != "" {
-		q.Set("sha", ref)
+		base.Set("sha", ref)
 	}
 	if path != "" {
-		q.Set("path", path)
+		base.Set("path", path)
 	}
+
+	// Number of commits to skip, in whole Forgejo pages.
+	skipPages := offset / forgejoMaxPerPage
+	skipInPage := offset % forgejoMaxPerPage
+	// We want `limit` commits starting at `offset`; fetch enough pages to cover
+	// that plus the intra-page skip, then trim.
+	need := skipInPage + limit
+	pages := (need + forgejoMaxPerPage - 1) / forgejoMaxPerPage
+
 	var rows []map[string]any
-	if err := c.do(ctx, "GET", "/repos/"+seg(org)+"/"+seg(repo)+"/commits", q, nil, &rows); err != nil {
-		return nil, err
+	total := 0
+	for p := 0; p < pages; p++ {
+		q := url.Values{}
+		for k, vs := range base {
+			for _, v := range vs {
+				q.Add(k, v)
+			}
+		}
+		q.Set("limit", fmt.Sprint(forgejoMaxPerPage))
+		q.Set("page", fmt.Sprint(skipPages+p+1))
+		var pageRows []map[string]any
+		t, err := c.doCount(ctx, "GET", "/repos/"+seg(org)+"/"+seg(repo)+"/commits", q, &pageRows)
+		if err != nil {
+			return nil, false, err
+		}
+		if p == 0 {
+			total = t
+		}
+		if len(pageRows) == 0 {
+			break
+		}
+		rows = append(rows, pageRows...)
+		if len(pageRows) < forgejoMaxPerPage {
+			break // last page
+		}
+	}
+	if skipInPage >= len(rows) {
+		rows = nil
+	} else {
+		rows = rows[skipInPage:]
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	// Prefer the host's total when available (it is authoritative for a
+	// truncated last page); fall back to the window heuristic.
+	if total > 0 {
+		hasMore = offset+len(rows) < total
 	}
 	out := make([]CommitInfo, 0, len(rows))
 	for _, r := range rows {
@@ -968,7 +1067,7 @@ func (c *Client) Log(ctx context.Context, org, repo, ref, path string, limit int
 			Date:    str(author["date"]),
 		})
 	}
-	return out, nil
+	return out, hasMore, nil
 }
 
 // Branches lists branches.

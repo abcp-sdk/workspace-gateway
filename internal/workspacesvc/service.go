@@ -778,7 +778,7 @@ func (s *Service) Tree(ctx context.Context, req *connect.Request[wsv1.TreeReques
 	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
-	entries, err := s.git.Tree(ctx, m.GetOrg(), m.GetRepo(), m.GetRef(), m.GetPath())
+	entries, truncated, err := s.git.Tree(ctx, m.GetOrg(), m.GetRepo(), m.GetRef(), m.GetPath())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -786,7 +786,7 @@ func (s *Service) Tree(ctx context.Context, req *connect.Request[wsv1.TreeReques
 	for _, e := range entries {
 		out = append(out, &wsv1.TreeEntry{Path: e.Path, Type: e.Type, Size: e.Size})
 	}
-	return connect.NewResponse(&wsv1.TreeResponse{Entries: out}), nil
+	return connect.NewResponse(&wsv1.TreeResponse{Entries: out, Truncated: truncated}), nil
 }
 
 func (s *Service) ReadBlob(ctx context.Context, req *connect.Request[wsv1.ReadBlobRequest]) (*connect.Response[wsv1.ReadBlobResponse], error) {
@@ -806,7 +806,7 @@ func (s *Service) Log(ctx context.Context, req *connect.Request[wsv1.LogRequest]
 	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
-	commits, err := s.git.Log(ctx, m.GetOrg(), m.GetRepo(), m.GetRef(), m.GetPath(), int(m.GetLimit()))
+	commits, hasMore, err := s.git.Log(ctx, m.GetOrg(), m.GetRepo(), m.GetRef(), m.GetPath(), int(m.GetLimit()), int(m.GetOffset()))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -814,7 +814,7 @@ func (s *Service) Log(ctx context.Context, req *connect.Request[wsv1.LogRequest]
 	for _, c := range commits {
 		out = append(out, &wsv1.CommitInfo{Sha: c.SHA, Message: c.Message, Author: c.Author, Date: c.Date})
 	}
-	return connect.NewResponse(&wsv1.LogResponse{Commits: out}), nil
+	return connect.NewResponse(&wsv1.LogResponse{Commits: out, HasMore: hasMore}), nil
 }
 
 func (s *Service) Branches(ctx context.Context, req *connect.Request[wsv1.BranchesRequest]) (*connect.Response[wsv1.BranchesResponse], error) {

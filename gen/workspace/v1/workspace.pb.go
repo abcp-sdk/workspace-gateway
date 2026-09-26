@@ -1316,8 +1316,11 @@ func (x *TreeEntry) GetSize() int64 {
 }
 
 type TreeResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Entries       []*TreeEntry           `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Entries []*TreeEntry           `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	// True when the git host capped the listing (very large repos); the entries
+	// are a PARTIAL tree, not the whole repository.
+	Truncated     bool `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1357,6 +1360,13 @@ func (x *TreeResponse) GetEntries() []*TreeEntry {
 		return x.Entries
 	}
 	return nil
+}
+
+func (x *TreeResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
 }
 
 type ReadBlobRequest struct {
@@ -1480,12 +1490,14 @@ func (x *ReadBlobResponse) GetSha() string {
 }
 
 type LogRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Repo          string                 `protobuf:"bytes,2,opt,name=repo,proto3" json:"repo,omitempty"`
-	Ref           string                 `protobuf:"bytes,3,opt,name=ref,proto3" json:"ref,omitempty"`
-	Path          string                 `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"`
-	Limit         int32                  `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Repo  string                 `protobuf:"bytes,2,opt,name=repo,proto3" json:"repo,omitempty"`
+	Ref   string                 `protobuf:"bytes,3,opt,name=ref,proto3" json:"ref,omitempty"`
+	Path  string                 `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"`
+	Limit int32                  `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Skip the first `offset` commits (newest-first). Used to page history.
+	Offset        int32 `protobuf:"varint,6,opt,name=offset,proto3" json:"offset,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1551,6 +1563,13 @@ func (x *LogRequest) GetPath() string {
 func (x *LogRequest) GetLimit() int32 {
 	if x != nil {
 		return x.Limit
+	}
+	return 0
+}
+
+func (x *LogRequest) GetOffset() int32 {
+	if x != nil {
+		return x.Offset
 	}
 	return 0
 }
@@ -1624,8 +1643,10 @@ func (x *CommitInfo) GetDate() string {
 }
 
 type LogResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Commits       []*CommitInfo          `protobuf:"bytes,1,rep,name=commits,proto3" json:"commits,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Commits []*CommitInfo          `protobuf:"bytes,1,rep,name=commits,proto3" json:"commits,omitempty"`
+	// True when at least one more commit exists beyond this page.
+	HasMore       bool `protobuf:"varint,2,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1665,6 +1686,13 @@ func (x *LogResponse) GetCommits() []*CommitInfo {
 		return x.Commits
 	}
 	return nil
+}
+
+func (x *LogResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 type BranchesRequest struct {
@@ -10631,9 +10659,10 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\tTreeEntry\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x12\n" +
-	"\x04size\x18\x03 \x01(\x03R\x04size\"A\n" +
+	"\x04size\x18\x03 \x01(\x03R\x04size\"_\n" +
 	"\fTreeResponse\x121\n" +
-	"\aentries\x18\x01 \x03(\v2\x17.workspace.v1.TreeEntryR\aentries\"]\n" +
+	"\aentries\x18\x01 \x03(\v2\x17.workspace.v1.TreeEntryR\aentries\x12\x1c\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"]\n" +
 	"\x0fReadBlobRequest\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
 	"\x04repo\x18\x02 \x01(\tR\x04repo\x12\x10\n" +
@@ -10641,22 +10670,24 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\x04path\x18\x04 \x01(\tR\x04path\">\n" +
 	"\x10ReadBlobResponse\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\x12\x10\n" +
-	"\x03sha\x18\x02 \x01(\tR\x03sha\"n\n" +
+	"\x03sha\x18\x02 \x01(\tR\x03sha\"\x86\x01\n" +
 	"\n" +
 	"LogRequest\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
 	"\x04repo\x18\x02 \x01(\tR\x04repo\x12\x10\n" +
 	"\x03ref\x18\x03 \x01(\tR\x03ref\x12\x12\n" +
 	"\x04path\x18\x04 \x01(\tR\x04path\x12\x14\n" +
-	"\x05limit\x18\x05 \x01(\x05R\x05limit\"d\n" +
+	"\x05limit\x18\x05 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06offset\x18\x06 \x01(\x05R\x06offset\"d\n" +
 	"\n" +
 	"CommitInfo\x12\x10\n" +
 	"\x03sha\x18\x01 \x01(\tR\x03sha\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x16\n" +
 	"\x06author\x18\x03 \x01(\tR\x06author\x12\x12\n" +
-	"\x04date\x18\x04 \x01(\tR\x04date\"A\n" +
+	"\x04date\x18\x04 \x01(\tR\x04date\"\\\n" +
 	"\vLogResponse\x122\n" +
-	"\acommits\x18\x01 \x03(\v2\x18.workspace.v1.CommitInfoR\acommits\"7\n" +
+	"\acommits\x18\x01 \x03(\v2\x18.workspace.v1.CommitInfoR\acommits\x12\x19\n" +
+	"\bhas_more\x18\x02 \x01(\bR\ahasMore\"7\n" +
 	"\x0fBranchesRequest\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
 	"\x04repo\x18\x02 \x01(\tR\x04repo\"2\n" +
