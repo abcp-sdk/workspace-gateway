@@ -899,6 +899,25 @@ message ServiceInfo {
   bool paused = 16;
   // Unix-millis creation time of the service's Deployment (list sort key).
   int64 created_at = 17;
+  // Number of pods reporting ready (from the Deployment status).
+  int32 ready_replicas = 18;
+  // Desired replica count is `replicas`; `ready_replicas` is how many are up.
+  // Container resource requests/limits, as the k8s quantity strings.
+  string cpu = 19;
+  string memory = 20;
+  // Container command override (argv) and environment variables.
+  repeated string command = 21;
+  map<string, string> env = 22;
+  // PVCs mounted into the container.
+  repeated VolumeMountInfo volumes = 23;
+}
+
+// VolumeMountInfo is one PVC mounted into a service container.
+message VolumeMountInfo {
+  string pvc = 1;
+  string mount_path = 2;
+  bool read_only = 3;
+  string sub_path = 4;
 }
 
 // ServicePortInfo is one exposed port of a service.
@@ -1050,6 +1069,38 @@ message PauseServiceResponse { ServiceInfo service = 1; }
 message ResumeServiceRequest { string name = 1; }
 message ResumeServiceResponse { ServiceInfo service = 1; }
 
+// ScaleService sets a service's desired replica count (0 = scaled down but
+// still present; unlike PauseService the count is not remembered for resume).
+message ScaleServiceRequest {
+  string name = 1;
+  int32 replicas = 2;
+}
+message ScaleServiceResponse { ServiceInfo service = 1; }
+
+// GetServiceManifest returns the service's Deployment + its Services as a
+// multi-document YAML (server-side status/metadata stripped). Read-only.
+message GetServiceManifestRequest { string name = 1; }
+message GetServiceManifestResponse {
+  // The multi-document YAML, `---`-separated (Deployment first).
+  string yaml = 1;
+}
+
+// ApplyServiceManifest replaces a service from an edited multi-document YAML.
+// The name(s) must resolve to a service the caller's tenant owns; the
+// Deployment's selector/name/labels are pinned so the manifest cannot
+// retarget another service. `dry_run` validates + returns the diff-like YAML
+// without writing.
+message ApplyServiceManifestRequest {
+  string name = 1;
+  string yaml = 2;
+  bool dry_run = 3;
+}
+message ApplyServiceManifestResponse {
+  ServiceInfo service = 1;
+  // The normalized YAML that was (or would be) applied.
+  string yaml = 2;
+}
+
 // ---- service logs ----
 message ServiceLogsRequest {
   string name = 1;
@@ -1195,6 +1246,12 @@ service BranchSessionService {
   rpc DeleteService(DeleteServiceRequest) returns (DeleteServiceResponse);
   rpc PauseService(PauseServiceRequest) returns (PauseServiceResponse);
   rpc ResumeService(ResumeServiceRequest) returns (ResumeServiceResponse);
+  // ScaleService sets the desired replica count (0 = scaled down).
+  rpc ScaleService(ScaleServiceRequest) returns (ScaleServiceResponse);
+  // GetServiceManifest returns the Deployment + Services as YAML (read-only).
+  rpc GetServiceManifest(GetServiceManifestRequest) returns (GetServiceManifestResponse);
+  // ApplyServiceManifest replaces a service from edited YAML (owner-only).
+  rpc ApplyServiceManifest(ApplyServiceManifestRequest) returns (ApplyServiceManifestResponse);
   // Persistent volume claims (admin-managed storage for services).
   rpc CreatePVC(CreatePVCRequest) returns (CreatePVCResponse);
   rpc ListPVCs(ListPVCsRequest) returns (ListPVCsResponse);

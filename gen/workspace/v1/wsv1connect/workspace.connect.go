@@ -241,6 +241,15 @@ const (
 	// BranchSessionServiceResumeServiceProcedure is the fully-qualified name of the
 	// BranchSessionService's ResumeService RPC.
 	BranchSessionServiceResumeServiceProcedure = "/workspace.v1.BranchSessionService/ResumeService"
+	// BranchSessionServiceScaleServiceProcedure is the fully-qualified name of the
+	// BranchSessionService's ScaleService RPC.
+	BranchSessionServiceScaleServiceProcedure = "/workspace.v1.BranchSessionService/ScaleService"
+	// BranchSessionServiceGetServiceManifestProcedure is the fully-qualified name of the
+	// BranchSessionService's GetServiceManifest RPC.
+	BranchSessionServiceGetServiceManifestProcedure = "/workspace.v1.BranchSessionService/GetServiceManifest"
+	// BranchSessionServiceApplyServiceManifestProcedure is the fully-qualified name of the
+	// BranchSessionService's ApplyServiceManifest RPC.
+	BranchSessionServiceApplyServiceManifestProcedure = "/workspace.v1.BranchSessionService/ApplyServiceManifest"
 	// BranchSessionServiceCreatePVCProcedure is the fully-qualified name of the BranchSessionService's
 	// CreatePVC RPC.
 	BranchSessionServiceCreatePVCProcedure = "/workspace.v1.BranchSessionService/CreatePVC"
@@ -452,6 +461,12 @@ type BranchSessionServiceClient interface {
 	DeleteService(context.Context, *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error)
 	PauseService(context.Context, *connect.Request[v1.PauseServiceRequest]) (*connect.Response[v1.PauseServiceResponse], error)
 	ResumeService(context.Context, *connect.Request[v1.ResumeServiceRequest]) (*connect.Response[v1.ResumeServiceResponse], error)
+	// ScaleService sets the desired replica count (0 = scaled down).
+	ScaleService(context.Context, *connect.Request[v1.ScaleServiceRequest]) (*connect.Response[v1.ScaleServiceResponse], error)
+	// GetServiceManifest returns the Deployment + Services as YAML (read-only).
+	GetServiceManifest(context.Context, *connect.Request[v1.GetServiceManifestRequest]) (*connect.Response[v1.GetServiceManifestResponse], error)
+	// ApplyServiceManifest replaces a service from edited YAML (owner-only).
+	ApplyServiceManifest(context.Context, *connect.Request[v1.ApplyServiceManifestRequest]) (*connect.Response[v1.ApplyServiceManifestResponse], error)
 	// Persistent volume claims (admin-managed storage for services).
 	CreatePVC(context.Context, *connect.Request[v1.CreatePVCRequest]) (*connect.Response[v1.CreatePVCResponse], error)
 	ListPVCs(context.Context, *connect.Request[v1.ListPVCsRequest]) (*connect.Response[v1.ListPVCsResponse], error)
@@ -907,6 +922,24 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(branchSessionServiceMethods.ByName("ResumeService")),
 			connect.WithClientOptions(opts...),
 		),
+		scaleService: connect.NewClient[v1.ScaleServiceRequest, v1.ScaleServiceResponse](
+			httpClient,
+			baseURL+BranchSessionServiceScaleServiceProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ScaleService")),
+			connect.WithClientOptions(opts...),
+		),
+		getServiceManifest: connect.NewClient[v1.GetServiceManifestRequest, v1.GetServiceManifestResponse](
+			httpClient,
+			baseURL+BranchSessionServiceGetServiceManifestProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("GetServiceManifest")),
+			connect.WithClientOptions(opts...),
+		),
+		applyServiceManifest: connect.NewClient[v1.ApplyServiceManifestRequest, v1.ApplyServiceManifestResponse](
+			httpClient,
+			baseURL+BranchSessionServiceApplyServiceManifestProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("ApplyServiceManifest")),
+			connect.WithClientOptions(opts...),
+		),
 		createPVC: connect.NewClient[v1.CreatePVCRequest, v1.CreatePVCResponse](
 			httpClient,
 			baseURL+BranchSessionServiceCreatePVCProcedure,
@@ -1217,6 +1250,9 @@ type branchSessionServiceClient struct {
 	deleteService        *connect.Client[v1.DeleteServiceRequest, v1.DeleteServiceResponse]
 	pauseService         *connect.Client[v1.PauseServiceRequest, v1.PauseServiceResponse]
 	resumeService        *connect.Client[v1.ResumeServiceRequest, v1.ResumeServiceResponse]
+	scaleService         *connect.Client[v1.ScaleServiceRequest, v1.ScaleServiceResponse]
+	getServiceManifest   *connect.Client[v1.GetServiceManifestRequest, v1.GetServiceManifestResponse]
+	applyServiceManifest *connect.Client[v1.ApplyServiceManifestRequest, v1.ApplyServiceManifestResponse]
 	createPVC            *connect.Client[v1.CreatePVCRequest, v1.CreatePVCResponse]
 	listPVCs             *connect.Client[v1.ListPVCsRequest, v1.ListPVCsResponse]
 	deletePVC            *connect.Client[v1.DeletePVCRequest, v1.DeletePVCResponse]
@@ -1584,6 +1620,21 @@ func (c *branchSessionServiceClient) ResumeService(ctx context.Context, req *con
 	return c.resumeService.CallUnary(ctx, req)
 }
 
+// ScaleService calls workspace.v1.BranchSessionService.ScaleService.
+func (c *branchSessionServiceClient) ScaleService(ctx context.Context, req *connect.Request[v1.ScaleServiceRequest]) (*connect.Response[v1.ScaleServiceResponse], error) {
+	return c.scaleService.CallUnary(ctx, req)
+}
+
+// GetServiceManifest calls workspace.v1.BranchSessionService.GetServiceManifest.
+func (c *branchSessionServiceClient) GetServiceManifest(ctx context.Context, req *connect.Request[v1.GetServiceManifestRequest]) (*connect.Response[v1.GetServiceManifestResponse], error) {
+	return c.getServiceManifest.CallUnary(ctx, req)
+}
+
+// ApplyServiceManifest calls workspace.v1.BranchSessionService.ApplyServiceManifest.
+func (c *branchSessionServiceClient) ApplyServiceManifest(ctx context.Context, req *connect.Request[v1.ApplyServiceManifestRequest]) (*connect.Response[v1.ApplyServiceManifestResponse], error) {
+	return c.applyServiceManifest.CallUnary(ctx, req)
+}
+
 // CreatePVC calls workspace.v1.BranchSessionService.CreatePVC.
 func (c *branchSessionServiceClient) CreatePVC(ctx context.Context, req *connect.Request[v1.CreatePVCRequest]) (*connect.Response[v1.CreatePVCResponse], error) {
 	return c.createPVC.CallUnary(ctx, req)
@@ -1874,6 +1925,12 @@ type BranchSessionServiceHandler interface {
 	DeleteService(context.Context, *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error)
 	PauseService(context.Context, *connect.Request[v1.PauseServiceRequest]) (*connect.Response[v1.PauseServiceResponse], error)
 	ResumeService(context.Context, *connect.Request[v1.ResumeServiceRequest]) (*connect.Response[v1.ResumeServiceResponse], error)
+	// ScaleService sets the desired replica count (0 = scaled down).
+	ScaleService(context.Context, *connect.Request[v1.ScaleServiceRequest]) (*connect.Response[v1.ScaleServiceResponse], error)
+	// GetServiceManifest returns the Deployment + Services as YAML (read-only).
+	GetServiceManifest(context.Context, *connect.Request[v1.GetServiceManifestRequest]) (*connect.Response[v1.GetServiceManifestResponse], error)
+	// ApplyServiceManifest replaces a service from edited YAML (owner-only).
+	ApplyServiceManifest(context.Context, *connect.Request[v1.ApplyServiceManifestRequest]) (*connect.Response[v1.ApplyServiceManifestResponse], error)
 	// Persistent volume claims (admin-managed storage for services).
 	CreatePVC(context.Context, *connect.Request[v1.CreatePVCRequest]) (*connect.Response[v1.CreatePVCResponse], error)
 	ListPVCs(context.Context, *connect.Request[v1.ListPVCsRequest]) (*connect.Response[v1.ListPVCsResponse], error)
@@ -2325,6 +2382,24 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		connect.WithSchema(branchSessionServiceMethods.ByName("ResumeService")),
 		connect.WithHandlerOptions(opts...),
 	)
+	branchSessionServiceScaleServiceHandler := connect.NewUnaryHandler(
+		BranchSessionServiceScaleServiceProcedure,
+		svc.ScaleService,
+		connect.WithSchema(branchSessionServiceMethods.ByName("ScaleService")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceGetServiceManifestHandler := connect.NewUnaryHandler(
+		BranchSessionServiceGetServiceManifestProcedure,
+		svc.GetServiceManifest,
+		connect.WithSchema(branchSessionServiceMethods.ByName("GetServiceManifest")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceApplyServiceManifestHandler := connect.NewUnaryHandler(
+		BranchSessionServiceApplyServiceManifestProcedure,
+		svc.ApplyServiceManifest,
+		connect.WithSchema(branchSessionServiceMethods.ByName("ApplyServiceManifest")),
+		connect.WithHandlerOptions(opts...),
+	)
 	branchSessionServiceCreatePVCHandler := connect.NewUnaryHandler(
 		BranchSessionServiceCreatePVCProcedure,
 		svc.CreatePVC,
@@ -2697,6 +2772,12 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServicePauseServiceHandler.ServeHTTP(w, r)
 		case BranchSessionServiceResumeServiceProcedure:
 			branchSessionServiceResumeServiceHandler.ServeHTTP(w, r)
+		case BranchSessionServiceScaleServiceProcedure:
+			branchSessionServiceScaleServiceHandler.ServeHTTP(w, r)
+		case BranchSessionServiceGetServiceManifestProcedure:
+			branchSessionServiceGetServiceManifestHandler.ServeHTTP(w, r)
+		case BranchSessionServiceApplyServiceManifestProcedure:
+			branchSessionServiceApplyServiceManifestHandler.ServeHTTP(w, r)
 		case BranchSessionServiceCreatePVCProcedure:
 			branchSessionServiceCreatePVCHandler.ServeHTTP(w, r)
 		case BranchSessionServiceListPVCsProcedure:
@@ -3044,6 +3125,18 @@ func (UnimplementedBranchSessionServiceHandler) PauseService(context.Context, *c
 
 func (UnimplementedBranchSessionServiceHandler) ResumeService(context.Context, *connect.Request[v1.ResumeServiceRequest]) (*connect.Response[v1.ResumeServiceResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ResumeService is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) ScaleService(context.Context, *connect.Request[v1.ScaleServiceRequest]) (*connect.Response[v1.ScaleServiceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ScaleService is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) GetServiceManifest(context.Context, *connect.Request[v1.GetServiceManifestRequest]) (*connect.Response[v1.GetServiceManifestResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetServiceManifest is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) ApplyServiceManifest(context.Context, *connect.Request[v1.ApplyServiceManifestRequest]) (*connect.Response[v1.ApplyServiceManifestResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ApplyServiceManifest is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) CreatePVC(context.Context, *connect.Request[v1.CreatePVCRequest]) (*connect.Response[v1.CreatePVCResponse], error) {

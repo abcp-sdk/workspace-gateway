@@ -2,6 +2,7 @@ package servicesmgr
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -313,5 +314,42 @@ func TestDeployRefusesForeignService(t *testing.T) {
 	}})
 	if err == nil {
 		t.Fatal("expected refusal to clobber a foreign Service")
+	}
+}
+
+func TestScaleAndManifest(t *testing.T) {
+	c := newTestClient()
+	ctx := context.Background()
+	if _, err := c.Deploy(ctx, Spec{Name: "app", Image: "img:1", Creator: "t", ContainerPort: 8080, CPU: "250m", Memory: "128Mi",
+		Env: map[string]string{"A": "1"}, Volumes: []VolumeMount{{PVC: "data", MountPath: "/data"}}}); err != nil {
+		t.Fatal(err)
+	}
+	scaled, err := c.Scale(ctx, "app", 3)
+	if err != nil || scaled.Replicas != 3 {
+		t.Fatalf("scale: %+v, %v", scaled, err)
+	}
+	if scaled.CPU != "250m" || scaled.Memory != "128Mi" || scaled.Env["A"] != "1" || len(scaled.Volumes) != 1 {
+		t.Fatalf("detail not populated: %+v", scaled)
+	}
+	y, err := c.Manifest(ctx, "app")
+	if err != nil || y == "" {
+		t.Fatalf("manifest: %v", err)
+	}
+	if !strings.Contains(y, "kind: Deployment") || !strings.Contains(y, "kind: Service") {
+		t.Fatalf("manifest missing docs:\n%s", y)
+	}
+	// Apply a scale-up via YAML and verify.
+	edited := strings.Replace(y, "replicas: 3", "replicas: 5", 1)
+	out, norm, err := c.ApplyManifest(ctx, "app", edited, false)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if out.Replicas != 5 || !strings.Contains(norm, "replicas: 5") {
+		t.Fatalf("apply result: %+v\n%s", out, norm)
+	}
+	// A foreign deployment name is refused.
+	wrong := "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: other\nspec:\n  template:\n    spec:\n      containers:\n      - name: svc\n        image: img:1\n"
+	if _, _, err := c.ApplyManifest(ctx, "app", wrong, false); err == nil {
+		t.Fatal("expected refusal for a mismatched deployment name")
 	}
 }

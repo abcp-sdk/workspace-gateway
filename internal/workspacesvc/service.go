@@ -2513,6 +2513,66 @@ func (s *Service) ResumeService(ctx context.Context, req *connect.Request[wsv1.R
 	return connect.NewResponse(&wsv1.ResumeServiceResponse{Service: svc}), nil
 }
 
+// ScaleService sets a service's desired replica count (0 = scaled down).
+func (s *Service) ScaleService(ctx context.Context, req *connect.Request[wsv1.ScaleServiceRequest]) (*connect.Response[wsv1.ScaleServiceResponse], error) {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	if s.services == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+	}
+	cur, gerr := s.services.Get(ctx, req.Msg.GetName())
+	if gerr != nil {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("service not found"))
+	}
+	if cur.Creator != "" && cur.Creator != tenant {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("service not found"))
+	}
+	if req.Msg.GetReplicas() < 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("replicas must be >= 0"))
+	}
+	out, err := s.services.Scale(ctx, req.Msg.GetName(), req.Msg.GetReplicas())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.ScaleServiceResponse{Service: toServiceInfo(out, s.servicePublicURLs(out, req.Header()))}), nil
+}
+
+// GetServiceManifest returns the service's Deployment + Services as YAML.
+func (s *Service) GetServiceManifest(ctx context.Context, req *connect.Request[wsv1.GetServiceManifestRequest]) (*connect.Response[wsv1.GetServiceManifestResponse], error) {
+	if _, err := s.ownedService(ctx, req.Header(), req.Msg.GetName()); err != nil {
+		return nil, err
+	}
+	if s.services == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+	}
+	y, err := s.services.Manifest(ctx, req.Msg.GetName())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.GetServiceManifestResponse{Yaml: y}), nil
+}
+
+// ApplyServiceManifest replaces a service from an edited multi-document YAML.
+func (s *Service) ApplyServiceManifest(ctx context.Context, req *connect.Request[wsv1.ApplyServiceManifestRequest]) (*connect.Response[wsv1.ApplyServiceManifestResponse], error) {
+	if _, err := s.ownedService(ctx, req.Header(), req.Msg.GetName()); err != nil {
+		return nil, err
+	}
+	if s.services == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+	}
+	out, y, err := s.services.ApplyManifest(ctx, req.Msg.GetName(), req.Msg.GetYaml(), req.Msg.GetDryRun())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	resp := &wsv1.ApplyServiceManifestResponse{Yaml: y}
+	if !req.Msg.GetDryRun() {
+		resp.Service = toServiceInfo(out, s.servicePublicURLs(out, req.Header()))
+	}
+	return connect.NewResponse(resp), nil
+}
+
 // pauseResume is the shared authorization + dispatch for Pause/Resume. Pausing
 // is only meaningful for a running service; resuming only for a paused one.
 func (s *Service) pauseResume(ctx context.Context, hdr map[string][]string, name string, pause bool) (*wsv1.ServiceInfo, error) {
@@ -2841,13 +2901,22 @@ func toServiceInfo(svc servicesmgr.Service, publicURLs map[string]string) *wsv1.
 			primary = publicURL
 		}
 	}
+	vols := make([]*wsv1.VolumeMountInfo, 0, len(svc.Volumes))
+	for _, v := range svc.Volumes {
+		vols = append(vols, &wsv1.VolumeMountInfo{
+			Pvc: v.PVC, MountPath: v.MountPath, ReadOnly: v.ReadOnly, SubPath: v.SubPath,
+		})
+	}
 	return &wsv1.ServiceInfo{
 		Name: svc.Name, Image: svc.Image, Phase: svc.Phase, Ready: svc.Ready,
-		Replicas: svc.Replicas, Url: svc.URL, Creator: svc.Creator, Session: svc.Session,
+		Replicas: svc.Replicas, ReadyReplicas: svc.ReadyReplicas,
+		Url: svc.URL, Creator: svc.Creator, Session: svc.Session,
 		PublicUrl: primary, Ports: ports,
 		Stage: svc.Stage, PodPhase: svc.PodPhase, Restarts: svc.Restarts,
 		Message: svc.Message, ExpiresAt: svc.ExpiresAt, Paused: svc.Paused,
 		CreatedAt: svc.CreatedAt,
+		Cpu:       svc.CPU, Memory: svc.Memory, Command: svc.Command, Env: svc.Env,
+		Volumes: vols,
 	}
 }
 
