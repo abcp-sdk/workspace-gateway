@@ -15,6 +15,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/yaml"
 
@@ -1159,4 +1160,18 @@ func ServiceName(session string) string {
 		return "app"
 	}
 	return slug
+}
+
+// WatchDeployments returns a watch over every managed service Deployment.
+func (c *Client) WatchDeployments(ctx context.Context) (watch.Interface, error) {
+	return c.cs.AppsV1().Deployments(c.namespace).Watch(ctx, metav1.ListOptions{
+		LabelSelector: LabelManaged + "=1",
+	})
+}
+
+// WatchPVCs returns a watch over every managed PersistentVolumeClaim.
+func (c *Client) WatchPVCs(ctx context.Context) (watch.Interface, error) {
+	return c.cs.CoreV1().PersistentVolumeClaims(c.namespace).Watch(ctx, metav1.ListOptions{
+		LabelSelector: LabelPVC + "=1",
+	})
 }

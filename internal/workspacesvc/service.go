@@ -28,6 +28,7 @@ import (
 	"github.com/abcp-sdk/workspace-gateway/internal/gitimport"
 	"github.com/abcp-sdk/workspace-gateway/internal/gitmerge"
 	"github.com/abcp-sdk/workspace-gateway/internal/imagebuild"
+	"github.com/abcp-sdk/workspace-gateway/internal/k8swatch"
 	"github.com/abcp-sdk/workspace-gateway/internal/members"
 	"github.com/abcp-sdk/workspace-gateway/internal/roles"
 	"github.com/abcp-sdk/workspace-gateway/internal/runtimeprofiles"
@@ -68,6 +69,8 @@ type Service struct {
 	pvcStorageClass string
 	// pvcDefaultSize is used when CreatePVC omits a size.
 	pvcDefaultSize string
+	// hub fans out a single k8s-change signal to WatchWorkspace subscribers.
+	hub *workspaceHub
 }
 
 // Deps configures the service.
@@ -117,6 +120,13 @@ type Deps struct {
 func New(d Deps) *Service {
 	commits := gitcommit.NewManager()
 	commits.SetBaseDir(d.GitCloneDir)
+	var sources []k8swatch.Source
+	if d.Sandbox != nil {
+		sources = append(sources, d.Sandbox.Watch)
+	}
+	if d.Services != nil {
+		sources = append(sources, d.Services.WatchDeployments, d.Services.WatchPVCs)
+	}
 	return &Service{
 		agent: d.Agent, members: d.Members, git: d.Forgejo, sbx: d.Sandbox,
 		services: d.Services,
@@ -131,6 +141,7 @@ func New(d Deps) *Service {
 		serviceLogTail:      d.ServiceLogTail,
 		pvcStorageClass:     d.PVCStorageClass,
 		pvcDefaultSize:      d.PVCDefaultSize,
+		hub:                 newWorkspaceHub(sources...),
 	}
 }
 
@@ -1799,32 +1810,39 @@ func (s *Service) ListSandboxes(ctx context.Context, req *connect.Request[wsv1.L
 	if err != nil {
 		return nil, err
 	}
+	out, err := s.listSandboxes(ctx, tenant, req.Msg.GetSession(), req.Header())
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&wsv1.ListSandboxesResponse{Sandboxes: out}), nil
+}
+
+// listSandboxes returns the tenant's visible sandboxes (newest-first). A
+// caller with a session header is confined to its OWN sandboxes; `want` is an
+// optional explicit session filter for a webui caller.
+func (s *Service) listSandboxes(ctx context.Context, tenant, want string, hdr map[string][]string) ([]*wsv1.SandboxInfo, error) {
 	sbxs, err := s.sbx.List(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	out := make([]*wsv1.SandboxInfo, 0, len(sbxs))
-	want := req.Msg.GetSession()
 	// An agent session may only enumerate ITS OWN sandboxes; a webui (tenant
 	// console, no session header) may enumerate all of the tenant's (with the
 	// optional `session` filter still honoured).
-	if caller := sessionFromHeaders(req.Header()); caller != "" {
+	if caller := sessionFromHeaders(hdr); caller != "" {
 		want = caller
 	}
 	for _, sb := range sbxs {
-		// Visibility: only sandboxes this tenant created.
 		if sb.Creator != "" && sb.Creator != tenant {
 			continue
 		}
-		// Optional session filter: only this session's sandboxes.
 		if want != "" && sb.Session != want {
 			continue
 		}
 		out = append(out, toSandboxInfo(sb))
 	}
-	// Newest-created first (the k8s List order is name-ish, not time).
 	sortByCreatedAtDesc(out)
-	return connect.NewResponse(&wsv1.ListSandboxesResponse{Sandboxes: out}), nil
+	return out, nil
 }
 
 func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.CreateSandboxRequest]) (*connect.Response[wsv1.CreateSandboxResponse], error) {
@@ -2386,8 +2404,17 @@ func (s *Service) ListPVCs(ctx context.Context, req *connect.Request[wsv1.ListPV
 	if err != nil {
 		return nil, err
 	}
+	out, err := s.listPVCs(ctx, tenant)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&wsv1.ListPVCsResponse{Pvcs: out}), nil
+}
+
+// listPVCs returns the tenant's visible PersistentVolumeClaims.
+func (s *Service) listPVCs(ctx context.Context, tenant string) ([]*wsv1.PVCInfo, error) {
 	if s.services == nil {
-		return connect.NewResponse(&wsv1.ListPVCsResponse{}), nil
+		return []*wsv1.PVCInfo{}, nil
 	}
 	pvcs, err := s.services.ListPVCs(ctx)
 	if err != nil {
@@ -2400,7 +2427,7 @@ func (s *Service) ListPVCs(ctx context.Context, req *connect.Request[wsv1.ListPV
 		}
 		out = append(out, toPVCInfo(p))
 	}
-	return connect.NewResponse(&wsv1.ListPVCsResponse{Pvcs: out}), nil
+	return out, nil
 }
 
 // DeletePVC removes a claim the tenant owns. Refused while a service mounts it.
@@ -2440,8 +2467,17 @@ func (s *Service) ListServices(ctx context.Context, req *connect.Request[wsv1.Li
 	if err != nil {
 		return nil, err
 	}
+	out, err := s.listServices(ctx, tenant, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&wsv1.ListServicesResponse{Services: out}), nil
+}
+
+// listServices returns the tenant's visible services (newest-first).
+func (s *Service) listServices(ctx context.Context, tenant string, hdr map[string][]string) ([]*wsv1.ServiceInfo, error) {
 	if s.services == nil {
-		return connect.NewResponse(&wsv1.ListServicesResponse{}), nil
+		return []*wsv1.ServiceInfo{}, nil
 	}
 	svcs, err := s.services.List(ctx)
 	if err != nil {
@@ -2452,11 +2488,10 @@ func (s *Service) ListServices(ctx context.Context, req *connect.Request[wsv1.Li
 		if svc.Creator != "" && svc.Creator != tenant {
 			continue
 		}
-		out = append(out, toServiceInfo(svc, s.servicePublicURLs(svc, req.Header())))
+		out = append(out, toServiceInfo(svc, s.servicePublicURLs(svc, hdr)))
 	}
-	// Newest-created first (the k8s List order is name-ish, not time).
 	sortByCreatedAtDesc(out)
-	return connect.NewResponse(&wsv1.ListServicesResponse{Services: out}), nil
+	return out, nil
 }
 
 // hasCreatedAt is the shared sort-key contract for both list messages.
@@ -2719,6 +2754,55 @@ func (s *Service) WatchServiceLogs(ctx context.Context, req *connect.Request[wsv
 		return st.Send(&wsv1.WatchServiceLogsResponse{Done: true, Error: err.Error()})
 	}
 	return st.Send(&wsv1.WatchServiceLogsResponse{Done: true})
+}
+
+// WatchWorkspace streams the tenant's sandboxes/services/PVCs live: an initial
+// full snapshot, then a new frame whenever any underlying k8s object changes.
+// The client never polls.
+func (s *Service) WatchWorkspace(ctx context.Context, req *connect.Request[wsv1.WatchWorkspaceRequest], st *connect.ServerStream[wsv1.WatchWorkspaceResponse]) error {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
+		return err
+	}
+	changes, unsub := s.hub.subscribe()
+	defer unsub()
+
+	send := func() error {
+		hdr := req.Header()
+		sbxs, err := s.listSandboxes(ctx, tenant, "", hdr)
+		if err != nil {
+			return err
+		}
+		svcs, err := s.listServices(ctx, tenant, hdr)
+		if err != nil {
+			return err
+		}
+		pvcs, err := s.listPVCs(ctx, tenant)
+		if err != nil {
+			return err
+		}
+		return st.Send(&wsv1.WatchWorkspaceResponse{
+			Sandboxes: sbxs, Services: svcs, Pvcs: pvcs,
+			SandboxesChanged: true, ServicesChanged: true, PvcsChanged: true,
+		})
+	}
+	// Initial snapshot.
+	if err := send(); err != nil {
+		return err
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case _, ok := <-changes:
+			if !ok {
+				return nil
+			}
+			if err := send(); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 // ownedService resolves a service and enforces tenant/creator ownership.

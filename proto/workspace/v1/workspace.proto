@@ -1124,6 +1124,35 @@ message WatchServiceLogsResponse {
   string error = 3;
 }
 
+// ---- live workspace list (server push) ----
+//
+// WatchWorkspace streams the caller-tenant's sandboxes + services + PVCs as a
+// snapshot followed by incremental deltas, so the Service tab is LIVE without
+// polling. It watches the underlying k8s objects (pods/deployments/claims) in
+// the managed namespace and re-emits whenever any of them changes. Every frame
+// carries the FULL current list for its kind (small, and avoids client-side
+// reconciliation of add/modify/delete).
+
+message WatchWorkspaceRequest {
+  // Reserved for a future filter (e.g. a single session); empty = the tenant.
+}
+
+message WatchWorkspaceResponse {
+  // The sandboxes of the caller's tenant, newest-first (same shape as
+  // ListSandboxes). Sent whenever the set changes.
+  repeated SandboxInfo sandboxes = 1;
+  // The services of the caller's tenant, newest-first (same shape as
+  // ListServices).
+  repeated ServiceInfo services = 2;
+  // The PVCs of the caller's tenant (same shape as ListPVCs).
+  repeated PVCInfo pvcs = 3;
+  // Which kinds changed in this frame (0=all on the initial snapshot). Lets the
+  // client skip re-rendering an unchanged list.
+  bool sandboxes_changed = 4;
+  bool services_changed = 5;
+  bool pvcs_changed = 6;
+}
+
 // BuildPreviewImage builds a PREVIEW image from a repository Dockerfile. The
 // image name is FORCED to the repo name and the tag is FORCED to
 // `preview-<branch>-<sha>` (the caller may add a suffix), so a preview build
@@ -1259,6 +1288,8 @@ service BranchSessionService {
   // service logs (read a service's container logs; seam for a log backend)
   rpc ServiceLogs(ServiceLogsRequest) returns (ServiceLogsResponse);
   rpc WatchServiceLogs(WatchServiceLogsRequest) returns (stream WatchServiceLogsResponse);
+  // WatchWorkspace streams the tenant's sandboxes/services/PVCs live.
+  rpc WatchWorkspace(WatchWorkspaceRequest) returns (stream WatchWorkspaceResponse);
   // BuildPreviewImage builds a preview-tagged image (forced name/tag).
   rpc BuildPreviewImage(BuildPreviewImageRequest) returns (BuildPreviewImageResponse);
 

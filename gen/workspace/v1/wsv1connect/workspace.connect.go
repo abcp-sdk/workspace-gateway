@@ -265,6 +265,9 @@ const (
 	// BranchSessionServiceWatchServiceLogsProcedure is the fully-qualified name of the
 	// BranchSessionService's WatchServiceLogs RPC.
 	BranchSessionServiceWatchServiceLogsProcedure = "/workspace.v1.BranchSessionService/WatchServiceLogs"
+	// BranchSessionServiceWatchWorkspaceProcedure is the fully-qualified name of the
+	// BranchSessionService's WatchWorkspace RPC.
+	BranchSessionServiceWatchWorkspaceProcedure = "/workspace.v1.BranchSessionService/WatchWorkspace"
 	// BranchSessionServiceBuildPreviewImageProcedure is the fully-qualified name of the
 	// BranchSessionService's BuildPreviewImage RPC.
 	BranchSessionServiceBuildPreviewImageProcedure = "/workspace.v1.BranchSessionService/BuildPreviewImage"
@@ -474,6 +477,8 @@ type BranchSessionServiceClient interface {
 	// service logs (read a service's container logs; seam for a log backend)
 	ServiceLogs(context.Context, *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error)
 	WatchServiceLogs(context.Context, *connect.Request[v1.WatchServiceLogsRequest]) (*connect.ServerStreamForClient[v1.WatchServiceLogsResponse], error)
+	// WatchWorkspace streams the tenant's sandboxes/services/PVCs live.
+	WatchWorkspace(context.Context, *connect.Request[v1.WatchWorkspaceRequest]) (*connect.ServerStreamForClient[v1.WatchWorkspaceResponse], error)
 	// BuildPreviewImage builds a preview-tagged image (forced name/tag).
 	BuildPreviewImage(context.Context, *connect.Request[v1.BuildPreviewImageRequest]) (*connect.Response[v1.BuildPreviewImageResponse], error)
 	// ---- forwarded agent surface (minimal; no policy RPCs) ----
@@ -970,6 +975,12 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(branchSessionServiceMethods.ByName("WatchServiceLogs")),
 			connect.WithClientOptions(opts...),
 		),
+		watchWorkspace: connect.NewClient[v1.WatchWorkspaceRequest, v1.WatchWorkspaceResponse](
+			httpClient,
+			baseURL+BranchSessionServiceWatchWorkspaceProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("WatchWorkspace")),
+			connect.WithClientOptions(opts...),
+		),
 		buildPreviewImage: connect.NewClient[v1.BuildPreviewImageRequest, v1.BuildPreviewImageResponse](
 			httpClient,
 			baseURL+BranchSessionServiceBuildPreviewImageProcedure,
@@ -1258,6 +1269,7 @@ type branchSessionServiceClient struct {
 	deletePVC            *connect.Client[v1.DeletePVCRequest, v1.DeletePVCResponse]
 	serviceLogs          *connect.Client[v1.ServiceLogsRequest, v1.ServiceLogsResponse]
 	watchServiceLogs     *connect.Client[v1.WatchServiceLogsRequest, v1.WatchServiceLogsResponse]
+	watchWorkspace       *connect.Client[v1.WatchWorkspaceRequest, v1.WatchWorkspaceResponse]
 	buildPreviewImage    *connect.Client[v1.BuildPreviewImageRequest, v1.BuildPreviewImageResponse]
 	health               *connect.Client[v11.HealthRequest, v11.HealthResponse]
 	getIdentity          *connect.Client[v11.GetIdentityRequest, v11.GetIdentityResponse]
@@ -1660,6 +1672,11 @@ func (c *branchSessionServiceClient) WatchServiceLogs(ctx context.Context, req *
 	return c.watchServiceLogs.CallServerStream(ctx, req)
 }
 
+// WatchWorkspace calls workspace.v1.BranchSessionService.WatchWorkspace.
+func (c *branchSessionServiceClient) WatchWorkspace(ctx context.Context, req *connect.Request[v1.WatchWorkspaceRequest]) (*connect.ServerStreamForClient[v1.WatchWorkspaceResponse], error) {
+	return c.watchWorkspace.CallServerStream(ctx, req)
+}
+
 // BuildPreviewImage calls workspace.v1.BranchSessionService.BuildPreviewImage.
 func (c *branchSessionServiceClient) BuildPreviewImage(ctx context.Context, req *connect.Request[v1.BuildPreviewImageRequest]) (*connect.Response[v1.BuildPreviewImageResponse], error) {
 	return c.buildPreviewImage.CallUnary(ctx, req)
@@ -1938,6 +1955,8 @@ type BranchSessionServiceHandler interface {
 	// service logs (read a service's container logs; seam for a log backend)
 	ServiceLogs(context.Context, *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error)
 	WatchServiceLogs(context.Context, *connect.Request[v1.WatchServiceLogsRequest], *connect.ServerStream[v1.WatchServiceLogsResponse]) error
+	// WatchWorkspace streams the tenant's sandboxes/services/PVCs live.
+	WatchWorkspace(context.Context, *connect.Request[v1.WatchWorkspaceRequest], *connect.ServerStream[v1.WatchWorkspaceResponse]) error
 	// BuildPreviewImage builds a preview-tagged image (forced name/tag).
 	BuildPreviewImage(context.Context, *connect.Request[v1.BuildPreviewImageRequest]) (*connect.Response[v1.BuildPreviewImageResponse], error)
 	// ---- forwarded agent surface (minimal; no policy RPCs) ----
@@ -2430,6 +2449,12 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		connect.WithSchema(branchSessionServiceMethods.ByName("WatchServiceLogs")),
 		connect.WithHandlerOptions(opts...),
 	)
+	branchSessionServiceWatchWorkspaceHandler := connect.NewServerStreamHandler(
+		BranchSessionServiceWatchWorkspaceProcedure,
+		svc.WatchWorkspace,
+		connect.WithSchema(branchSessionServiceMethods.ByName("WatchWorkspace")),
+		connect.WithHandlerOptions(opts...),
+	)
 	branchSessionServiceBuildPreviewImageHandler := connect.NewUnaryHandler(
 		BranchSessionServiceBuildPreviewImageProcedure,
 		svc.BuildPreviewImage,
@@ -2788,6 +2813,8 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceServiceLogsHandler.ServeHTTP(w, r)
 		case BranchSessionServiceWatchServiceLogsProcedure:
 			branchSessionServiceWatchServiceLogsHandler.ServeHTTP(w, r)
+		case BranchSessionServiceWatchWorkspaceProcedure:
+			branchSessionServiceWatchWorkspaceHandler.ServeHTTP(w, r)
 		case BranchSessionServiceBuildPreviewImageProcedure:
 			branchSessionServiceBuildPreviewImageHandler.ServeHTTP(w, r)
 		case BranchSessionServiceHealthProcedure:
@@ -3157,6 +3184,10 @@ func (UnimplementedBranchSessionServiceHandler) ServiceLogs(context.Context, *co
 
 func (UnimplementedBranchSessionServiceHandler) WatchServiceLogs(context.Context, *connect.Request[v1.WatchServiceLogsRequest], *connect.ServerStream[v1.WatchServiceLogsResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.WatchServiceLogs is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) WatchWorkspace(context.Context, *connect.Request[v1.WatchWorkspaceRequest], *connect.ServerStream[v1.WatchWorkspaceResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.WatchWorkspace is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) BuildPreviewImage(context.Context, *connect.Request[v1.BuildPreviewImageRequest]) (*connect.Response[v1.BuildPreviewImageResponse], error) {

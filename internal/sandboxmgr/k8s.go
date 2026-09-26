@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/abcp-sdk/workspace-gateway/internal/runtimeprofiles"
 	"k8s.io/client-go/kubernetes"
@@ -399,3 +400,11 @@ func toSandbox(c *Client, p *corev1.Pod) Sandbox {
 }
 
 func hostPathTypePtr(t corev1.HostPathType) *corev1.HostPathType { return &t }
+
+// Watch returns a watch over every sandbox Pod in the namespace. The caller
+// re-lists on each signal (see k8swatch), so only the event stream matters.
+func (c *Client) Watch(ctx context.Context) (watch.Interface, error) {
+	return c.cs.CoreV1().Pods(c.namespace).Watch(ctx, metav1.ListOptions{
+		LabelSelector: LabelManaged + "=1",
+	})
+}
