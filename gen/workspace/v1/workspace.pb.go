@@ -515,6 +515,9 @@ func (x *GetBranchSessionResponse) GetBranchSession() *BranchSession {
 	return nil
 }
 
+// DeleteBranchSession deletes a branch session (sandboxes + agent session) or
+// a free session. For a non-main branch session it ALSO deletes the underlying
+// git branch (repo:branch <-> session is 1:1); `main` is protected.
 type DeleteBranchSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Session       string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
@@ -8559,7 +8562,9 @@ type ServiceInfo struct {
 	ExpiresAt int64 `protobuf:"varint,15,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	// Paused is true when the service is scaled to zero replicas (PauseService);
 	// ResumeService restores the replica count it had before the pause.
-	Paused        bool `protobuf:"varint,16,opt,name=paused,proto3" json:"paused,omitempty"`
+	Paused bool `protobuf:"varint,16,opt,name=paused,proto3" json:"paused,omitempty"`
+	// Unix-millis creation time of the service's Deployment (list sort key).
+	CreatedAt     int64 `protobuf:"varint,17,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8704,6 +8709,13 @@ func (x *ServiceInfo) GetPaused() bool {
 		return x.Paused
 	}
 	return false
+}
+
+func (x *ServiceInfo) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
 }
 
 // ServicePortInfo is one exposed port of a service.
@@ -11141,7 +11153,7 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"totalLines\x12\x1d\n" +
 	"\n" +
 	"start_line\x18\x03 \x01(\x05R\tstartLine\x12\x19\n" +
-	"\bend_line\x18\x04 \x01(\x05R\aendLine\"\xb9\x03\n" +
+	"\bend_line\x18\x04 \x01(\x05R\aendLine\"\xd8\x03\n" +
 	"\vServiceInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05image\x18\x02 \x01(\tR\x05image\x12\x14\n" +
@@ -11161,7 +11173,9 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\amessage\x18\x0e \x01(\tR\amessage\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\x0f \x01(\x03R\texpiresAt\x12\x16\n" +
-	"\x06paused\x18\x10 \x01(\bR\x06paused\"\xad\x01\n" +
+	"\x06paused\x18\x10 \x01(\bR\x06paused\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x11 \x01(\x03R\tcreatedAt\"\xad\x01\n" +
 	"\x0fServicePortInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06preset\x18\x02 \x01(\tR\x06preset\x12\x12\n" +

@@ -272,6 +272,103 @@ func TestValidateSandboxImage(t *testing.T) {
 	}
 }
 
+func TestSandboxAccessible(t *testing.T) {
+	sb := sandboxmgr.Sandbox{Name: "sb", Creator: "myuser", Session: "o:r:main"}
+	cases := []struct {
+		name    string
+		tenant  string
+		session string
+		want    bool
+	}{
+		// Tenant console (no session header): every sandbox the tenant owns.
+		{"tenant console sees own", "myuser", "", true},
+		// Another tenant is invisible regardless.
+		{"foreign tenant hidden", "other", "", false},
+		{"foreign tenant + session hidden", "other", "o:r:feat", false},
+		// Agent session: ONLY its own session's sandboxes.
+		{"own session allowed", "myuser", "o:r:main", true},
+		{"other session blocked", "myuser", "o:r:feat", false},
+	}
+	for _, c := range cases {
+		if got := sandboxAccessible(sb, c.tenant, c.session); got != c.want {
+			t.Errorf("%s: sandboxAccessible = %v, want %v", c.name, got, c.want)
+		}
+	}
+	// A legacy sandbox with no session binding is invisible to an agent session
+	// (only the tenant console can see it).
+	legacy := sandboxmgr.Sandbox{Name: "l", Creator: "myuser", Session: ""}
+	if sandboxAccessible(legacy, "myuser", "o:r:main") {
+		t.Error("unbound sandbox must be hidden from an agent session")
+	}
+	if !sandboxAccessible(legacy, "myuser", "") {
+		t.Error("unbound sandbox must be visible to the tenant console")
+	}
+}
+
+func TestBranchTargetAllowed(t *testing.T) {
+	cases := []struct {
+		name   string
+		caller string
+		org    string
+		repo   string
+		want   bool
+	}{
+		// A human webui caller (no session header) is the tenant console.
+		{"no session unrestricted", "", "other", "lib", true},
+		// A branch session may only act on its OWN repository.
+		{"own repo allowed", "acme:web:main", "acme", "web", true},
+		{"other repo refused", "acme:web:main", "other", "lib", false},
+		{"other org refused", "acme:web:main", "acme", "lib", false},
+		// A free (non-branch) session has no repo binding to compare.
+		{"free session unrestricted", "myuser-admin", "acme", "web", true},
+	}
+	for _, c := range cases {
+		if got := branchTargetAllowed(c.caller, c.org, c.repo); got != c.want {
+			t.Errorf("%s: branchTargetAllowed = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestCreateSandboxRefusesExisting(t *testing.T) {
+	sm := sandboxmgr.NewWithClientset(fake.NewSimpleClientset(), sandboxmgr.Config{Namespace: "worker"})
+	s := &Service{
+		svcToken: "tok", svcTenant: "ten", sbx: sm,
+		sandboxOrg: "sandbox", defaultSandboxImage: "sandbox/sandbox-base",
+	}
+	ctx := context.Background()
+	// Seed a live sandbox, then attempt to create the same name again.
+	if _, _, err := sm.Create(ctx, sandboxmgr.Spec{Name: "dup", Image: "sandbox/sandbox-base"}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	req := connect.NewRequest(&wsv1.CreateSandboxRequest{Name: "dup"})
+	req.Header().Set("Authorization", "Bearer tok")
+	_, err := s.CreateSandbox(ctx, req)
+	if connect.CodeOf(err) != connect.CodeAlreadyExists {
+		t.Fatalf("create existing code = %v (err %v), want AlreadyExists", connect.CodeOf(err), err)
+	}
+	// The original sandbox is untouched.
+	if _, ok, _ := sm.Get(ctx, "dup"); !ok {
+		t.Fatal("existing sandbox was destroyed by a refused create")
+	}
+}
+
+func TestSortByCreatedAtDesc(t *testing.T) {
+	items := []*wsv1.SandboxInfo{
+		{Name: "a", CreatedAt: 100},
+		{Name: "b", CreatedAt: 300},
+		{Name: "c", CreatedAt: 200},
+		{Name: "d", CreatedAt: 200}, // tie keeps incoming order (stable)
+	}
+	sortByCreatedAtDesc(items)
+	got := []string{items[0].GetName(), items[1].GetName(), items[2].GetName(), items[3].GetName()}
+	want := []string{"b", "c", "d", "a"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("order = %v, want %v", got, want)
+		}
+	}
+}
+
 func TestSessionSandboxesOrdering(t *testing.T) {
 	mk := func(name, phase string, ready bool, created int64) sandboxmgr.Sandbox {
 		return sandboxmgr.Sandbox{Name: name, Phase: phase, Ready: ready, CreatedAt: created, Session: "s"}

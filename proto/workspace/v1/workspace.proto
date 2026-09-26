@@ -886,6 +886,8 @@ message ServiceInfo {
   // Paused is true when the service is scaled to zero replicas (PauseService);
   // ResumeService restores the replica count it had before the pause.
   bool paused = 16;
+  // Unix-millis creation time of the service's Deployment (list sort key).
+  int64 created_at = 17;
 }
 
 // ServicePortInfo is one exposed port of a service.

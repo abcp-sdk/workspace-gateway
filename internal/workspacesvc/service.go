@@ -38,13 +38,13 @@ import (
 
 // Service implements wsv1connect.BranchSessionServiceHandler.
 type Service struct {
-	agent        agentv1connect.AgentServiceClient
-	members      *members.Store
-	git          *forgejo.Client
-	sbx          *sandboxmgr.Client
-	services     *servicesmgr.Client
-	builder      *imagebuild.Builder
-	runtime      runtimeprofiles.Settings
+	agent    agentv1connect.AgentServiceClient
+	members  *members.Store
+	git      *forgejo.Client
+	sbx      *sandboxmgr.Client
+	services *servicesmgr.Client
+	builder  *imagebuild.Builder
+	runtime  runtimeprofiles.Settings
 	// sandboxOrg is the ONLY registry org a sandbox image may come from. The
 	// deployment pre-imports worker-bundled images there (see sandbox-images/),
 	// so a sandbox can never run an arbitrary upstream image.
@@ -52,10 +52,10 @@ type Service struct {
 	// defaultSandboxImage is used when CreateSandbox omits an image.
 	defaultSandboxImage string
 	toolchainOrg        string // default owner for ListOCIImages
-	svcToken     string // shared service token (sandbox-only service-to-service)
-	svcTenant    string // tenant the service token resolves to (sandbox ownership)
-	commits      *gitcommit.Manager
-	sandboxNS    string // namespace services/sandboxes live in (public-host inference)
+	svcToken            string // shared service token (sandbox-only service-to-service)
+	svcTenant           string // tenant the service token resolves to (sandbox ownership)
+	commits             *gitcommit.Manager
+	sandboxNS           string // namespace services/sandboxes live in (public-host inference)
 	// previewTTL reclaims a preview service after this long (0 = no TTL).
 	previewTTL time.Duration
 	// serviceLogTail is the default number of log lines returned.
@@ -120,10 +120,10 @@ func New(d Deps) *Service {
 	return &Service{
 		agent: d.Agent, members: d.Members, git: d.Forgejo, sbx: d.Sandbox,
 		services: d.Services,
-		builder: d.Builder, runtime: d.Runtime,
+		builder:  d.Builder, runtime: d.Runtime,
 		sandboxOrg: d.SandboxOrg, defaultSandboxImage: d.DefaultSandboxImage,
 		toolchainOrg: d.ToolchainOrg,
-		svcToken: d.ServiceToken, svcTenant: d.ServiceTenant,
+		svcToken:     d.ServiceToken, svcTenant: d.ServiceTenant,
 		commits:             commits,
 		sandboxNS:           d.SandboxNamespace,
 		publicServiceDomain: d.PublicServiceDomain,
@@ -375,6 +375,13 @@ func (s *Service) ForkBranchSession(ctx context.Context, req *connect.Request[ws
 	if parentBranch != roles.MainBranch {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New(
 			"only a main session can create branches; a feature branch cannot fork new branches"))
+	}
+	// An agent session may only fork a branch in its OWN repository; the parent
+	// must belong to the caller's repo (a human webui caller sends no session
+	// header and keeps full tenant access).
+	if !branchTargetAllowed(sessionFromHeaders(req.Header()), org, repo) {
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New(
+			"a session may only create branches in its own repository"))
 	}
 	owned, err := s.members.OwnsRepo(tenant, org, repo)
 	if err != nil {
@@ -1169,10 +1176,31 @@ func (s *Service) CreateBranch(ctx context.Context, req *connect.Request[wsv1.Cr
 	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
+	// An agent session may only create branches in its OWN repository (a human
+	// webui caller sends no session header and keeps full tenant access).
+	if !branchTargetAllowed(sessionFromHeaders(req.Header()), m.GetOrg(), m.GetRepo()) {
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New(
+			"a session may only create branches in its own repository"))
+	}
 	if err := s.git.CreateBranch(ctx, m.GetOrg(), m.GetRepo(), m.GetName(), m.GetFrom()); err != nil {
 		return nil, mrError(err)
 	}
 	return connect.NewResponse(&wsv1.CreateBranchResponse{Ok: true}), nil
+}
+
+// branchTargetAllowed reports whether `callerSession` may act on the repo
+// `org/repo` for a branch-scoped mutation. An EMPTY caller (human webui, no
+// X-Session-Name) is unrestricted (the tenant console); a branch session is
+// confined to its own org/repo.
+func branchTargetAllowed(callerSession, org, repo string) bool {
+	if callerSession == "" {
+		return true
+	}
+	sOrg, sRepo, _, ok := roles.ParseSession(callerSession)
+	if !ok {
+		return true // non-branch session (free): no repo binding to compare
+	}
+	return sOrg == org && sRepo == repo
 }
 
 // Archive returns a repo tree at a ref as a tar.gz (sandbox checkout).
@@ -1704,6 +1732,9 @@ func (s *Service) ApplyFiles(ctx context.Context, req *connect.Request[wsv1.Appl
 	}
 	sha, err := s.commits.ApplyFiles(ctx, opts, ops)
 	if err != nil {
+		if errors.Is(err, gitcommit.ErrNoChanges) || errors.Is(err, gitcommit.ErrIgnoredPath) {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&wsv1.ApplyFilesResponse{Sha: sha}), nil
@@ -1774,6 +1805,12 @@ func (s *Service) ListSandboxes(ctx context.Context, req *connect.Request[wsv1.L
 	}
 	out := make([]*wsv1.SandboxInfo, 0, len(sbxs))
 	want := req.Msg.GetSession()
+	// An agent session may only enumerate ITS OWN sandboxes; a webui (tenant
+	// console, no session header) may enumerate all of the tenant's (with the
+	// optional `session` filter still honoured).
+	if caller := sessionFromHeaders(req.Header()); caller != "" {
+		want = caller
+	}
 	for _, sb := range sbxs {
 		// Visibility: only sandboxes this tenant created.
 		if sb.Creator != "" && sb.Creator != tenant {
@@ -1785,6 +1822,8 @@ func (s *Service) ListSandboxes(ctx context.Context, req *connect.Request[wsv1.L
 		}
 		out = append(out, toSandboxInfo(sb))
 	}
+	// Newest-created first (the k8s List order is name-ish, not time).
+	sortByCreatedAtDesc(out)
 	return connect.NewResponse(&wsv1.ListSandboxesResponse{Sandboxes: out}), nil
 }
 
@@ -1811,12 +1850,34 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 	if err := s.validateSandboxImage(image); err != nil {
 		return nil, err
 	}
+	// Session binding: an agent session OWNS the sandbox it creates — the
+	// binding comes from the caller's session header, not the (spoofable) body,
+	// so a session can never create a sandbox under another session's name. A
+	// webui caller (no session header) may pass an explicit `session`.
+	bindSession := req.Msg.GetSession()
+	if caller := sessionFromHeaders(req.Header()); caller != "" {
+		bindSession = caller
+	}
+	// A sandbox name is never reused, not even by the SAME session: creating
+	// over a live sandbox would silently destroy its workload and token. Refuse
+	// early (the manager's ErrExists is the race-safe backstop). This also
+	// refuses a name another session/tenant already occupies.
+	if _, ok, gerr := s.sbx.Get(ctx, name); gerr != nil {
+		return nil, connect.NewError(connect.CodeInternal, gerr)
+	} else if ok {
+		return nil, connect.NewError(connect.CodeAlreadyExists,
+			fmt.Errorf("sandbox %q already exists; delete it before reusing the name", name))
+	}
 	sb, _, err := s.sbx.Create(ctx, sandboxmgr.Spec{
 		Name: name, Image: image, CPU: req.Msg.GetCpu(), Memory: req.Msg.GetMemory(),
-		Env: req.Msg.GetEnv(), Creator: tenant, Session: req.Msg.GetSession(),
+		Env: req.Msg.GetEnv(), Creator: tenant, Session: bindSession,
 		Runtime: s.renderRuntime(req.Msg.GetKvm(), req.Msg.GetGpuCount()),
 	})
 	if err != nil {
+		if errors.Is(err, sandboxmgr.ErrExists) {
+			return nil, connect.NewError(connect.CodeAlreadyExists,
+				fmt.Errorf("sandbox %q already exists; delete it before reusing the name", name))
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	// Wait up to 60s for the worker to accept connections; on timeout the
@@ -1828,6 +1889,25 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 		sb = cur
 	}
 	return connect.NewResponse(&wsv1.CreateSandboxResponse{Sandbox: toSandboxInfo(sb)}), nil
+}
+
+// sandboxAccessible reports whether the caller may act on `sb`.
+//
+// Tenant ownership is the first gate: a sandbox created by another tenant is
+// invisible. The SECOND gate is SESSION isolation: an agent session (which
+// identifies itself via `X-Session-Name`) may only touch sandboxes bound to
+// ITS OWN session — a feature-branch session must never drive/read/delete a
+// sandbox another session (e.g. the main session) created. A human/webui caller
+// (tenant token, no session header) is the tenant console and may see/manage
+// every sandbox the tenant owns.
+func sandboxAccessible(sb sandboxmgr.Sandbox, tenant, callerSession string) bool {
+	if sb.Creator != "" && sb.Creator != tenant {
+		return false
+	}
+	if callerSession != "" && sb.Session != callerSession {
+		return false
+	}
+	return true
 }
 
 // sandboxPick is one session's representative sandbox.
@@ -1952,7 +2032,7 @@ func (s *Service) GetSandbox(ctx context.Context, req *connect.Request[wsv1.GetS
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
 	}
-	if sb.Creator != "" && sb.Creator != tenant {
+	if !sandboxAccessible(sb, tenant, sessionFromHeaders(req.Header())) {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
 	}
 	info := toSandboxInfo(sb)
@@ -1978,7 +2058,7 @@ func (s *Service) DeleteSandbox(ctx context.Context, req *connect.Request[wsv1.D
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
 	}
-	if sb.Creator != "" && sb.Creator != tenant {
+	if !sandboxAccessible(sb, tenant, sessionFromHeaders(req.Header())) {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
 	}
 	deleted, err := s.sbx.Delete(ctx, req.Msg.GetName())
@@ -2002,7 +2082,7 @@ func (s *Service) ResolveSandbox(ctx context.Context, req *connect.Request[wsv1.
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
 	}
-	if sb.Creator != "" && sb.Creator != tenant {
+	if !sandboxAccessible(sb, tenant, sessionFromHeaders(req.Header())) {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
 	}
 	url, token, err := s.sbx.Resolve(ctx, req.Msg.GetName())
@@ -2028,7 +2108,7 @@ func (s *Service) ownedSandbox(ctx context.Context, hdr map[string][]string, nam
 	if !ok {
 		return "", "", connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
 	}
-	if sb.Creator != "" && sb.Creator != tenant {
+	if !sandboxAccessible(sb, tenant, sessionFromHeaders(hdr)) {
 		return "", "", connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
 	}
 	url, token, err := s.sbx.Resolve(ctx, name)
@@ -2374,7 +2454,21 @@ func (s *Service) ListServices(ctx context.Context, req *connect.Request[wsv1.Li
 		}
 		out = append(out, toServiceInfo(svc, s.servicePublicURLs(svc, req.Header())))
 	}
+	// Newest-created first (the k8s List order is name-ish, not time).
+	sortByCreatedAtDesc(out)
 	return connect.NewResponse(&wsv1.ListServicesResponse{Services: out}), nil
+}
+
+// hasCreatedAt is the shared sort-key contract for both list messages.
+type hasCreatedAt interface{ GetCreatedAt() int64 }
+
+// sortByCreatedAtDesc orders items newest-first (stable, so equal timestamps
+// keep their incoming order). The k8s API returns pods/deployments in
+// name-ish order, not creation order.
+func sortByCreatedAtDesc[T hasCreatedAt](items []T) {
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].GetCreatedAt() > items[j].GetCreatedAt()
+	})
 }
 
 // DeleteService removes a service the tenant owns.
@@ -2753,6 +2847,7 @@ func toServiceInfo(svc servicesmgr.Service, publicURLs map[string]string) *wsv1.
 		PublicUrl: primary, Ports: ports,
 		Stage: svc.Stage, PodPhase: svc.PodPhase, Restarts: svc.Restarts,
 		Message: svc.Message, ExpiresAt: svc.ExpiresAt, Paused: svc.Paused,
+		CreatedAt: svc.CreatedAt,
 	}
 }
 

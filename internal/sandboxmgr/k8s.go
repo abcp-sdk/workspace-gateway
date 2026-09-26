@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -39,6 +40,11 @@ const (
 	// WorkerPort is the agent-worker listen port baked into preset images.
 	WorkerPort = 48080
 )
+
+// ErrExists reports that a sandbox with the requested name already exists. A
+// sandbox name is never reused: creating over a live one would silently destroy
+// its workload and token, so callers must delete it first.
+var ErrExists = errors.New("sandbox already exists")
 
 // Sandbox is a live worker view.
 type Sandbox struct {
@@ -175,17 +181,19 @@ func (c *Client) Create(ctx context.Context, s Spec) (Sandbox, string, error) {
 		AnnoSession: s.Session,
 	}
 
-	// Idempotent: clear any prior objects with the same name first.
-	if err := c.deleteObjects(ctx, res); err != nil {
-		return Sandbox{}, "", err
-	}
-
+	// A name is NEVER reused: creating over an existing sandbox would silently
+	// destroy a running workload (and its token). The K8s Create calls below are
+	// the authoritative guard — an already-present object yields ErrExists and we
+	// leave the existing sandbox untouched.
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: res, Namespace: c.namespace, Labels: labels},
 		Type:       corev1.SecretTypeOpaque,
 		Data:       map[string][]byte{"token": []byte(token)},
 	}
 	if _, err := c.cs.CoreV1().Secrets(c.namespace).Create(ctx, secret, metav1.CreateOptions{}); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			return Sandbox{}, "", fmt.Errorf("%w: %s", ErrExists, s.Name)
+		}
 		return Sandbox{}, "", fmt.Errorf("create secret: %w", err)
 	}
 
@@ -252,6 +260,9 @@ func (c *Client) Create(ctx context.Context, s Spec) (Sandbox, string, error) {
 	}
 	if _, err := c.cs.CoreV1().Pods(c.namespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		_ = c.cs.CoreV1().Secrets(c.namespace).Delete(ctx, res, metav1.DeleteOptions{})
+		if apierrors.IsAlreadyExists(err) {
+			return Sandbox{}, "", fmt.Errorf("%w: %s", ErrExists, s.Name)
+		}
 		return Sandbox{}, "", fmt.Errorf("create pod: %w", err)
 	}
 
@@ -267,6 +278,9 @@ func (c *Client) Create(ctx context.Context, s Spec) (Sandbox, string, error) {
 	if _, err := c.cs.CoreV1().Services(c.namespace).Create(ctx, svc, metav1.CreateOptions{}); err != nil {
 		_ = c.cs.CoreV1().Pods(c.namespace).Delete(ctx, res, metav1.DeleteOptions{})
 		_ = c.cs.CoreV1().Secrets(c.namespace).Delete(ctx, res, metav1.DeleteOptions{})
+		if apierrors.IsAlreadyExists(err) {
+			return Sandbox{}, "", fmt.Errorf("%w: %s", ErrExists, s.Name)
+		}
 		return Sandbox{}, "", fmt.Errorf("create service: %w", err)
 	}
 

@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -49,6 +50,106 @@ func TestExtractStripsTopDir(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "sub", "main.go")); err != nil {
 		t.Fatalf("nested file missing: %v", err)
+	}
+}
+
+// tarGzWithGlobalHeader prepends a real PAX global header, exactly as Forgejo's
+// archive endpoint does (`pax_global_header`). Go's archive/tar SURFACES that
+// header as the first entry, which used to be mistaken for the top dir name.
+// The block is crafted by hand because tar.Writer refuses to emit a global
+// header without PAXRecords.
+func tarGzWithGlobalHeader(t *testing.T, top string, files map[string]string) []byte {
+	t.Helper()
+	var inner bytes.Buffer
+	tw := tar.NewWriter(&inner)
+	for name, body := range files {
+		p := top + "/" + name
+		if err := tw.WriteHeader(&tar.Header{Name: p, Mode: 0o644, Size: int64(len(body)), Typeflag: tar.TypeReg}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	blk := make([]byte, 512)
+	copy(blk[0:], "pax_global_header")
+	copy(blk[100:], "0000644\x00") // mode
+	copy(blk[108:], "0000000\x00") // uid
+	copy(blk[116:], "0000000\x00") // gid
+	copy(blk[124:], "00000000000\x00")
+	copy(blk[136:], "00000000000\x00")
+	for i := 148; i < 156; i++ {
+		blk[i] = ' '
+	}
+	blk[156] = 'g' // TypeXGlobalHeader
+	copy(blk[257:], "ustar\x0000")
+	for i := 329; i < 337; i++ {
+		blk[i] = ' '
+	}
+	var sum int
+	for _, b := range blk {
+		sum += int(b)
+	}
+	copy(blk[148:], []byte(fmt.Sprintf("%06o\x00 ", sum)))
+
+	var out bytes.Buffer
+	gz := gzip.NewWriter(&out)
+	if _, err := gz.Write(blk); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gz.Write(inner.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return out.Bytes()
+}
+
+func TestExtractSkipsPaxGlobalHeader(t *testing.T) {
+	dir, cleanup, err := Extract(tarGzWithGlobalHeader(t, "weixin-agent", map[string]string{
+		"Dockerfile": "FROM scratch\n",
+		"README.md":  "hi\n",
+	}), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if b, err := os.ReadFile(filepath.Join(dir, "Dockerfile")); err != nil || string(b) != "FROM scratch\n" {
+		t.Fatalf("Dockerfile at root = %q err=%v", b, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "weixin-agent", "Dockerfile")); err == nil {
+		t.Fatal("top dir was NOT stripped (pax header confused the stripper)")
+	}
+}
+
+// A tar WITHOUT a wrapper dir (root-level files only) must NOT be stripped.
+func TestExtractKeepsRootWhenNoWrapper(t *testing.T) {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{Name: "Dockerfile", Mode: 0o644, Size: 13, Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte("FROM scratch\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	dir, cleanup, err := Extract(buf.Bytes(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if b, err := os.ReadFile(filepath.Join(dir, "Dockerfile")); err != nil || string(b) != "FROM scratch\n" {
+		t.Fatalf("root Dockerfile lost: %q err=%v", b, err)
 	}
 }
 

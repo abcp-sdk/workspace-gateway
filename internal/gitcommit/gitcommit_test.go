@@ -2,6 +2,7 @@ package gitcommit
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -231,9 +232,67 @@ func TestCommitRequiresPlaceholder(t *testing.T) {
 }
 
 // TestStripTrailingPlaceholder verifies the MR-time backstop: a CLEAN trailing
-// placeholder (only possible via a write that is later reverted) is dropped by
-// ResetTo(mergeTip), leaving the real commit as HEAD. The normal flow no longer
-// produces one, so it is built here explicitly.
+// TestApplyFilesNoChanges pins that an ApplyFiles which produces NO tree change
+// (identical content, or an ignored path) FAILS with ErrNoChanges instead of
+// silently reporting success with the parent commit sha.
+func TestApplyFilesNoChanges(t *testing.T) {
+	url := setupBranch(t)
+	m := NewManager()
+	opts := Options{RepoURL: url, Branch: "feature", Timeout: 60 * time.Second}
+	ctx := context.Background()
+
+	// Commit a real change first.
+	if _, err := m.ApplyFiles(ctx, opts, []FileOp{{Path: "f.txt", Op: "update", Content: []byte("x\n")}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Commit(ctx, opts, "change"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Applying the IDENTICAL content produces no tree change: it must FAIL with
+	// ErrNoChanges, never report success.
+	_, err := m.ApplyFiles(ctx, opts, []FileOp{{Path: "f.txt", Op: "update", Content: []byte("x\n")}})
+	if !errors.Is(err, ErrNoChanges) {
+		t.Fatalf("identical write err = %v, want ErrNoChanges", err)
+	}
+
+	// Same when a placeholder is ALREADY open (the amend path): stage one real
+	// change, then re-apply it unchanged.
+	if _, err := m.ApplyFiles(ctx, opts, []FileOp{{Path: "f.txt", Op: "update", Content: []byte("y\n")}}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = m.ApplyFiles(ctx, opts, []FileOp{{Path: "f.txt", Op: "update", Content: []byte("y\n")}})
+	if !errors.Is(err, ErrNoChanges) {
+		t.Fatalf("identical amend err = %v, want ErrNoChanges", err)
+	}
+}
+
+func TestApplyFilesRejectsIgnoredPath(t *testing.T) {
+	url := setupBranch(t)
+	m := NewManager()
+	opts := Options{RepoURL: url, Branch: "feature", Timeout: 60 * time.Second}
+	ctx := context.Background()
+
+	// Land a .gitignore that excludes `/easyvcs` (the easy-vcs footgun).
+	if _, err := m.ApplyFiles(ctx, opts, []FileOp{{Path: ".gitignore", Op: "create", Content: []byte("/easyvcs\n")}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Commit(ctx, opts, "add gitignore"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Writing under the ignored directory must be REFUSED (git would skip it and
+	// the old code reported an empty-commit success).
+	_, err := m.ApplyFiles(ctx, opts, []FileOp{{Path: "easyvcs/store/store.go", Op: "create", Content: []byte("package store\n")}})
+	if !errors.Is(err, ErrIgnoredPath) {
+		t.Fatalf("ignored write err = %v, want ErrIgnoredPath", err)
+	}
+	// A non-ignored path still works.
+	if _, err := m.ApplyFiles(ctx, opts, []FileOp{{Path: "store/store.go", Op: "create", Content: []byte("package store\n")}}); err != nil {
+		t.Fatalf("non-ignored write: %v", err)
+	}
+}
+
 func TestStripTrailingPlaceholder(t *testing.T) {
 	url := setupBranch(t)
 	m := NewManager()

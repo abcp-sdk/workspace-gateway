@@ -313,12 +313,72 @@ func (b *Builder) runEnv(ctx context.Context, env []string, args []string) (stri
 	return tail(out.String(), 16*1024), nil
 }
 
+// isTarMeta reports whether a header is tar bookkeeping that must never be
+// treated as a real entry. Go's archive/tar SURFACES a leading
+// `TypeXGlobalHeader` (Forgejo archives begin with a `pax_global_header`), and
+// a `TypeXHeader` may appear too; both would otherwise be mistaken for the
+// archive's top-level directory name.
+func isTarMeta(hdr *tar.Header) bool {
+	return hdr.Typeflag == tar.TypeXGlobalHeader || hdr.Typeflag == tar.TypeXHeader
+}
+
+// archiveTop decides which single leading path segment to strip. Forgejo wraps
+// every archive in one `<repo>/` directory, but a tar stream may begin with PAX
+// metadata and an archive may (in principle) have no wrapper at all. Strip the
+// leading segment ONLY when every real entry shares the same first segment AND
+// that entry is actually nested (its name contains a separator) — otherwise
+// nothing is stripped, so a root-level file is never dropped.
+func archiveTop(tarball []byte) (string, error) {
+	gz, err := gzip.NewReader(bytes.NewReader(tarball))
+	if err != nil {
+		return "", fmt.Errorf("gzip: %w", err)
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	seg := ""
+	nested := false
+	uniform := true
+	for {
+		hdr, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return "", fmt.Errorf("tar: %w", err)
+		}
+		if isTarMeta(hdr) {
+			continue
+		}
+		name := filepath.ToSlash(hdr.Name)
+		if strings.Contains(name, "/") {
+			nested = true
+		}
+		first := strings.SplitN(strings.Trim(name, "/"), "/", 2)[0]
+		if first == "" {
+			continue
+		}
+		if seg == "" {
+			seg = first
+		} else if first != seg {
+			uniform = false
+		}
+	}
+	if nested && uniform && seg != "" {
+		return seg, nil
+	}
+	return "", nil
+}
+
 // Extract unpacks a tar.gz repository archive into a fresh temp directory,
 // stripping the archive's single top-level directory (Forgejo wraps the tree).
 // The returned cleanup removes the directory.
 func Extract(tarball []byte, maxBytes int64) (string, func(), error) {
 	if maxBytes <= 0 {
 		maxBytes = 512 << 20
+	}
+	top, err := archiveTop(tarball)
+	if err != nil {
+		return "", nil, err
 	}
 	gz, err := gzip.NewReader(bytes.NewReader(tarball))
 	if err != nil {
@@ -334,7 +394,6 @@ func Extract(tarball []byte, maxBytes int64) (string, func(), error) {
 
 	tr := tar.NewReader(gz)
 	var total int64
-	top := "" // first path component, stripped from every entry
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -344,11 +403,14 @@ func Extract(tarball []byte, maxBytes int64) (string, func(), error) {
 			cleanup()
 			return "", nil, fmt.Errorf("tar: %w", err)
 		}
-		name := filepath.ToSlash(hdr.Name)
-		if top == "" {
-			top = strings.SplitN(strings.Trim(name, "/"), "/", 2)[0]
+		if isTarMeta(hdr) {
+			continue
 		}
-		rel := strings.TrimPrefix(name, top)
+		name := filepath.ToSlash(hdr.Name)
+		rel := name
+		if top != "" {
+			rel = strings.TrimPrefix(name, top)
+		}
 		rel = strings.TrimPrefix(rel, "/")
 		if rel == "" {
 			continue

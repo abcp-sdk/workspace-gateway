@@ -20,6 +20,21 @@ func TestRenderKVM(t *testing.T) {
 	if r.SecurityContext == nil || r.SecurityContext.Privileged == nil || *r.SecurityContext.Privileged {
 		t.Fatal("kvm must never be privileged")
 	}
+	// SYS_ADMIN must NOT be granted: it enables container escape on a shared
+	// node, and the VM images boot + network with NET_ADMIN/MKNOD alone
+	// (verified live against the macOS / Windows / Android images).
+	caps := map[string]bool{}
+	if r.SecurityContext.Capabilities != nil {
+		for _, c := range r.SecurityContext.Capabilities.Add {
+			caps[string(c)] = true
+		}
+	}
+	if caps["SYS_ADMIN"] {
+		t.Fatal("kvm must not add SYS_ADMIN")
+	}
+	if !caps["NET_ADMIN"] || !caps["MKNOD"] {
+		t.Fatalf("kvm must keep NET_ADMIN + MKNOD, got %v", caps)
+	}
 }
 
 func TestRenderGPU(t *testing.T) {

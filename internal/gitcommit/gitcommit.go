@@ -39,6 +39,7 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/format/diff"
+	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 )
@@ -54,6 +55,18 @@ const PlaceholderMessage = PlaceholderPrefix + " (workspace staging — amend be
 // ErrStaged is returned when an operation requires a clean branch but the
 // current placeholder commit carries staged changes.
 var ErrStaged = errors.New("branch has uncommitted staged changes; call repo-commit with a message first")
+
+// ErrNoChanges is returned by ApplyFiles when applying the given operations
+// produced NO change to the commit tree. This happens when the content is
+// identical to what is already committed, or — the classic footgun — the target
+// path is IGNORED by the repository's `.gitignore`, so git never stages it.
+// Reporting this as a SUCCESS (the old behaviour returned the parent commit sha)
+// silently swallowed failed writes.
+var ErrNoChanges = errors.New("no changes to commit (the content is unchanged, or the target path is ignored by the repository's .gitignore)")
+
+// ErrIgnoredPath is returned by ApplyFiles when a target path is excluded by
+// the repository's `.gitignore` (git would never stage it).
+var ErrIgnoredPath = errors.New("target path is ignored by the repository's .gitignore")
 
 // IsPlaceholder reports whether a commit message is the staging placeholder.
 func IsPlaceholder(msg string) bool { return strings.HasPrefix(msg, PlaceholderPrefix) }
@@ -338,8 +351,15 @@ func (m *Manager) ApplyFiles(ctx context.Context, o Options, ops []FileOp) (stri
 	if err != nil {
 		return "", err
 	}
+	// Compute the repo's .gitignore matcher ONCE: a write to an ignored path
+	// would never be staged (git skips it), so we refuse it up front with a
+	// precise message instead of silently producing an empty commit.
+	ignored, err := gitignoreMatcher(wt)
+	if err != nil {
+		return "", err
+	}
 	for _, op := range ops {
-		if err := applyFile(wt, op); err != nil {
+		if err := applyFile(wt, op, ignored); err != nil {
 			return "", fmt.Errorf("apply %s: %w", op.Path, err)
 		}
 	}
@@ -349,6 +369,17 @@ func (m *Manager) ApplyFiles(ctx context.Context, o Options, ops []FileOp) (stri
 	_, place, err := c.head()
 	if err != nil {
 		return "", err
+	}
+	// A placeholder is AMENDED with AllowEmptyCommits, so an unchanged tree would
+	// otherwise slip through as a bogus "success" (the old bug: a write to an
+	// ignored/identical path reported the parent sha). Check the staged state
+	// explicitly: nothing staged relative to HEAD means nothing changed.
+	staged, err := hasStagedChanges(wt)
+	if err != nil {
+		return "", err
+	}
+	if !staged {
+		return "", ErrNoChanges
 	}
 	author := &object.Signature{Name: "workspace-gateway", Email: "gateway@workspace.local", When: time.Now()}
 	var hash plumbing.Hash
@@ -361,15 +392,13 @@ func (m *Manager) ApplyFiles(ctx context.Context, o Options, ops []FileOp) (stri
 			Author: author, Committer: author,
 		})
 	}
-	if err != nil && !errors.Is(err, git.ErrEmptyCommit) {
-		return "", fmt.Errorf("commit: %w", err)
+	if errors.Is(err, git.ErrEmptyCommit) {
+		// Nothing changed. NEVER report this as success (it used to return the
+		// parent sha, so a write to an ignored path looked like it worked).
+		return "", ErrNoChanges
 	}
-	if err != nil { // ErrEmptyCommit: nothing changed; treat as no-op.
-		ref, herr := c.repo.Head()
-		if herr != nil {
-			return "", herr
-		}
-		hash = ref.Hash()
+	if err != nil {
+		return "", fmt.Errorf("commit: %w", err)
 	}
 	if err := c.push(ctx, o); err != nil {
 		return "", err
@@ -438,11 +467,42 @@ func (c *cloned) push(ctx context.Context, o Options) error {
 	return nil
 }
 
-// applyFile writes or removes one path in the worktree.
-func applyFile(wt *git.Worktree, op FileOp) error {
+// hasStagedChanges reports whether the worktree/index differs from HEAD after
+// staging. Used to reject a no-op ApplyFiles BEFORE an AllowEmptyCommits amend,
+// which would otherwise commit an unchanged tree and report a bogus success.
+func hasStagedChanges(wt *git.Worktree) (bool, error) {
+	st, err := wt.Status()
+	if err != nil {
+		return false, fmt.Errorf("status: %w", err)
+	}
+	return !st.IsClean(), nil
+}
+
+// gitignoreMatcher builds a matcher from the worktree's .gitignore files (and
+// the repo's exclude file). Returns nil when there are no patterns, so callers
+// can skip the check cheaply.
+func gitignoreMatcher(wt *git.Worktree) (gitignore.Matcher, error) {
+	patterns, err := gitignore.ReadPatterns(wt.Filesystem, nil)
+	if err != nil {
+		return nil, fmt.Errorf("read .gitignore: %w", err)
+	}
+	patterns = append(patterns, wt.Excludes...)
+	if len(patterns) == 0 {
+		return nil, nil
+	}
+	return gitignore.NewMatcher(patterns), nil
+}
+
+// applyFile writes or removes one path in the worktree. A non-nil `ignored`
+// matcher refuses a path the repository's `.gitignore` excludes (git would skip
+// it, yielding an empty commit).
+func applyFile(wt *git.Worktree, op FileOp, ignored gitignore.Matcher) error {
 	path := filepath.ToSlash(strings.TrimSpace(op.Path))
 	if path == "" || strings.Contains(path, "..") || strings.HasPrefix(path, "/") {
 		return fmt.Errorf("illegal path %q", op.Path)
+	}
+	if ignored != nil && ignored.Match(strings.Split(path, "/"), false) {
+		return fmt.Errorf("%w: %s", ErrIgnoredPath, path)
 	}
 	if op.Op == "delete" {
 		_, err := wt.Filesystem.Stat(path)

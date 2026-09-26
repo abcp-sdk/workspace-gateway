@@ -43,8 +43,15 @@ func DefaultSettings() Settings {
 			RunAsUser:                int64Ptr(0),
 			AllowPrivilegeEscalation: boolPtr(true),
 			Privileged:               boolPtr(false),
+			// NOTE: NO SYS_ADMIN. KVM guests boot and configure NAT/bridge
+			// networking with only NET_ADMIN + MKNOD (verified against the
+			// deployment's macOS / Windows / Android images: QEMU boots, NAT
+			// networking comes up, the worker serves, jobs run). SYS_ADMIN was a
+			// conservative upstream default that also enables container escape
+			// (mount/unshare/cgroup) on a shared node, so it is intentionally
+			// dropped.
 			Capabilities: &corev1.Capabilities{Add: []corev1.Capability{
-				"NET_ADMIN", "NET_RAW", "SYS_ADMIN", "SYS_NICE", "MKNOD",
+				"NET_ADMIN", "NET_RAW", "SYS_NICE", "MKNOD",
 				"CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE", "FOWNER", "KILL",
 			}},
 			AppArmorProfile: &corev1.AppArmorProfile{Type: corev1.AppArmorProfileTypeUnconfined},

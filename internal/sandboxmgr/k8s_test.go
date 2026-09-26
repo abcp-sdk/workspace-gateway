@@ -2,6 +2,7 @@ package sandboxmgr
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -117,16 +118,30 @@ func TestCreateListResolveDelete(t *testing.T) {
 	}
 }
 
-func TestCreateIsIdempotent(t *testing.T) {
+func TestCreateRefusesExisting(t *testing.T) {
 	c := newTestClient()
 	ctx := context.Background()
-	_, t1, _ := c.Create(ctx, Spec{Name: "x", Image: "i"})
-	_, t2, err := c.Create(ctx, Spec{Name: "x", Image: "i"})
+	_, t1, err := c.Create(ctx, Spec{Name: "x", Image: "i"})
 	if err != nil {
-		t.Fatalf("recreate: %v", err)
+		t.Fatalf("create: %v", err)
 	}
-	if t1 == t2 {
-		t.Fatal("expected a fresh token on recreate")
+	// A second create with the same name must be REFUSED, not silently
+	// overwrite (which would destroy the running sandbox and rotate its token).
+	_, _, err = c.Create(ctx, Spec{Name: "x", Image: "i"})
+	if !errors.Is(err, ErrExists) {
+		t.Fatalf("recreate err = %v, want ErrExists", err)
+	}
+	// The original sandbox and token survive untouched.
+	got, ok, err := c.Get(ctx, "x")
+	if err != nil || !ok {
+		t.Fatalf("get after refused recreate: err=%v ok=%v", err, ok)
+	}
+	if got.Name != "x" {
+		t.Fatalf("sandbox name = %q, want x", got.Name)
+	}
+	_, tok, err := c.Resolve(ctx, "x")
+	if err != nil || tok != t1 {
+		t.Fatalf("token rotated: err=%v tok=%q want %q", err, tok, t1)
 	}
 }
 
