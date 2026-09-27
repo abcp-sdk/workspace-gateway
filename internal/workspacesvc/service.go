@@ -2285,6 +2285,17 @@ func (s *Service) DeployService(ctx context.Context, req *connect.Request[wsv1.D
 		Ports:   ports,
 		Runtime: s.renderRuntime(m.GetKvm(), m.GetGpuCount()),
 		Volumes: vols,
+		Resources:      toResources(m.GetResources()),
+		ReadinessProbe: toProbeSpec(m.GetReadinessProbe()),
+		LivenessProbe:  toProbeSpec(m.GetLivenessProbe()),
+		StartupProbe:   toProbeSpec(m.GetStartupProbe()),
+		Rollout:        toRollout(m.GetRollout()),
+		EnvRefs:        toEnvRefs(m.GetEnvRefs()),
+		EnvFrom:        toEnvFrom(m.GetEnvFrom()),
+		ConfigMounts:   toConfigMounts(m.GetConfigMounts()),
+		Sidecars:       toSidecars(m.GetSidecars()),
+		NodeSelector:   m.GetNodeSelector(),
+		Tolerations:    toTolerations(m.GetTolerations()),
 	}
 	if spec.Image == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("image is required"))
@@ -2365,6 +2376,94 @@ func (s *Service) resolveVolumes(ctx context.Context, tenant string, mounts []*w
 		})
 	}
 	return out, nil
+}
+
+// ---- Tier 0 conversion helpers (proto -> servicesmgr) ----
+
+func toResources(r *wsv1.ResourceSpec) servicesmgr.Resources {
+	if r == nil {
+		return servicesmgr.Resources{}
+	}
+	return servicesmgr.Resources{
+		CPURequest: r.GetCpu(), MemoryRequest: r.GetMemory(),
+		CPULimit: r.GetCpuLimit(), MemoryLimit: r.GetMemoryLimit(),
+	}
+}
+
+func toProbeSpec(p *wsv1.ProbeSpec) servicesmgr.Probe {
+	if p == nil {
+		return servicesmgr.Probe{}
+	}
+	return servicesmgr.Probe{
+		HTTPPath: p.GetHttpPath(), HTTPPort: p.GetHttpPort(), TCPPort: p.GetTcpPort(),
+		Exec:                p.GetExecCommand(),
+		InitialDelaySeconds: p.GetInitialDelaySeconds(),
+		PeriodSeconds:       p.GetPeriodSeconds(),
+		TimeoutSeconds:      p.GetTimeoutSeconds(),
+		FailureThreshold:    p.GetFailureThreshold(),
+		SuccessThreshold:    p.GetSuccessThreshold(),
+	}
+}
+
+func toRollout(r *wsv1.RolloutSpec) servicesmgr.Rollout {
+	if r == nil {
+		return servicesmgr.Rollout{}
+	}
+	return servicesmgr.Rollout{MaxSurge: r.GetMaxSurge(), MaxUnavailable: r.GetMaxUnavailable()}
+}
+
+func toEnvRefs(in []*wsv1.EnvRefSpec) []servicesmgr.EnvRef {
+	out := make([]servicesmgr.EnvRef, 0, len(in))
+	for _, e := range in {
+		out = append(out, servicesmgr.EnvRef{
+			Name: e.GetName(), ConfigMap: e.GetConfigMap(), ConfigKey: e.GetConfigKey(),
+			Secret: e.GetSecret(), SecretKey: e.GetSecretKey(),
+		})
+	}
+	return out
+}
+
+func toEnvFrom(in []*wsv1.EnvFromSpec) []servicesmgr.EnvFrom {
+	out := make([]servicesmgr.EnvFrom, 0, len(in))
+	for _, e := range in {
+		out = append(out, servicesmgr.EnvFrom{ConfigMap: e.GetConfigMap(), Secret: e.GetSecret()})
+	}
+	return out
+}
+
+func toConfigMounts(in []*wsv1.ConfigMountSpec) []servicesmgr.ConfigMount {
+	out := make([]servicesmgr.ConfigMount, 0, len(in))
+	for _, c := range in {
+		cm := servicesmgr.ConfigMount{
+			ConfigMap: c.GetConfigMap(), Secret: c.GetSecret(), MountPath: c.GetMountPath(),
+		}
+		for _, it := range c.GetItems() {
+			cm.Items = append(cm.Items, servicesmgr.KeyToPath{Key: it.GetKey(), Path: it.GetPath()})
+		}
+		out = append(out, cm)
+	}
+	return out
+}
+
+func toSidecars(in []*wsv1.SidecarSpec) []servicesmgr.Sidecar {
+	out := make([]servicesmgr.Sidecar, 0, len(in))
+	for _, sc := range in {
+		out = append(out, servicesmgr.Sidecar{
+			Name: sc.GetName(), Image: sc.GetImage(), Command: sc.GetCommand(),
+			Env: sc.GetEnv(), CPU: sc.GetCpu(), Memory: sc.GetMemory(), Init: sc.GetInit(),
+		})
+	}
+	return out
+}
+
+func toTolerations(in []*wsv1.TolerationSpec) []servicesmgr.Toleration {
+	out := make([]servicesmgr.Toleration, 0, len(in))
+	for _, t := range in {
+		out = append(out, servicesmgr.Toleration{
+			Key: t.GetKey(), Operator: t.GetOperator(), Value: t.GetValue(), Effect: t.GetEffect(),
+		})
+	}
+	return out
 }
 
 // ---- persistent volume claims ----
@@ -2690,6 +2789,17 @@ func (s *Service) PreviewService(ctx context.Context, req *connect.Request[wsv1.
 		ExpiresAt: expires,
 		Runtime:   s.renderRuntime(m.GetKvm(), m.GetGpuCount()),
 		Volumes:   vols,
+		Resources:      toResources(m.GetResources()),
+		ReadinessProbe: toProbeSpec(m.GetReadinessProbe()),
+		LivenessProbe:  toProbeSpec(m.GetLivenessProbe()),
+		StartupProbe:   toProbeSpec(m.GetStartupProbe()),
+		Rollout:        toRollout(m.GetRollout()),
+		EnvRefs:        toEnvRefs(m.GetEnvRefs()),
+		EnvFrom:        toEnvFrom(m.GetEnvFrom()),
+		ConfigMounts:   toConfigMounts(m.GetConfigMounts()),
+		Sidecars:       toSidecars(m.GetSidecars()),
+		NodeSelector:   m.GetNodeSelector(),
+		Tolerations:    toTolerations(m.GetTolerations()),
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -2991,6 +3101,12 @@ func toServiceInfo(svc servicesmgr.Service, publicURLs map[string]string) *wsv1.
 			Pvc: v.PVC, MountPath: v.MountPath, ReadOnly: v.ReadOnly, SubPath: v.SubPath,
 		})
 	}
+	cms := make([]*wsv1.ConfigMountInfo, 0, len(svc.ConfigMounts))
+	for _, c := range svc.ConfigMounts {
+		cms = append(cms, &wsv1.ConfigMountInfo{
+			ConfigMap: c.ConfigMap, Secret: c.Secret, MountPath: c.MountPath,
+		})
+	}
 	return &wsv1.ServiceInfo{
 		Name: svc.Name, Image: svc.Image, Phase: svc.Phase, Ready: svc.Ready,
 		Replicas: svc.Replicas, ReadyReplicas: svc.ReadyReplicas,
@@ -3001,7 +3117,48 @@ func toServiceInfo(svc servicesmgr.Service, publicURLs map[string]string) *wsv1.
 		CreatedAt: svc.CreatedAt,
 		Cpu:       svc.CPU, Memory: svc.Memory, Command: svc.Command, Env: svc.Env,
 		Volumes: vols,
+		ConfigMounts:   cms,
+		Resources:      fromResources(svc.Resources),
+		ReadinessProbe: fromProbeSpec(svc.ReadinessProbe),
+		LivenessProbe:  fromProbeSpec(svc.LivenessProbe),
+		StartupProbe:   fromProbeSpec(svc.StartupProbe),
+		Rollout:        fromRollout(svc.Rollout),
+		SidecarCount:   svc.SidecarCount,
 	}
+}
+
+// ---- Tier 0 reverse mapping (servicesmgr -> proto) ----
+
+func fromResources(r servicesmgr.Resources) *wsv1.ResourceSpec {
+	if r.Empty() {
+		return nil
+	}
+	return &wsv1.ResourceSpec{
+		Cpu: r.CPURequest, Memory: r.MemoryRequest,
+		CpuLimit: r.CPULimit, MemoryLimit: r.MemoryLimit,
+	}
+}
+
+func fromProbeSpec(p servicesmgr.Probe) *wsv1.ProbeSpec {
+	if p.Empty() {
+		return nil
+	}
+	return &wsv1.ProbeSpec{
+		HttpPath: p.HTTPPath, HttpPort: p.HTTPPort, TcpPort: p.TCPPort,
+		ExecCommand:         p.Exec,
+		InitialDelaySeconds: p.InitialDelaySeconds,
+		PeriodSeconds:       p.PeriodSeconds,
+		TimeoutSeconds:      p.TimeoutSeconds,
+		FailureThreshold:    p.FailureThreshold,
+		SuccessThreshold:    p.SuccessThreshold,
+	}
+}
+
+func fromRollout(r servicesmgr.Rollout) *wsv1.RolloutSpec {
+	if r.MaxSurge == "" && r.MaxUnavailable == "" {
+		return nil
+	}
+	return &wsv1.RolloutSpec{MaxSurge: r.MaxSurge, MaxUnavailable: r.MaxUnavailable}
 }
 
 // presetKey maps a (port, protocol) back to its preset name.

@@ -353,3 +353,75 @@ func TestScaleAndManifest(t *testing.T) {
 		t.Fatal("expected refusal for a mismatched deployment name")
 	}
 }
+
+func TestDeployTier0(t *testing.T) {
+	c := newTestClient()
+	ctx := context.Background()
+	_, err := c.Deploy(ctx, Spec{
+		Name: "app", Image: "img:1", Creator: "t", ContainerPort: 8080,
+		Resources:      Resources{CPURequest: "100m", MemoryRequest: "128Mi", CPULimit: "1", MemoryLimit: "512Mi"},
+		ReadinessProbe: Probe{HTTPPort: 8080, HTTPPath: "/healthz", InitialDelaySeconds: 3},
+		LivenessProbe:  Probe{Exec: []string{"true"}},
+		Rollout:        Rollout{MaxSurge: "25%", MaxUnavailable: "0"},
+		EnvRefs:        []EnvRef{{Name: "DB", ConfigMap: "cfg", ConfigKey: "db"}},
+		EnvFrom:        []EnvFrom{{Secret: "sec"}},
+		ConfigMounts:   []ConfigMount{{ConfigMap: "cfg", MountPath: "/etc/cfg"}},
+		Sidecars:       []Sidecar{{Name: "helper", Image: "busybox", Init: true}, {Name: "log", Image: "busybox"}},
+		NodeSelector:   map[string]string{"disk": "ssd"},
+		Tolerations:    []Toleration{{Key: "dedicated", Operator: "Exists", Effect: "NoSchedule"}},
+	})
+	if err != nil {
+		t.Fatalf("deploy: %v", err)
+	}
+	d, err := c.cs.AppsV1().Deployments("worker").Get(ctx, "app", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctr := d.Spec.Template.Spec.Containers[0]
+	if ctr.Resources.Requests.Cpu().String() != "100m" || ctr.Resources.Limits.Memory().String() != "512Mi" {
+		t.Fatalf("resources = %+v", ctr.Resources)
+	}
+	if ctr.ReadinessProbe == nil || ctr.ReadinessProbe.HTTPGet == nil || ctr.ReadinessProbe.HTTPGet.Path != "/healthz" {
+		t.Fatalf("readiness = %+v", ctr.ReadinessProbe)
+	}
+	if ctr.LivenessProbe == nil || ctr.LivenessProbe.Exec == nil {
+		t.Fatalf("liveness = %+v", ctr.LivenessProbe)
+	}
+	if d.Spec.Strategy.RollingUpdate == nil || d.Spec.Strategy.RollingUpdate.MaxSurge.String() != "25%" {
+		t.Fatalf("rollout = %+v", d.Spec.Strategy)
+	}
+	if len(d.Spec.Template.Spec.InitContainers) != 1 || d.Spec.Template.Spec.InitContainers[0].Name != "helper" {
+		t.Fatalf("init = %+v", d.Spec.Template.Spec.InitContainers)
+	}
+	if len(d.Spec.Template.Spec.Containers) != 2 || d.Spec.Template.Spec.Containers[1].Name != "log" {
+		t.Fatalf("containers = %+v", d.Spec.Template.Spec.Containers)
+	}
+	if d.Spec.Template.Spec.NodeSelector["disk"] != "ssd" || len(d.Spec.Template.Spec.Tolerations) != 1 {
+		t.Fatalf("scheduling = %+v %+v", d.Spec.Template.Spec.NodeSelector, d.Spec.Template.Spec.Tolerations)
+	}
+	// Round-trip: the read-back service surfaces the Tier 0 detail.
+	got, err := c.Get(ctx, "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Resources.CPULimit != "1" || got.ReadinessProbe.HTTPPath != "/healthz" || got.SidecarCount != 2 {
+		t.Fatalf("readback = %+v", got)
+	}
+	if len(got.ConfigMounts) != 1 || got.ConfigMounts[0].ConfigMap != "cfg" {
+		t.Fatalf("config mounts = %+v", got.ConfigMounts)
+	}
+}
+
+func TestDeployTier0Validation(t *testing.T) {
+	c := newTestClient()
+	ctx := context.Background()
+	if _, err := c.Deploy(ctx, Spec{Name: "app", Image: "img", EnvRefs: []EnvRef{{Name: "X"}}}); err == nil {
+		t.Fatal("expected env_ref validation error")
+	}
+	if _, err := c.Deploy(ctx, Spec{Name: "app2", Image: "img", ConfigMounts: []ConfigMount{{ConfigMap: "c"}}}); err == nil {
+		t.Fatal("expected config_mount mount_path error")
+	}
+	if _, err := c.Deploy(ctx, Spec{Name: "app3", Image: "img", Sidecars: []Sidecar{{Name: "x"}}}); err == nil {
+		t.Fatal("expected sidecar image error")
+	}
+}

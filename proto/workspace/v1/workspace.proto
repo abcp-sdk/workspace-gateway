@@ -910,6 +910,14 @@ message ServiceInfo {
   map<string, string> env = 22;
   // PVCs mounted into the container.
   repeated VolumeMountInfo volumes = 23;
+  // Tier 0 detail (best-effort, from the live Deployment).
+  repeated ConfigMountInfo config_mounts = 24;
+  ResourceSpec resources = 25;
+  ProbeSpec readiness_probe = 26;
+  ProbeSpec liveness_probe = 27;
+  ProbeSpec startup_probe = 28;
+  RolloutSpec rollout = 29;
+  int32 sidecar_count = 30;
 }
 
 // VolumeMountInfo is one PVC mounted into a service container.
@@ -918,6 +926,101 @@ message VolumeMountInfo {
   string mount_path = 2;
   bool read_only = 3;
   string sub_path = 4;
+}
+
+// ProbeSpec is one container probe (readiness / liveness / startup). Exactly
+// one action should be set; `exec_command` wins over httpGet over tcpSocket.
+// Timing fields default to the k8s defaults when zero.
+message ProbeSpec {
+  // httpGet: GET `http_path` (default "/") on `http_port`.
+  string http_path = 1;
+  int32 http_port = 2;
+  // tcpSocket: open a TCP connection to `tcp_port`.
+  int32 tcp_port = 3;
+  // exec: run `exec_command` inside the container.
+  repeated string exec_command = 4;
+  int32 initial_delay_seconds = 5;
+  int32 period_seconds = 6;
+  int32 timeout_seconds = 7;
+  int32 failure_threshold = 8;
+  int32 success_threshold = 9;
+}
+
+// ResourceSpec splits requests from limits (each optional). A limit without a
+// request sets only the limit; k8s then defaults the request to the limit.
+message ResourceSpec {
+  string cpu = 1;
+  string memory = 2;
+  string cpu_limit = 3;
+  string memory_limit = 4;
+}
+
+// EnvRefSpec injects one env var from a ConfigMap or Secret key. `name` is the
+// env var name; set exactly one of (config_map, config_key) / (secret,
+// secret_key).
+message EnvRefSpec {
+  string name = 1;
+  string config_map = 2;
+  string config_key = 3;
+  string secret = 4;
+  string secret_key = 5;
+}
+
+// EnvFromSpec injects ALL keys of a ConfigMap or Secret as env vars. Set one of
+// config_map / secret.
+message EnvFromSpec {
+  string config_map = 1;
+  string secret = 2;
+}
+
+// KeyToPath selects a key of a ConfigMap/Secret into a file `path`.
+message KeyToPath {
+  string key = 1;
+  string path = 2;
+}
+
+// ConfigMountSpec mounts a ConfigMap or Secret as a volume at `mount_path`.
+// Set one of config_map / secret. `items` restricts which keys are mounted
+// (empty = all keys).
+message ConfigMountSpec {
+  string config_map = 1;
+  string secret = 2;
+  string mount_path = 3;
+  repeated KeyToPath items = 4;
+}
+
+// SidecarSpec is an extra container in the service pod (init=true makes it an
+// init container, run to completion before the main container starts).
+message SidecarSpec {
+  string name = 1;
+  string image = 2;
+  repeated string command = 3;
+  map<string, string> env = 4;
+  string cpu = 5;
+  string memory = 6;
+  bool init = 7;
+}
+
+// TolerationSpec is one pod toleration.
+message TolerationSpec {
+  string key = 1;
+  string operator = 2; // Equal | Exists
+  string value = 3;
+  string effect = 4; // NoSchedule | PreferNoSchedule | NoExecute
+}
+
+// RolloutSpec is the Deployment's RollingUpdate strategy (k8s quantity/percent
+// strings, e.g. "25%" or "1").
+message RolloutSpec {
+  string max_surge = 1;
+  string max_unavailable = 2;
+}
+
+// ConfigMountInfo is a ConfigMap/Secret volume as observed on a live service.
+message ConfigMountInfo {
+  string config_map = 1;
+  string secret = 2;
+  string mount_path = 3;
 }
 
 // ServicePortInfo is one exposed port of a service.
@@ -989,6 +1092,25 @@ message DeployServiceRequest {
   repeated ServicePortSpec services = 12;
   // PVCs to mount into the container.
   repeated VolumeMountSpec volumes = 13;
+  // ---- Tier 0: single-Deployment enhancements ----
+  // Split resource requests/limits (overrides cpu/memory when set).
+  ResourceSpec resources = 14;
+  // Container probes.
+  ProbeSpec readiness_probe = 15;
+  ProbeSpec liveness_probe = 16;
+  ProbeSpec startup_probe = 17;
+  // RollingUpdate strategy.
+  RolloutSpec rollout = 18;
+  // Env vars from ConfigMap/Secret keys, and whole-config envFrom.
+  repeated EnvRefSpec env_refs = 19;
+  repeated EnvFromSpec env_from = 20;
+  // ConfigMap/Secret volumes.
+  repeated ConfigMountSpec config_mounts = 21;
+  // Extra containers (init when `init` is set).
+  repeated SidecarSpec sidecars = 22;
+  // Scheduling.
+  map<string, string> node_selector = 23;
+  repeated TolerationSpec tolerations = 24;
 }
 message DeployServiceResponse { ServiceInfo service = 1; }
 
@@ -1012,6 +1134,18 @@ message PreviewServiceRequest {
   int32 ttl_seconds = 12;
   // PVCs to mount into the container.
   repeated VolumeMountSpec volumes = 13;
+  // ---- Tier 0: single-Deployment enhancements (same shape as DeployService) ----
+  ResourceSpec resources = 14;
+  ProbeSpec readiness_probe = 15;
+  ProbeSpec liveness_probe = 16;
+  ProbeSpec startup_probe = 17;
+  RolloutSpec rollout = 18;
+  repeated EnvRefSpec env_refs = 19;
+  repeated EnvFromSpec env_from = 20;
+  repeated ConfigMountSpec config_mounts = 21;
+  repeated SidecarSpec sidecars = 22;
+  map<string, string> node_selector = 23;
+  repeated TolerationSpec tolerations = 24;
 }
 message PreviewServiceResponse { ServiceInfo service = 1; }
 

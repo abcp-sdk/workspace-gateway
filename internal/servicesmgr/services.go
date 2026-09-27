@@ -117,6 +117,14 @@ type Service struct {
 	Env map[string]string
 	// Volumes are the PVCs mounted into the container.
 	Volumes []VolumeMount
+	// ---- Tier 0 detail (observed from the live Deployment) ----
+	ConfigMounts   []ConfigMount
+	Resources      Resources
+	ReadinessProbe Probe
+	LivenessProbe  Probe
+	StartupProbe   Probe
+	Rollout        Rollout
+	SidecarCount   int32
 }
 
 // LogOptions selects which container log to read.
@@ -166,6 +174,92 @@ func PresetPorts(preset string) (port int32, proto string, ok bool) {
 	return 0, "", false
 }
 
+// Probe is a container probe. Exactly one of HTTPGet/TCP/Exec should be set;
+// HTTPGet wins over TCP over Exec.
+type Probe struct {
+	HTTPPath string
+	HTTPPort int32
+	TCPPort  int32
+	Exec     []string
+	InitialDelaySeconds int32
+	PeriodSeconds       int32
+	TimeoutSeconds      int32
+	FailureThreshold    int32
+	SuccessThreshold    int32
+}
+
+// Empty reports whether the probe has no action (so it should be omitted).
+func (p Probe) Empty() bool {
+	return p.HTTPPort == 0 && p.TCPPort == 0 && len(p.Exec) == 0
+}
+
+// Resources splits requests from limits (each field optional).
+type Resources struct {
+	CPURequest    string
+	MemoryRequest string
+	CPULimit      string
+	MemoryLimit   string
+}
+
+// Empty reports whether no request/limit was given.
+func (r Resources) Empty() bool {
+	return r.CPURequest == "" && r.MemoryRequest == "" && r.CPULimit == "" && r.MemoryLimit == ""
+}
+
+// EnvRef injects one env var from a ConfigMap/Secret key.
+type EnvRef struct {
+	Name      string
+	ConfigMap string
+	ConfigKey string
+	Secret    string
+	SecretKey string
+}
+
+// EnvFrom injects all keys of a ConfigMap or Secret as env vars.
+type EnvFrom struct {
+	ConfigMap string
+	Secret    string
+}
+
+// ConfigMount mounts a ConfigMap or Secret as a volume.
+type ConfigMount struct {
+	ConfigMap string
+	Secret    string
+	MountPath string
+	Items     []KeyToPath
+}
+
+// KeyToPath selects one key of a ConfigMap/Secret into a relative file path.
+type KeyToPath struct {
+	Key  string
+	Path string
+}
+
+// Sidecar is an extra container in the pod (Init=true => an init container).
+type Sidecar struct {
+	Name     string
+	Image    string
+	Command  []string
+	Env      map[string]string
+	CPU      string
+	Memory   string
+	Init     bool
+}
+
+// Toleration is one pod toleration.
+type Toleration struct {
+	Key      string
+	Operator string
+	Value    string
+	Effect   string
+}
+
+// Rollout is the Deployment's RollingUpdate strategy.
+type Rollout struct {
+	MaxSurge       string
+	MaxUnavailable string
+}
+
 // Spec describes a service to deploy.
 type Spec struct {
 	Name          string
@@ -192,6 +286,18 @@ type Spec struct {
 	Runtime runtimeprofiles.Rendered
 	// Volumes are named PVCs to mount into the container.
 	Volumes []VolumeMount
+	// ---- Tier 0 enhancements (all optional) ----
+	Resources      Resources
+	ReadinessProbe Probe
+	LivenessProbe  Probe
+	StartupProbe   Probe
+	Rollout        Rollout
+	EnvRefs        []EnvRef
+	EnvFrom        []EnvFrom
+	ConfigMounts   []ConfigMount
+	Sidecars       []Sidecar
+	NodeSelector   map[string]string
+	Tolerations    []Toleration
 }
 
 // Client wraps the typed clientset plus the target namespace.
@@ -312,7 +418,49 @@ func (c *Client) Deploy(ctx context.Context, s Spec) (Service, error) {
 	for k, v := range s.Runtime.Env {
 		env = append(env, corev1.EnvVar{Name: k, Value: v})
 	}
+	// Env from ConfigMap/Secret keys, then whole-config envFrom.
+	for i, e := range s.EnvRefs {
+		if e.Name == "" {
+			return Service{}, fmt.Errorf("env_refs[%d]: name is required", i)
+		}
+		switch {
+		case e.ConfigMap != "" && e.ConfigKey != "":
+			env = append(env, corev1.EnvVar{Name: e.Name, ValueFrom: &corev1.EnvVarSource{
+				ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: e.ConfigMap},
+					Key:                  e.ConfigKey,
+				},
+			}})
+		case e.Secret != "" && e.SecretKey != "":
+			env = append(env, corev1.EnvVar{Name: e.Name, ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: e.Secret},
+					Key:                  e.SecretKey,
+				},
+			}})
+		default:
+			return Service{}, fmt.Errorf("env_refs[%d]: set (config_map+config_key) or (secret+secret_key)", i)
+		}
+	}
+	envFrom := []corev1.EnvFromSource{}
+	for i, e := range s.EnvFrom {
+		switch {
+		case e.ConfigMap != "":
+			envFrom = append(envFrom, corev1.EnvFromSource{ConfigMapRef: &corev1.ConfigMapEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{Name: e.ConfigMap},
+			}})
+		case e.Secret != "":
+			envFrom = append(envFrom, corev1.EnvFromSource{SecretRef: &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{Name: e.Secret},
+			}})
+		default:
+			return Service{}, fmt.Errorf("env_from[%d]: set config_map or secret", i)
+		}
+	}
 	rr := resources(s.CPU, s.Memory)
+	if !s.Resources.Empty() {
+		rr = buildResources(s.Resources)
+	}
 	if s.Runtime.Resources != nil {
 		rr = *s.Runtime.Resources
 	}
@@ -338,12 +486,100 @@ func (c *Client) Deploy(ctx context.Context, s Spec) (Service, error) {
 		Name:            "svc",
 		Image:           s.Image,
 		Env:             env,
+		EnvFrom:         envFrom,
 		Command:         s.Command,
 		Ports:           containerPorts,
 		Resources:       rr,
 		SecurityContext: s.Runtime.SecurityContext,
 	}
+	if pr := buildProbe(s.ReadinessProbe); pr != nil {
+		container.ReadinessProbe = pr
+	}
+	if pl := buildProbe(s.LivenessProbe); pl != nil {
+		container.LivenessProbe = pl
+	}
+	if ps := buildProbe(s.StartupProbe); ps != nil {
+		container.StartupProbe = ps
+	}
 	podSpec := corev1.PodSpec{Containers: []corev1.Container{container}}
+	// ConfigMap/Secret volumes.
+	initContainers := []corev1.Container{}
+	extraContainers := []corev1.Container{}
+	for i, cm := range s.ConfigMounts {
+		if cm.MountPath == "" {
+			return Service{}, fmt.Errorf("config_mounts[%d]: mount_path is required", i)
+		}
+		volName := fmt.Sprintf("cfg-%d", i)
+		vol := corev1.Volume{Name: volName}
+		switch {
+		case cm.ConfigMap != "":
+			src := &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{Name: cm.ConfigMap},
+			}
+			for _, it := range cm.Items {
+				src.Items = append(src.Items, corev1.KeyToPath{Key: it.Key, Path: it.Path})
+			}
+			vol.ConfigMap = src
+		case cm.Secret != "":
+			src := &corev1.SecretVolumeSource{SecretName: cm.Secret}
+			for _, it := range cm.Items {
+				src.Items = append(src.Items, corev1.KeyToPath{Key: it.Key, Path: it.Path})
+			}
+			vol.Secret = src
+		default:
+			return Service{}, fmt.Errorf("config_mounts[%d]: set config_map or secret", i)
+		}
+		podSpec.Volumes = append(podSpec.Volumes, vol)
+		podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, corev1.VolumeMount{
+			Name: volName, MountPath: cm.MountPath,
+		})
+	}
+	// Extra containers (init or sidecar).
+	for i, sc := range s.Sidecars {
+		if sc.Name == "" || sc.Image == "" {
+			return Service{}, fmt.Errorf("sidecars[%d]: name and image are required", i)
+		}
+		c := corev1.Container{
+			Name:      sc.Name,
+			Image:     sc.Image,
+			Command:   sc.Command,
+			Resources: resources(sc.CPU, sc.Memory),
+		}
+		for k, v := range sc.Env {
+			c.Env = append(c.Env, corev1.EnvVar{Name: k, Value: v})
+		}
+		if sc.Init {
+			initContainers = append(initContainers, c)
+		} else {
+			extraContainers = append(extraContainers, c)
+		}
+	}
+	if len(initContainers) > 0 {
+		podSpec.InitContainers = initContainers
+	}
+	if len(extraContainers) > 0 {
+		podSpec.Containers = append(podSpec.Containers, extraContainers...)
+	}
+	// Tolerations (node selector merges with the runtime profile's below).
+	if len(s.Tolerations) > 0 {
+		for i, t := range s.Tolerations {
+			if t.Key == "" {
+				return Service{}, fmt.Errorf("tolerations[%d]: key is required", i)
+			}
+			podSpec.Tolerations = append(podSpec.Tolerations, corev1.Toleration{
+				Key: t.Key, Operator: corev1.TolerationOperator(t.Operator),
+				Value: t.Value, Effect: corev1.TaintEffect(t.Effect),
+			})
+		}
+	}
+	if len(s.NodeSelector) > 0 {
+		if podSpec.NodeSelector == nil {
+			podSpec.NodeSelector = map[string]string{}
+		}
+		for k, v := range s.NodeSelector {
+			podSpec.NodeSelector[k] = v
+		}
+	}
 	if s.Runtime.RuntimeClass != "" {
 		rc := s.Runtime.RuntimeClass
 		podSpec.RuntimeClassName = &rc
@@ -385,16 +621,22 @@ func (c *Client) Deploy(ctx context.Context, s Spec) (Service, error) {
 			Name: volName, MountPath: vm.MountPath, ReadOnly: vm.ReadOnly, SubPath: vm.SubPath,
 		})
 	}
+	depSpec := appsv1.DeploymentSpec{
+		Replicas: &reps,
+		Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": s.Name}},
+		Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{Labels: labels, Annotations: annotations},
+			Spec:       podSpec,
+		},
+	}
+	if ru := buildRollout(s.Rollout); ru != nil {
+		depSpec.Strategy = appsv1.DeploymentStrategy{
+			Type: appsv1.RollingUpdateDeploymentStrategyType, RollingUpdate: ru,
+		}
+	}
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: s.Name, Namespace: c.namespace, Labels: labels, Annotations: annotations},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &reps,
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": s.Name}},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: labels, Annotations: annotations},
-				Spec:       podSpec,
-			},
-		},
+		Spec:       depSpec,
 	}
 	if err := c.applyDeployment(ctx, dep); err != nil {
 		return Service{}, err
@@ -1042,6 +1284,89 @@ func resources(cpu, mem string) corev1.ResourceRequirements {
 	return corev1.ResourceRequirements{Requests: rl, Limits: rl}
 }
 
+// buildResources maps a split request/limit spec to k8s requirements.
+func buildResources(r Resources) corev1.ResourceRequirements {
+	out := corev1.ResourceRequirements{}
+	req := corev1.ResourceList{}
+	if r.CPURequest != "" {
+		req[corev1.ResourceCPU] = resource.MustParse(r.CPURequest)
+	}
+	if r.MemoryRequest != "" {
+		req[corev1.ResourceMemory] = resource.MustParse(r.MemoryRequest)
+	}
+	if len(req) > 0 {
+		out.Requests = req
+	}
+	lim := corev1.ResourceList{}
+	if r.CPULimit != "" {
+		lim[corev1.ResourceCPU] = resource.MustParse(r.CPULimit)
+	}
+	if r.MemoryLimit != "" {
+		lim[corev1.ResourceMemory] = resource.MustParse(r.MemoryLimit)
+	}
+	if len(lim) > 0 {
+		out.Limits = lim
+	}
+	return out
+}
+
+// buildProbe maps a Probe spec to a k8s Probe (nil when no action is set).
+func buildProbe(p Probe) *corev1.Probe {
+	if p.Empty() {
+		return nil
+	}
+	handler := corev1.ProbeHandler{}
+	switch {
+	case p.HTTPPort > 0:
+		path := p.HTTPPath
+		if path == "" {
+			path = "/"
+		}
+		handler.HTTPGet = &corev1.HTTPGetAction{
+			Path: path, Port: intstr.FromInt32(p.HTTPPort),
+		}
+	case p.TCPPort > 0:
+		handler.TCPSocket = &corev1.TCPSocketAction{Port: intstr.FromInt32(p.TCPPort)}
+	case len(p.Exec) > 0:
+		handler.Exec = &corev1.ExecAction{Command: p.Exec}
+	}
+	probe := &corev1.Probe{ProbeHandler: handler}
+	if p.InitialDelaySeconds > 0 {
+		probe.InitialDelaySeconds = p.InitialDelaySeconds
+	}
+	if p.PeriodSeconds > 0 {
+		probe.PeriodSeconds = p.PeriodSeconds
+	}
+	if p.TimeoutSeconds > 0 {
+		probe.TimeoutSeconds = p.TimeoutSeconds
+	}
+	if p.FailureThreshold > 0 {
+		probe.FailureThreshold = p.FailureThreshold
+	}
+	if p.SuccessThreshold > 0 {
+		probe.SuccessThreshold = p.SuccessThreshold
+	}
+	return probe
+}
+
+// buildRollout maps a Rollout spec to k8s int-or-percent values (nil when
+// neither is set).
+func buildRollout(r Rollout) *appsv1.RollingUpdateDeployment {
+	if r.MaxSurge == "" && r.MaxUnavailable == "" {
+		return nil
+	}
+	out := &appsv1.RollingUpdateDeployment{}
+	if r.MaxSurge != "" {
+		v := intstr.Parse(r.MaxSurge)
+		out.MaxSurge = &v
+	}
+	if r.MaxUnavailable != "" {
+		v := intstr.Parse(r.MaxUnavailable)
+		out.MaxUnavailable = &v
+	}
+	return out
+}
+
 func toService(c *Client, d *appsv1.Deployment, ports []Port) Service {
 	phase := "Pending"
 	if d.Status.ReadyReplicas > 0 {
@@ -1099,9 +1424,20 @@ func toService(c *Client, d *appsv1.Deployment, ports []Port) Service {
 		if r, ok := ctr.Resources.Requests[corev1.ResourceMemory]; ok {
 			svc.Memory = r.String()
 		}
-		// Map pod volume names back to PVC claims.
+		svc.Resources = Resources{
+			CPURequest:    quantityString(ctr.Resources.Requests, corev1.ResourceCPU),
+			MemoryRequest: quantityString(ctr.Resources.Requests, corev1.ResourceMemory),
+			CPULimit:      quantityString(ctr.Resources.Limits, corev1.ResourceCPU),
+			MemoryLimit:   quantityString(ctr.Resources.Limits, corev1.ResourceMemory),
+		}
+		svc.ReadinessProbe = toProbe(ctr.ReadinessProbe)
+		svc.LivenessProbe = toProbe(ctr.LivenessProbe)
+		svc.StartupProbe = toProbe(ctr.StartupProbe)
+		// Map pod volume names back to PVC / ConfigMap / Secret sources.
 		volByPVC := map[string]string{}
+		cmByVol := map[string]corev1.Volume{}
 		for _, v := range d.Spec.Template.Spec.Volumes {
+			cmByVol[v.Name] = v
 			if v.PersistentVolumeClaim != nil {
 				volByPVC[v.Name] = v.PersistentVolumeClaim.ClaimName
 			}
@@ -1111,10 +1447,61 @@ func toService(c *Client, d *appsv1.Deployment, ports []Port) Service {
 				svc.Volumes = append(svc.Volumes, VolumeMount{
 					PVC: pvc, MountPath: m.MountPath, ReadOnly: m.ReadOnly, SubPath: m.SubPath,
 				})
+				continue
 			}
+			if v, ok := cmByVol[m.Name]; ok {
+				switch {
+				case v.ConfigMap != nil:
+					svc.ConfigMounts = append(svc.ConfigMounts, ConfigMount{ConfigMap: v.ConfigMap.Name, MountPath: m.MountPath})
+				case v.Secret != nil:
+					svc.ConfigMounts = append(svc.ConfigMounts, ConfigMount{Secret: v.Secret.SecretName, MountPath: m.MountPath})
+				}
+			}
+		}
+		// Extra containers (beyond the first) count as sidecars/init.
+		svc.SidecarCount = int32(len(d.Spec.Template.Spec.Containers) - 1 + len(d.Spec.Template.Spec.InitContainers))
+	}
+	if ru := d.Spec.Strategy.RollingUpdate; ru != nil {
+		if ru.MaxSurge != nil {
+			svc.Rollout.MaxSurge = ru.MaxSurge.String()
+		}
+		if ru.MaxUnavailable != nil {
+			svc.Rollout.MaxUnavailable = ru.MaxUnavailable.String()
 		}
 	}
 	return svc
+}
+
+// quantityString renders a resource quantity ("" when absent).
+func quantityString(rl corev1.ResourceList, name corev1.ResourceName) string {
+	if q, ok := rl[name]; ok {
+		return q.String()
+	}
+	return ""
+}
+
+// toProbe maps a k8s Probe back to our Probe spec.
+func toProbe(p *corev1.Probe) Probe {
+	if p == nil {
+		return Probe{}
+	}
+	out := Probe{
+		InitialDelaySeconds: p.InitialDelaySeconds,
+		PeriodSeconds:       p.PeriodSeconds,
+		TimeoutSeconds:      p.TimeoutSeconds,
+		FailureThreshold:    p.FailureThreshold,
+		SuccessThreshold:    p.SuccessThreshold,
+	}
+	switch {
+	case p.HTTPGet != nil:
+		out.HTTPPath = p.HTTPGet.Path
+		out.HTTPPort = p.HTTPGet.Port.IntVal
+	case p.TCPSocket != nil:
+		out.TCPPort = p.TCPSocket.Port.IntVal
+	case p.Exec != nil:
+		out.Exec = p.Exec.Command
+	}
+	return out
 }
 
 // podDiagnostics returns the pod phase, total restarts and the first

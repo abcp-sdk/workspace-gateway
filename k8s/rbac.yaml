@@ -28,6 +28,10 @@ rules:
   - apiGroups: [""]
     resources: ["pods/log"]
     verbs: ["get"]
+  # ConfigMaps referenced by services (env refs / volume mounts).
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "get", "list", "watch", "update", "delete"]
   # Long-lived services (Deployment + Service).
   - apiGroups: ["apps"]
     resources: ["deployments"]
