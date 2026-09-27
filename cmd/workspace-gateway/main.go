@@ -185,8 +185,10 @@ func main() {
 		}()
 	}
 
-	// Nudge stalled sessions: a session that is idle, quiet for IDLEWATCH_AFTER
-	// (default 1h) and still has unfinished todos gets a mailbox `trigger`.
+	// Re-trigger stalled sessions: a session that is IDLE and whose latest
+	// message is an assistant step ending on a `tool_result` (the model ran a
+	// tool then stopped) gets a mailbox `trigger`, unless the agent's turn-end
+	// marker says the last turn was a user interrupt.
 	if envOr("IDLEWATCH_ENABLED", "true") == "true" {
 		if natsURL := os.Getenv("NATS_URL"); natsURL != "" {
 			if nbus, err := natstransport.Connect(natsURL); err != nil {
@@ -198,9 +200,7 @@ func main() {
 					AdminToken:   os.Getenv("AGENT_ADMIN_TOKEN"),
 					ServiceToken: os.Getenv("GATEWAY_SERVICE_TOKEN"),
 					Bus:          nbus,
-					IdleAfter:    envOrDuration("IDLEWATCH_AFTER", time.Hour),
-					Interval:     envOrDuration("IDLEWATCH_INTERVAL", 5*time.Minute),
-					Cooldown:     envOrDuration("IDLEWATCH_COOLDOWN", 30*time.Minute),
+					Interval:     envOrDuration("IDLEWATCH_INTERVAL", 2*time.Minute),
 				}
 				go watch.Run(context.Background())
 			}

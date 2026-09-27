@@ -1,77 +1,66 @@
 package idlewatch
 
 import (
+	"context"
 	"testing"
-	"time"
+
+	"github.com/abcp-sdk/abc-protocol-go/v2/bus"
+	"github.com/abcp-sdk/abc-protocol-go/v2/protocol"
 
 	agentv1 "github.com/abcp-sdk/workspace-gateway/gen/agent/v1"
 )
 
-func msgWith(parts ...*agentv1.Part) *agentv1.Message {
-	return &agentv1.Message{Parts: parts}
+func msg(role string, parts ...*agentv1.Part) *agentv1.Message {
+	return &agentv1.Message{Role: role, Parts: parts}
 }
 
-func toolPart(data string) *agentv1.Part {
-	return &agentv1.Part{Type: "tool", Data: data}
-}
+func part(typ string) *agentv1.Part { return &agentv1.Part{Type: typ} }
 
-func TestLatestTodosPicksNewestTodoWrite(t *testing.T) {
-	msgs := []*agentv1.Message{
-		msgWith(toolPart(`{"name":"todo-write","input":{"todos":[{"content":"a","status":"pending","priority":"high"}]}}`)),
-		msgWith(toolPart(`{"name":"repo-file-read","input":{"path":"x"}}`)),
-		msgWith(toolPart(`{"name":"todo-write","input":{"todos":[{"content":"a","status":"completed","priority":"high"},{"content":"b","status":"in_progress","priority":"high"}]}}`)),
+func TestEndsOnToolResult(t *testing.T) {
+	cases := []struct {
+		name string
+		msgs []*agentv1.Message
+		want bool
+	}{
+		{
+			name: "assistant step ending on tool_result triggers",
+			msgs: []*agentv1.Message{msg("assistant", part("tool"), part("tool_result"))},
+			want: true,
+		},
+		{
+			name: "assistant step with trailing text does NOT trigger",
+			msgs: []*agentv1.Message{msg("assistant", part("tool"), part("tool_result"), part("text"))},
+			want: false,
+		},
+		{
+			name: "user message does NOT trigger",
+			msgs: []*agentv1.Message{msg("user", part("text"))},
+			want: false,
+		},
+		{
+			name: "event message does NOT trigger",
+			msgs: []*agentv1.Message{msg("event", part("text"))},
+			want: false,
+		},
+		{
+			name: "assistant text-only step does NOT trigger",
+			msgs: []*agentv1.Message{msg("assistant", part("text"))},
+			want: false,
+		},
+		{
+			name: "tip is what matters, not an earlier message",
+			msgs: []*agentv1.Message{
+				msg("assistant", part("tool"), part("tool_result")),
+				msg("assistant", part("text")),
+			},
+			want: false,
+		},
+		{name: "no messages does NOT trigger", msgs: nil, want: false},
 	}
-	todos := latestTodos(msgs)
-	if len(todos) != 2 {
-		t.Fatalf("todos = %v, want 2", todos)
-	}
-	if total, remaining := countTodos(todos); total != 2 || remaining != 1 {
-		t.Fatalf("counts = %d/%d, want total 2 remaining 1", total, remaining)
-	}
-}
-
-func TestLatestTodosQualifiedAndBare(t *testing.T) {
-	for _, name := range []string{"todo-write", "todowrite", "bundled.todo-write"} {
-		msgs := []*agentv1.Message{
-			msgWith(toolPart(`{"name":"` + name + `","input":{"todos":[{"content":"x","status":"pending"}]}}`)),
+	for _, tc := range cases {
+		if got := endsOnToolResult(tc.msgs); got != tc.want {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
 		}
-		if got := latestTodos(msgs); len(got) != 1 {
-			t.Fatalf("%s: todos = %v, want 1", name, got)
-		}
-	}
-}
-
-func TestLatestTodosNone(t *testing.T) {
-	msgs := []*agentv1.Message{
-		msgWith(toolPart(`{"name":"repo-file-read","input":{}}`)),
-		msgWith(&agentv1.Part{Type: "reasoning", Data: `{"text":"hi"}`}),
-	}
-	if got := latestTodos(msgs); got != nil {
-		t.Fatalf("todos = %v, want nil", got)
-	}
-}
-
-func TestCountTodosCancelledCountsAsDone(t *testing.T) {
-	todos := []todo{
-		{Status: "completed"},
-		{Status: "cancelled"},
-		{Status: "pending"},
-		{Status: "in_progress"},
-	}
-	if total, remaining := countTodos(todos); total != 4 || remaining != 2 {
-		t.Fatalf("counts = %d/%d, want total 4 remaining 2", total, remaining)
-	}
-}
-
-func TestParseTime(t *testing.T) {
-	if _, ok := parseTime(""); ok {
-		t.Fatal("empty must not parse")
-	}
-	if _, ok := parseTime("not-a-time"); ok {
-		t.Fatal("garbage must not parse")
-	}
-	if _, ok := parseTime("2026-09-22T16:32:14.049Z"); !ok {
-		t.Fatal("RFC3339Nano must parse")
 	}
 }
 
@@ -88,18 +77,31 @@ func TestNudgeTextLocale(t *testing.T) {
 	}
 }
 
-func TestCoolingDown(t *testing.T) {
-	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	w := &Watchdog{Cooldown: 30 * time.Minute, now: func() time.Time { return now }, nudged: map[string]time.Time{}}
-	if w.coolingDown("t", "s") {
-		t.Fatal("never-nudged must not be cooling down")
+// fakeBus implements just the KV read the interrupt check needs.
+type fakeBus struct {
+	bus.Bus
+	vals map[string]string
+}
+
+func (f *fakeBus) KVGet(_ context.Context, bucket, key string) (string, error) {
+	return f.vals[bucket+"\x00"+key], nil
+}
+
+func TestTurnInterrupted(t *testing.T) {
+	w := &Watchdog{Bus: &fakeBus{vals: map[string]string{}}}
+	// Missing marker -> not interrupted.
+	if w.turnInterrupted(context.Background(), "t", "s") {
+		t.Fatal("missing marker must be treated as not interrupted")
 	}
-	w.nudged["t/s"] = now.Add(-10 * time.Minute)
-	if !w.coolingDown("t", "s") {
-		t.Fatal("nudged 10m ago with 30m cooldown must be cooling down")
+	// reason=interrupted -> true.
+	key := "abc-session-turn\x00" + protocol.TenantKVKey("t", protocol.SessionToken("s"))
+	w = &Watchdog{Bus: &fakeBus{vals: map[string]string{key: `{"reason":"interrupted"}`}}}
+	if !w.turnInterrupted(context.Background(), "t", "s") {
+		t.Fatal("reason=interrupted must be detected")
 	}
-	w.nudged["t/s"] = now.Add(-40 * time.Minute)
-	if w.coolingDown("t", "s") {
-		t.Fatal("nudged 40m ago with 30m cooldown must be ready")
+	// reason=stop -> false.
+	w = &Watchdog{Bus: &fakeBus{vals: map[string]string{key: `{"reason":"stop"}`}}}
+	if w.turnInterrupted(context.Background(), "t", "s") {
+		t.Fatal("reason=stop must not be interrupted")
 	}
 }

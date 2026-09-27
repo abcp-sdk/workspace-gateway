@@ -49,9 +49,7 @@ spec:
             # (all present above), so it is wired independently of provisioning.
             - { name: NATS_URL, value: {{ include "workspace.natsUrl" . | quote }} }
             - { name: IDLEWATCH_ENABLED, value: {{ .Values.gateway.idlewatch.enabled | quote }} }
-            - { name: IDLEWATCH_AFTER, value: {{ .Values.gateway.idlewatch.after | quote }} }
             - { name: IDLEWATCH_INTERVAL, value: {{ .Values.gateway.idlewatch.interval | quote }} }
-            - { name: IDLEWATCH_COOLDOWN, value: {{ .Values.gateway.idlewatch.cooldown | quote }} }
             # Preview services (developer verification) + service logs.
             - { name: SERVICE_PREVIEW_TTL, value: {{ .Values.gateway.preview.ttl | quote }} }
             - { name: SERVICE_PREVIEW_REAP_INTERVAL, value: {{ .Values.gateway.preview.reapInterval | quote }} }

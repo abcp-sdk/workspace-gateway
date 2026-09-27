@@ -130,14 +130,14 @@ gateway:
   # infer from the request Host by dropping the first two labels (the edge
   # convention is `<svc>.<ns>.<domain>`), so a domain change needs no config.
   publicServiceDomain: ""
-  # Nudge stalled sessions: a session that is idle, quiet for `after`, and
-  # still has unfinished todos gets a mailbox `trigger` (source
-  # `system:idlewatch`). Needs NATS_URL (set below) + the service/admin tokens.
+  # Re-trigger stalled sessions: a session that is IDLE and whose latest
+  # message is an assistant step ending on a `tool_result` (the model ran a
+  # tool then stopped) gets a mailbox `trigger` (source `system:idlewatch`),
+  # unless the last turn was a user interrupt. Needs NATS_URL (set below) + the
+  # service/admin tokens.
   idlewatch:
     enabled: true
-    after: "1h"
-    interval: "5m"
-    cooldown: "30m"
+    interval: "2m"
   # Developer preview services: session-bound, cluster-only, reclaimed on
   # session end or after previewTTL. serviceLogTail is the default number of
   # service-log lines returned.

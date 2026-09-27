@@ -1,17 +1,23 @@
-// Package idlewatch nudges a session that has stopped working while its todo
-// list is still unfinished.
+// Package idlewatch re-triggers a session that stopped mid-task after a tool
+// call.
 //
 // Every sweep it walks each tenant's sessions and, for a session that is
-//   - IDLE (the agent reports no running turn), and
-//   - QUIET (its last message is older than IdleAfter),
+//   - IDLE (the agent reports no running turn), AND
+//   - whose LATEST message is an assistant step ending on a `tool_result`
+//     (the model executed a tool and then produced no text — it stopped),
+//   - and whose last turn was NOT ended by a user interrupt,
 //
-// inspects the session's most recent `todo-write` call. When that list has a
-// todo that is neither completed nor cancelled, it publishes a `trigger` into
-// the session's mailbox (source `system:idlewatch`) asking the agent to either
-// mark the work done or keep going.
+// publishes a `trigger` into the session's mailbox (source `system:idlewatch`)
+// telling the model to continue or wrap up.
 //
-// The watchdog only READS the agent (ListSessions/State/ListMessages) and
-// publishes onto NATS; it never mutates a session itself.
+// The interrupt signal comes from the agent's turn-END marker (the
+// `abc-session-turn` KV bucket, keyed tenant+session token): the agent writes
+// `{ reason, finish, tip }` awaited BEFORE emitting the terminal `status:idle`,
+// so a reader that sees idle can trust the marker. A MISSING marker (older
+// session, agent hard-crash) is treated as "not interrupted" and DOES trigger.
+//
+// The watchdog only READS the agent (ListSessions/State/ListMessages) + the KV
+// and publishes onto NATS; it never mutates a session itself.
 package idlewatch
 
 import (
@@ -31,7 +37,10 @@ import (
 	agentv1connect "github.com/abcp-sdk/workspace-gateway/gen/agent/v1/agentv1connect"
 )
 
-// Watchdog periodically nudges stalled sessions.
+// turnMarkerBucket mirrors the agent's `BUCKET_SESSION_TURN`.
+const turnMarkerBucket = "abc-session-turn"
+
+// Watchdog re-triggers stalled sessions.
 type Watchdog struct {
 	// Agent is the agent's service client (Raw). Tenant-scoped calls set the
 	// shared service token + `X-Abc-Tenant` so the transport mints a tenant
@@ -40,22 +49,15 @@ type Watchdog struct {
 	Admin        agentv1connect.AdminServiceClient
 	AdminToken   string
 	ServiceToken string
-	// Bus publishes the mailbox trigger and reads the session's effective
-	// locale from the vars KV.
+	// Bus publishes the mailbox trigger and reads the turn-end marker + the
+	// session's effective locale from KV.
 	Bus bus.Bus
 
-	// IdleAfter is how long a session must have been quiet (no new message)
-	// before it is nudged. Default 1h.
-	IdleAfter time.Duration
-	// Interval is the sweep period. Default 5m.
+	// Interval is the sweep period. Default 2m.
 	Interval time.Duration
-	// Cooldown suppresses a repeat nudge for the same session. Default 30m.
-	Cooldown time.Duration
 
 	// now is injectable for tests.
 	now func() time.Time
-	// nudged is the in-memory cooldown ledger (session -> last nudge).
-	nudged map[string]time.Time
 }
 
 // Run sweeps until ctx is cancelled.
@@ -64,23 +66,14 @@ func (w *Watchdog) Run(ctx context.Context) {
 		log.Printf("idlewatch: disabled (missing agent/admin/nats wiring)")
 		return
 	}
-	if w.IdleAfter <= 0 {
-		w.IdleAfter = time.Hour
-	}
 	interval := w.Interval
 	if interval <= 0 {
-		interval = 5 * time.Minute
-	}
-	if w.Cooldown <= 0 {
-		w.Cooldown = 30 * time.Minute
-	}
-	if w.nudged == nil {
-		w.nudged = map[string]time.Time{}
+		interval = 2 * time.Minute
 	}
 	if w.now == nil {
 		w.now = time.Now
 	}
-	log.Printf("idlewatch: idle-after=%s interval=%s cooldown=%s", w.IdleAfter, interval, w.Cooldown)
+	log.Printf("idlewatch: interval=%s", interval)
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
@@ -97,9 +90,6 @@ func (w *Watchdog) Run(ctx context.Context) {
 func (w *Watchdog) SweepOnce(ctx context.Context) {
 	if w.now == nil {
 		w.now = time.Now
-	}
-	if w.nudged == nil {
-		w.nudged = map[string]time.Time{}
 	}
 	tenants, err := w.listTenants(ctx)
 	if err != nil {
@@ -122,33 +112,35 @@ func (w *Watchdog) SweepOnce(ctx context.Context) {
 	}
 }
 
-// maybeNudge applies the idle/quiet/unfinished rules to one session.
+// maybeNudge applies the idle + ends-on-tool-result + not-interrupted rules to
+// one session.
 func (w *Watchdog) maybeNudge(ctx context.Context, tenant string, s *agentv1.Session) {
 	name := s.GetName()
-	if w.coolingDown(tenant, name) {
+	// IDLE: no running turn. Prefer the status carried on the list row; fall
+	// back to a State RPC only when it is absent (e.g. a single-session reply).
+	status := s.GetStatus()
+	if status == "" {
+		st, err := w.state(ctx, tenant, name)
+		if err != nil {
+			return
+		}
+		status = statusOf(st)
+	}
+	if status != "idle" {
 		return
 	}
-	// QUIET: the last message must be older than IdleAfter.
-	last, ok := parseTime(s.GetLastMessageAt())
-	if !ok || w.now().Sub(last) < w.IdleAfter {
-		return
-	}
-	// IDLE: no running turn.
-	st, err := w.state(ctx, tenant, name)
-	if err != nil {
-		return
-	}
-	if statusOf(st) != "idle" {
-		return
-	}
-	// UNFINISHED: the latest todo-write must have a live todo.
+	// The LATEST message must be an assistant step that ends on a tool_result:
+	// the model ran a tool and then stopped without producing text.
 	msgs, err := w.listMessages(ctx, tenant, name)
 	if err != nil {
 		return
 	}
-	todos := latestTodos(msgs.GetMessages())
-	_, remaining := countTodos(todos)
-	if remaining == 0 {
+	if !endsOnToolResult(msgs.GetMessages()) {
+		return
+	}
+	// A user interrupt must NOT be re-triggered. A missing/unreadable marker is
+	// treated as "not interrupted" (trigger).
+	if w.turnInterrupted(ctx, tenant, name) {
 		return
 	}
 	locale := w.effectiveLocale(ctx, tenant, name, s.GetLocale())
@@ -156,8 +148,25 @@ func (w *Watchdog) maybeNudge(ctx context.Context, tenant string, s *agentv1.Ses
 		log.Printf("idlewatch: publish %s/%s: %v", tenant, name, err)
 		return
 	}
-	w.nudged[tenant+"/"+name] = w.now()
-	log.Printf("idlewatch: nudged %s/%s (remaining=%d, last_message=%s ago)", tenant, name, remaining, w.now().Sub(last).Truncate(time.Second))
+	log.Printf("idlewatch: re-triggered %s/%s (stopped after a tool call)", tenant, name)
+}
+
+// turnInterrupted reports whether the session's LAST turn was ended by a user
+// interrupt, per the agent's `abc-session-turn` marker. A missing marker or any
+// read error is treated as "not interrupted" (false).
+func (w *Watchdog) turnInterrupted(ctx context.Context, tenant, session string) bool {
+	key := protocol.TenantKVKey(tenant, protocol.SessionToken(session))
+	raw, err := w.Bus.KVGet(ctx, turnMarkerBucket, key)
+	if err != nil || raw == "" {
+		return false
+	}
+	var marker struct {
+		Reason string `json:"reason"`
+	}
+	if err := json.Unmarshal([]byte(raw), &marker); err != nil {
+		return false
+	}
+	return marker.Reason == "interrupted"
 }
 
 // ---- agent reads (tenant-scoped) ----
@@ -199,7 +208,8 @@ func (w *Watchdog) state(ctx context.Context, tenant, session string) (*agentv1.
 }
 
 func (w *Watchdog) listMessages(ctx context.Context, tenant, session string) (*agentv1.ListMessagesResponse, error) {
-	req := connect.NewRequest(&agentv1.ListMessagesRequest{Id: session, Limit: 100})
+	// Only the tip is needed: `limit:1` walks one message back from the tip.
+	req := connect.NewRequest(&agentv1.ListMessagesRequest{Id: session, Limit: 1})
 	w.scope(req.Header(), tenant)
 	res, err := w.Agent.ListMessages(ctx, req)
 	if err != nil {
@@ -238,63 +248,25 @@ func (w *Watchdog) publish(ctx context.Context, tenant, session, text string) er
 	)
 }
 
-func (w *Watchdog) coolingDown(tenant, session string) bool {
-	last, ok := w.nudged[tenant+"/"+session]
-	return ok && w.now().Sub(last) < w.Cooldown
-}
-
 // ---- pure rules (unit-tested) ----
 
-type todo struct {
-	Content  string `json:"content"`
-	Status   string `json:"status"`
-	Priority string `json:"priority"`
-}
-
-// latestTodos returns the todo list from the session's NEWEST `todo-write`
-// tool part, or nil when the session has none. `todo-write` replaces the whole
-// list each call, so the most recent one IS the current list.
-func latestTodos(msgs []*agentv1.Message) []todo {
-	for i := len(msgs) - 1; i >= 0; i-- {
-		parts := msgs[i].GetParts()
-		for j := len(parts) - 1; j >= 0; j-- {
-			p := parts[j]
-			if p.GetType() != "tool" {
-				continue
-			}
-			var payload struct {
-				Name  string `json:"name"`
-				Input struct {
-					Todos *[]todo `json:"todos"`
-				} `json:"input"`
-			}
-			if err := json.Unmarshal([]byte(p.GetData()), &payload); err != nil {
-				continue
-			}
-			if !isTodoWrite(payload.Name) || payload.Input.Todos == nil {
-				continue
-			}
-			return *payload.Input.Todos
-		}
+// endsOnToolResult reports whether the newest message is an assistant step
+// whose LAST part is a `tool_result`. That is the "ran a tool then stopped"
+// shape: a normal finish produces a trailing text part.
+func endsOnToolResult(msgs []*agentv1.Message) bool {
+	if len(msgs) == 0 {
+		return false
 	}
-	return nil
-}
-
-// isTodoWrite matches the bundled todo tool, bare or extension-qualified.
-func isTodoWrite(name string) bool {
-	return name == "todo-write" || name == "todowrite" || strings.HasSuffix(name, ".todo-write")
-}
-
-// countTodos returns (total, remaining); a completed OR cancelled todo counts
-// as done.
-func countTodos(todos []todo) (total, remaining int) {
-	for _, t := range todos {
-		total++
-		if t.Status != "completed" && t.Status != "cancelled" {
-			remaining++
-		}
+	// The chain is oldest→newest; the tip is the last row.
+	last := msgs[len(msgs)-1]
+	if last.GetRole() != "assistant" {
+		return false
 	}
-	return total, remaining
+	parts := last.GetParts()
+	if len(parts) == 0 {
+		return false
+	}
+	return parts[len(parts)-1].GetType() == "tool_result"
 }
 
 // statusOf reads the `status` field of a State response.
@@ -305,22 +277,10 @@ func statusOf(st *agentv1.StateResponse) string {
 	return st.GetState().GetFields()["status"].GetStringValue()
 }
 
-// parseTime parses an RFC3339 timestamp (empty / malformed => false).
-func parseTime(s string) (time.Time, bool) {
-	if s == "" {
-		return time.Time{}, false
-	}
-	t, err := time.Parse(time.RFC3339Nano, s)
-	if err != nil {
-		return time.Time{}, false
-	}
-	return t, true
-}
-
 // nudgeText is the mailbox body, localized by the session's effective locale.
 func nudgeText(locale string) string {
 	if strings.HasPrefix(strings.ToLower(locale), "zh") {
-		return "发现你已经停止工作了，但你还有未完成的代办。如果你已经完成了任务，请把代办更新为已完成；否则请继续执行你的任务！"
+		return "你在一次工具调用之后停止了，没有继续。请继续完成你的任务；若已完成，请用文本说明结果并收尾。"
 	}
-	return "You appear to have stopped working, but you still have unfinished todos. If you have completed the task, mark the todos as completed; otherwise continue carrying out your task!"
+	return "You stopped after a tool call without continuing. Please carry on with your task; if you are done, respond with a text summary to finish."
 }
