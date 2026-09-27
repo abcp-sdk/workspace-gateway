@@ -31,6 +31,7 @@ import (
 	"github.com/abcp-sdk/workspace-gateway/internal/runtimeprofiles"
 	"github.com/abcp-sdk/workspace-gateway/internal/sandboxmgr"
 	"github.com/abcp-sdk/workspace-gateway/internal/sandboxreaper"
+	"github.com/abcp-sdk/workspace-gateway/internal/helmmgr"
 	"github.com/abcp-sdk/workspace-gateway/internal/servicesmgr"
 	"github.com/abcp-sdk/workspace-gateway/internal/workspacesvc"
 
@@ -105,6 +106,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("service backend: %v", err)
 	}
+	// Helm chart releases (templating + apply). Non-fatal: a discovery failure
+	// (e.g. no cluster access) just disables the helm-* RPCs.
+	helm, herr := helmmgr.New(helmmgr.Config{Namespace: sandboxNS})
+	if herr != nil {
+		log.Printf("warn: helm backend disabled: %v", herr)
+	}
 	runtime, err := runtimeprofiles.Load(os.Getenv("WORKSPACE_RUNTIME"))
 	if err != nil {
 		log.Fatalf("load runtime settings: %v", err)
@@ -137,6 +144,7 @@ func main() {
 		Forgejo:  git,
 		Sandbox:  sbx,
 		Services: services,
+		Helm:     helm,
 		Builder: &imagebuild.Builder{
 			Addr:           envOr("BUILDKIT_ADDR", "tcp://buildkitd.agent.svc.cluster.local:1234"),
 			RegistryHost:   registryHost,

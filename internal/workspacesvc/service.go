@@ -11,6 +11,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -27,6 +30,7 @@ import (
 	"github.com/abcp-sdk/workspace-gateway/internal/gitcommit"
 	"github.com/abcp-sdk/workspace-gateway/internal/gitimport"
 	"github.com/abcp-sdk/workspace-gateway/internal/gitmerge"
+	"github.com/abcp-sdk/workspace-gateway/internal/helmmgr"
 	"github.com/abcp-sdk/workspace-gateway/internal/imagebuild"
 	"github.com/abcp-sdk/workspace-gateway/internal/k8swatch"
 	"github.com/abcp-sdk/workspace-gateway/internal/members"
@@ -44,6 +48,7 @@ type Service struct {
 	git      *forgejo.Client
 	sbx      *sandboxmgr.Client
 	services *servicesmgr.Client
+	helm     *helmmgr.Client
 	builder  *imagebuild.Builder
 	runtime  runtimeprofiles.Settings
 	// sandboxOrg is the ONLY registry org a sandbox image may come from. The
@@ -81,6 +86,9 @@ type Deps struct {
 	Sandbox *sandboxmgr.Client
 	// Services manages long-lived Deployments.
 	Services *servicesmgr.Client
+	// Helm manages chart releases (templating + apply). Nil disables the
+	// helm-* RPCs.
+	Helm *helmmgr.Client
 	// Builder builds/derives images (repo Dockerfile / base image -> registry).
 	Builder *imagebuild.Builder
 	// Runtime holds the deployment's runtime knobs (KVM/GPU devices).
@@ -130,6 +138,7 @@ func New(d Deps) *Service {
 	return &Service{
 		agent: d.Agent, members: d.Members, git: d.Forgejo, sbx: d.Sandbox,
 		services: d.Services,
+		helm:     d.Helm,
 		builder:  d.Builder, runtime: d.Runtime,
 		sandboxOrg: d.SandboxOrg, defaultSandboxImage: d.DefaultSandboxImage,
 		toolchainOrg: d.ToolchainOrg,
@@ -2416,6 +2425,204 @@ func (s *Service) resolveVolumes(ctx context.Context, tenant string, mounts []*w
 	}
 	return out, nil
 }
+
+// ---- Helm ----
+
+func toHelmReleaseInfo(r helmmgr.Release) *wsv1.HelmReleaseInfo {
+	return &wsv1.HelmReleaseInfo{
+		Name: r.Name, Namespace: r.Namespace, Creator: r.Creator, Session: r.Session,
+		Ref: r.Ref, ChartPath: r.ChartPath, Revision: int32(r.Revision),
+		Status: r.Status, UpdatedAt: r.UpdatedAt,
+	}
+}
+
+// helmChartDir extracts the repo archive and resolves the chart directory,
+// refusing any path that escapes the extracted root.
+func (s *Service) helmChartDir(ctx context.Context, org, repo, ref, chartPath string) (string, func(), error) {
+	archive, err := s.git.ArchiveTarGz(ctx, org, repo, ref)
+	if err != nil {
+		return "", nil, fmt.Errorf("fetch repo archive: %w", err)
+	}
+	dir, cleanup, err := imagebuild.Extract(archive, 0)
+	if err != nil {
+		return "", nil, err
+	}
+	cp := chartPath
+	if cp == "" {
+		cp = "."
+	}
+	// Reject absolute / parent-escaping chart paths.
+	clean := path.Clean("/" + cp)
+	chartDir := filepath.Join(dir, filepath.FromSlash(strings.TrimPrefix(clean, "/")))
+	if chartDir != dir && !strings.HasPrefix(chartDir, dir+string(os.PathSeparator)) {
+		cleanup()
+		return "", nil, fmt.Errorf("chart path escapes the repository")
+	}
+	return chartDir, cleanup, nil
+}
+
+// HelmDeploy renders (and, unless dry_run, applies) a chart as a release.
+func (s *Service) HelmDeploy(ctx context.Context, req *connect.Request[wsv1.HelmDeployRequest]) (*connect.Response[wsv1.HelmDeployResponse], error) {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	if s.helm == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("helm backend not configured"))
+	}
+	m := req.Msg
+	org, repo, ref := m.GetOrg(), m.GetRepo(), m.GetRef()
+	if !roles.ValidComponent(org) || !roles.ValidComponent(repo) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org/repo must be simple names"))
+	}
+	if ref == "" {
+		ref = roles.MainBranch
+	}
+	if !roles.ValidComponent(ref) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("ref must be a simple name"))
+	}
+	if !helmReleaseRe.MatchString(m.GetRelease()) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("release must be a DNS-1123 label"))
+	}
+	chartDir, cleanup, err := s.helmChartDir(ctx, org, repo, ref, m.GetChartPath())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	defer cleanup()
+	opts := helmmgr.RenderOptions{
+		Release: m.GetRelease(), ChartPath: m.GetChartPath(),
+		ValuesYAML: m.GetValues(), Ref: ref,
+	}
+	if m.GetDryRun() {
+		manifest, objects, terr := s.helm.Template(chartDir, opts)
+		if terr != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, terr)
+		}
+		names := make([]string, 0, len(objects))
+		for _, o := range objects {
+			names = append(names, o.Kind+"/"+o.Name)
+		}
+		return connect.NewResponse(&wsv1.HelmDeployResponse{Manifest: manifest, Objects: names}), nil
+	}
+	rel, err := s.helm.Apply(ctx, chartDir, opts, tenant, sessionFromHeaders(req.Header()))
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.HelmDeployResponse{
+		Release: toHelmReleaseInfo(rel),
+		Manifest: func() string {
+			if len(rel.History) > 0 {
+				return rel.History[len(rel.History)-1].Manifest
+			}
+			return ""
+		}(),
+	}), nil
+}
+
+// HelmList lists the tenant's releases.
+func (s *Service) HelmList(ctx context.Context, req *connect.Request[wsv1.HelmListRequest]) (*connect.Response[wsv1.HelmListResponse], error) {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	if s.helm == nil {
+		return connect.NewResponse(&wsv1.HelmListResponse{}), nil
+	}
+	all, err := s.helm.List(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	out := make([]*wsv1.HelmReleaseInfo, 0, len(all))
+	for _, r := range all {
+		if r.Creator != "" && r.Creator != tenant {
+			continue
+		}
+		out = append(out, toHelmReleaseInfo(r))
+	}
+	return connect.NewResponse(&wsv1.HelmListResponse{Releases: out}), nil
+}
+
+// HelmHistory returns a release and its revisions.
+func (s *Service) HelmHistory(ctx context.Context, req *connect.Request[wsv1.HelmHistoryRequest]) (*connect.Response[wsv1.HelmHistoryResponse], error) {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	if s.helm == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("helm backend not configured"))
+	}
+	rel, ok, err := s.helm.Get(ctx, req.Msg.GetRelease())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if !ok || (rel.Creator != "" && rel.Creator != tenant) {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("release not found"))
+	}
+	revs := make([]*wsv1.HelmRevisionInfo, 0, len(rel.History))
+	for _, rv := range rel.History {
+		objs := make([]string, 0, len(rv.Objects))
+		for _, o := range rv.Objects {
+			objs = append(objs, o.Kind+"/"+o.Name)
+		}
+		revs = append(revs, &wsv1.HelmRevisionInfo{
+			Revision: int32(rv.Revision), Ref: rv.Ref, ChartPath: rv.ChartPath,
+			Values: rv.Values, CreatedAt: rv.CreatedAt, Objects: objs,
+		})
+	}
+	return connect.NewResponse(&wsv1.HelmHistoryResponse{Release: toHelmReleaseInfo(rel), Revisions: revs}), nil
+}
+
+// HelmRollback re-applies a prior revision.
+func (s *Service) HelmRollback(ctx context.Context, req *connect.Request[wsv1.HelmRollbackRequest]) (*connect.Response[wsv1.HelmRollbackResponse], error) {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	if s.helm == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("helm backend not configured"))
+	}
+	cur, ok, err := s.helm.Get(ctx, req.Msg.GetRelease())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if !ok || (cur.Creator != "" && cur.Creator != tenant) {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("release not found"))
+	}
+	target := int(req.Msg.GetRevision())
+	if target == 0 {
+		target = cur.Revision - 1
+	}
+	rel, err := s.helm.Rollback(ctx, req.Msg.GetRelease(), target)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return connect.NewResponse(&wsv1.HelmRollbackResponse{Release: toHelmReleaseInfo(rel)}), nil
+}
+
+// HelmUninstall deletes a release and its objects.
+func (s *Service) HelmUninstall(ctx context.Context, req *connect.Request[wsv1.HelmUninstallRequest]) (*connect.Response[wsv1.HelmUninstallResponse], error) {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	if s.helm == nil {
+		return connect.NewResponse(&wsv1.HelmUninstallResponse{Ok: false}), nil
+	}
+	cur, ok, err := s.helm.Get(ctx, req.Msg.GetRelease())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if !ok || (cur.Creator != "" && cur.Creator != tenant) {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("release not found"))
+	}
+	ok2, err := s.helm.Uninstall(ctx, req.Msg.GetRelease())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.HelmUninstallResponse{Ok: ok2}), nil
+}
+
+var helmReleaseRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,52}[a-z0-9])?$`)
 
 // ---- Tier 0 conversion helpers (proto -> servicesmgr) ----
 

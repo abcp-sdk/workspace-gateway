@@ -277,6 +277,21 @@ const (
 	// BranchSessionServiceBuildPreviewImageProcedure is the fully-qualified name of the
 	// BranchSessionService's BuildPreviewImage RPC.
 	BranchSessionServiceBuildPreviewImageProcedure = "/workspace.v1.BranchSessionService/BuildPreviewImage"
+	// BranchSessionServiceHelmDeployProcedure is the fully-qualified name of the BranchSessionService's
+	// HelmDeploy RPC.
+	BranchSessionServiceHelmDeployProcedure = "/workspace.v1.BranchSessionService/HelmDeploy"
+	// BranchSessionServiceHelmListProcedure is the fully-qualified name of the BranchSessionService's
+	// HelmList RPC.
+	BranchSessionServiceHelmListProcedure = "/workspace.v1.BranchSessionService/HelmList"
+	// BranchSessionServiceHelmHistoryProcedure is the fully-qualified name of the
+	// BranchSessionService's HelmHistory RPC.
+	BranchSessionServiceHelmHistoryProcedure = "/workspace.v1.BranchSessionService/HelmHistory"
+	// BranchSessionServiceHelmRollbackProcedure is the fully-qualified name of the
+	// BranchSessionService's HelmRollback RPC.
+	BranchSessionServiceHelmRollbackProcedure = "/workspace.v1.BranchSessionService/HelmRollback"
+	// BranchSessionServiceHelmUninstallProcedure is the fully-qualified name of the
+	// BranchSessionService's HelmUninstall RPC.
+	BranchSessionServiceHelmUninstallProcedure = "/workspace.v1.BranchSessionService/HelmUninstall"
 	// BranchSessionServiceHealthProcedure is the fully-qualified name of the BranchSessionService's
 	// Health RPC.
 	BranchSessionServiceHealthProcedure = "/workspace.v1.BranchSessionService/Health"
@@ -490,6 +505,12 @@ type BranchSessionServiceClient interface {
 	WatchWorkspace(context.Context, *connect.Request[v1.WatchWorkspaceRequest]) (*connect.ServerStreamForClient[v1.WatchWorkspaceResponse], error)
 	// BuildPreviewImage builds a preview-tagged image (forced name/tag).
 	BuildPreviewImage(context.Context, *connect.Request[v1.BuildPreviewImageRequest]) (*connect.Response[v1.BuildPreviewImageResponse], error)
+	// ---- Helm ----
+	HelmDeploy(context.Context, *connect.Request[v1.HelmDeployRequest]) (*connect.Response[v1.HelmDeployResponse], error)
+	HelmList(context.Context, *connect.Request[v1.HelmListRequest]) (*connect.Response[v1.HelmListResponse], error)
+	HelmHistory(context.Context, *connect.Request[v1.HelmHistoryRequest]) (*connect.Response[v1.HelmHistoryResponse], error)
+	HelmRollback(context.Context, *connect.Request[v1.HelmRollbackRequest]) (*connect.Response[v1.HelmRollbackResponse], error)
+	HelmUninstall(context.Context, *connect.Request[v1.HelmUninstallRequest]) (*connect.Response[v1.HelmUninstallResponse], error)
 	// ---- forwarded agent surface (minimal; no policy RPCs) ----
 	Health(context.Context, *connect.Request[v11.HealthRequest]) (*connect.Response[v11.HealthResponse], error)
 	GetIdentity(context.Context, *connect.Request[v11.GetIdentityRequest]) (*connect.Response[v11.GetIdentityResponse], error)
@@ -1008,6 +1029,36 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(branchSessionServiceMethods.ByName("BuildPreviewImage")),
 			connect.WithClientOptions(opts...),
 		),
+		helmDeploy: connect.NewClient[v1.HelmDeployRequest, v1.HelmDeployResponse](
+			httpClient,
+			baseURL+BranchSessionServiceHelmDeployProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("HelmDeploy")),
+			connect.WithClientOptions(opts...),
+		),
+		helmList: connect.NewClient[v1.HelmListRequest, v1.HelmListResponse](
+			httpClient,
+			baseURL+BranchSessionServiceHelmListProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("HelmList")),
+			connect.WithClientOptions(opts...),
+		),
+		helmHistory: connect.NewClient[v1.HelmHistoryRequest, v1.HelmHistoryResponse](
+			httpClient,
+			baseURL+BranchSessionServiceHelmHistoryProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("HelmHistory")),
+			connect.WithClientOptions(opts...),
+		),
+		helmRollback: connect.NewClient[v1.HelmRollbackRequest, v1.HelmRollbackResponse](
+			httpClient,
+			baseURL+BranchSessionServiceHelmRollbackProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("HelmRollback")),
+			connect.WithClientOptions(opts...),
+		),
+		helmUninstall: connect.NewClient[v1.HelmUninstallRequest, v1.HelmUninstallResponse](
+			httpClient,
+			baseURL+BranchSessionServiceHelmUninstallProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("HelmUninstall")),
+			connect.WithClientOptions(opts...),
+		),
 		health: connect.NewClient[v11.HealthRequest, v11.HealthResponse](
 			httpClient,
 			baseURL+BranchSessionServiceHealthProcedure,
@@ -1294,6 +1345,11 @@ type branchSessionServiceClient struct {
 	watchServiceLogs     *connect.Client[v1.WatchServiceLogsRequest, v1.WatchServiceLogsResponse]
 	watchWorkspace       *connect.Client[v1.WatchWorkspaceRequest, v1.WatchWorkspaceResponse]
 	buildPreviewImage    *connect.Client[v1.BuildPreviewImageRequest, v1.BuildPreviewImageResponse]
+	helmDeploy           *connect.Client[v1.HelmDeployRequest, v1.HelmDeployResponse]
+	helmList             *connect.Client[v1.HelmListRequest, v1.HelmListResponse]
+	helmHistory          *connect.Client[v1.HelmHistoryRequest, v1.HelmHistoryResponse]
+	helmRollback         *connect.Client[v1.HelmRollbackRequest, v1.HelmRollbackResponse]
+	helmUninstall        *connect.Client[v1.HelmUninstallRequest, v1.HelmUninstallResponse]
 	health               *connect.Client[v11.HealthRequest, v11.HealthResponse]
 	getIdentity          *connect.Client[v11.GetIdentityRequest, v11.GetIdentityResponse]
 	listSessions         *connect.Client[v11.ListSessionsRequest, v11.ListSessionsResponse]
@@ -1715,6 +1771,31 @@ func (c *branchSessionServiceClient) BuildPreviewImage(ctx context.Context, req 
 	return c.buildPreviewImage.CallUnary(ctx, req)
 }
 
+// HelmDeploy calls workspace.v1.BranchSessionService.HelmDeploy.
+func (c *branchSessionServiceClient) HelmDeploy(ctx context.Context, req *connect.Request[v1.HelmDeployRequest]) (*connect.Response[v1.HelmDeployResponse], error) {
+	return c.helmDeploy.CallUnary(ctx, req)
+}
+
+// HelmList calls workspace.v1.BranchSessionService.HelmList.
+func (c *branchSessionServiceClient) HelmList(ctx context.Context, req *connect.Request[v1.HelmListRequest]) (*connect.Response[v1.HelmListResponse], error) {
+	return c.helmList.CallUnary(ctx, req)
+}
+
+// HelmHistory calls workspace.v1.BranchSessionService.HelmHistory.
+func (c *branchSessionServiceClient) HelmHistory(ctx context.Context, req *connect.Request[v1.HelmHistoryRequest]) (*connect.Response[v1.HelmHistoryResponse], error) {
+	return c.helmHistory.CallUnary(ctx, req)
+}
+
+// HelmRollback calls workspace.v1.BranchSessionService.HelmRollback.
+func (c *branchSessionServiceClient) HelmRollback(ctx context.Context, req *connect.Request[v1.HelmRollbackRequest]) (*connect.Response[v1.HelmRollbackResponse], error) {
+	return c.helmRollback.CallUnary(ctx, req)
+}
+
+// HelmUninstall calls workspace.v1.BranchSessionService.HelmUninstall.
+func (c *branchSessionServiceClient) HelmUninstall(ctx context.Context, req *connect.Request[v1.HelmUninstallRequest]) (*connect.Response[v1.HelmUninstallResponse], error) {
+	return c.helmUninstall.CallUnary(ctx, req)
+}
+
 // Health calls workspace.v1.BranchSessionService.Health.
 func (c *branchSessionServiceClient) Health(ctx context.Context, req *connect.Request[v11.HealthRequest]) (*connect.Response[v11.HealthResponse], error) {
 	return c.health.CallUnary(ctx, req)
@@ -1995,6 +2076,12 @@ type BranchSessionServiceHandler interface {
 	WatchWorkspace(context.Context, *connect.Request[v1.WatchWorkspaceRequest], *connect.ServerStream[v1.WatchWorkspaceResponse]) error
 	// BuildPreviewImage builds a preview-tagged image (forced name/tag).
 	BuildPreviewImage(context.Context, *connect.Request[v1.BuildPreviewImageRequest]) (*connect.Response[v1.BuildPreviewImageResponse], error)
+	// ---- Helm ----
+	HelmDeploy(context.Context, *connect.Request[v1.HelmDeployRequest]) (*connect.Response[v1.HelmDeployResponse], error)
+	HelmList(context.Context, *connect.Request[v1.HelmListRequest]) (*connect.Response[v1.HelmListResponse], error)
+	HelmHistory(context.Context, *connect.Request[v1.HelmHistoryRequest]) (*connect.Response[v1.HelmHistoryResponse], error)
+	HelmRollback(context.Context, *connect.Request[v1.HelmRollbackRequest]) (*connect.Response[v1.HelmRollbackResponse], error)
+	HelmUninstall(context.Context, *connect.Request[v1.HelmUninstallRequest]) (*connect.Response[v1.HelmUninstallResponse], error)
 	// ---- forwarded agent surface (minimal; no policy RPCs) ----
 	Health(context.Context, *connect.Request[v11.HealthRequest]) (*connect.Response[v11.HealthResponse], error)
 	GetIdentity(context.Context, *connect.Request[v11.GetIdentityRequest]) (*connect.Response[v11.GetIdentityResponse], error)
@@ -2509,6 +2596,36 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		connect.WithSchema(branchSessionServiceMethods.ByName("BuildPreviewImage")),
 		connect.WithHandlerOptions(opts...),
 	)
+	branchSessionServiceHelmDeployHandler := connect.NewUnaryHandler(
+		BranchSessionServiceHelmDeployProcedure,
+		svc.HelmDeploy,
+		connect.WithSchema(branchSessionServiceMethods.ByName("HelmDeploy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceHelmListHandler := connect.NewUnaryHandler(
+		BranchSessionServiceHelmListProcedure,
+		svc.HelmList,
+		connect.WithSchema(branchSessionServiceMethods.ByName("HelmList")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceHelmHistoryHandler := connect.NewUnaryHandler(
+		BranchSessionServiceHelmHistoryProcedure,
+		svc.HelmHistory,
+		connect.WithSchema(branchSessionServiceMethods.ByName("HelmHistory")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceHelmRollbackHandler := connect.NewUnaryHandler(
+		BranchSessionServiceHelmRollbackProcedure,
+		svc.HelmRollback,
+		connect.WithSchema(branchSessionServiceMethods.ByName("HelmRollback")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceHelmUninstallHandler := connect.NewUnaryHandler(
+		BranchSessionServiceHelmUninstallProcedure,
+		svc.HelmUninstall,
+		connect.WithSchema(branchSessionServiceMethods.ByName("HelmUninstall")),
+		connect.WithHandlerOptions(opts...),
+	)
 	branchSessionServiceHealthHandler := connect.NewUnaryHandler(
 		BranchSessionServiceHealthProcedure,
 		svc.Health,
@@ -2869,6 +2986,16 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceWatchWorkspaceHandler.ServeHTTP(w, r)
 		case BranchSessionServiceBuildPreviewImageProcedure:
 			branchSessionServiceBuildPreviewImageHandler.ServeHTTP(w, r)
+		case BranchSessionServiceHelmDeployProcedure:
+			branchSessionServiceHelmDeployHandler.ServeHTTP(w, r)
+		case BranchSessionServiceHelmListProcedure:
+			branchSessionServiceHelmListHandler.ServeHTTP(w, r)
+		case BranchSessionServiceHelmHistoryProcedure:
+			branchSessionServiceHelmHistoryHandler.ServeHTTP(w, r)
+		case BranchSessionServiceHelmRollbackProcedure:
+			branchSessionServiceHelmRollbackHandler.ServeHTTP(w, r)
+		case BranchSessionServiceHelmUninstallProcedure:
+			branchSessionServiceHelmUninstallHandler.ServeHTTP(w, r)
 		case BranchSessionServiceHealthProcedure:
 			branchSessionServiceHealthHandler.ServeHTTP(w, r)
 		case BranchSessionServiceGetIdentityProcedure:
@@ -3252,6 +3379,26 @@ func (UnimplementedBranchSessionServiceHandler) WatchWorkspace(context.Context, 
 
 func (UnimplementedBranchSessionServiceHandler) BuildPreviewImage(context.Context, *connect.Request[v1.BuildPreviewImageRequest]) (*connect.Response[v1.BuildPreviewImageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.BuildPreviewImage is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) HelmDeploy(context.Context, *connect.Request[v1.HelmDeployRequest]) (*connect.Response[v1.HelmDeployResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmDeploy is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) HelmList(context.Context, *connect.Request[v1.HelmListRequest]) (*connect.Response[v1.HelmListResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmList is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) HelmHistory(context.Context, *connect.Request[v1.HelmHistoryRequest]) (*connect.Response[v1.HelmHistoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmHistory is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) HelmRollback(context.Context, *connect.Request[v1.HelmRollbackRequest]) (*connect.Response[v1.HelmRollbackResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmRollback is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) HelmUninstall(context.Context, *connect.Request[v1.HelmUninstallRequest]) (*connect.Response[v1.HelmUninstallResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmUninstall is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) Health(context.Context, *connect.Request[v11.HealthRequest]) (*connect.Response[v11.HealthResponse], error) {

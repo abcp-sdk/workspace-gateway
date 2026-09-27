@@ -1279,6 +1279,76 @@ message ApplyServiceManifestResponse {
   string yaml = 2;
 }
 
+// ---- Helm (chart templating + release management) ----
+//
+// A Helm release renders a chart from the repository (a repo-relative chart
+// directory + values) and applies the result to the managed namespace under a
+// strict safety filter (kind whitelist; no cluster-scoped/RBAC/CRD/privileged/
+// hostPath). Release history is stored server-side.
+
+message HelmReleaseInfo {
+  string name = 1;
+  string namespace = 2;
+  string creator = 3;
+  string session = 4;
+  // Git ref the chart came from.
+  string ref = 5;
+  // Repo-relative chart directory (holds Chart.yaml).
+  string chart_path = 6;
+  int32 revision = 7;
+  string status = 8; // deployed | failed
+  int64 updated_at = 9;
+}
+
+message HelmRevisionInfo {
+  int32 revision = 1;
+  string ref = 2;
+  string chart_path = 3;
+  string values = 4;
+  int64 created_at = 5;
+  repeated string objects = 6; // "Kind/name"
+}
+
+// HelmTemplateRequest renders (dry-run) or applies a chart as a release.
+message HelmDeployRequest {
+  // Release name (DNS-1123 label).
+  string release = 1;
+  string org = 2;
+  string repo = 3;
+  string ref = 4;
+  // Repo-relative chart directory (default ".").
+  string chart_path = 5;
+  // values.yaml content.
+  string values = 6;
+  // Dry-run: render + validate only (no apply, no release record).
+  bool dry_run = 7;
+}
+message HelmDeployResponse {
+  HelmReleaseInfo release = 1;
+  // The rendered (and namespace-pinned) manifest.
+  string manifest = 2;
+  repeated string objects = 3;
+}
+
+message HelmListRequest {}
+message HelmListResponse { repeated HelmReleaseInfo releases = 1; }
+
+message HelmHistoryRequest { string release = 1; }
+message HelmHistoryResponse {
+  HelmReleaseInfo release = 1;
+  repeated HelmRevisionInfo revisions = 2;
+}
+
+message HelmRollbackRequest {
+  string release = 1;
+  // Target revision (0 = the previous revision).
+  int32 revision = 2;
+}
+message HelmRollbackResponse { HelmReleaseInfo release = 1; }
+
+message HelmUninstallRequest { string release = 1; }
+message HelmUninstallResponse { bool ok = 1; }
+
 // ---- service logs ----
 message ServiceLogsRequest {
   string name = 1;
@@ -1473,6 +1543,13 @@ service BranchSessionService {
   rpc WatchWorkspace(WatchWorkspaceRequest) returns (stream WatchWorkspaceResponse);
   // BuildPreviewImage builds a preview-tagged image (forced name/tag).
   rpc BuildPreviewImage(BuildPreviewImageRequest) returns (BuildPreviewImageResponse);
+
+  // ---- Helm ----
+  rpc HelmDeploy(HelmDeployRequest) returns (HelmDeployResponse);
+  rpc HelmList(HelmListRequest) returns (HelmListResponse);
+  rpc HelmHistory(HelmHistoryRequest) returns (HelmHistoryResponse);
+  rpc HelmRollback(HelmRollbackRequest) returns (HelmRollbackResponse);
+  rpc HelmUninstall(HelmUninstallRequest) returns (HelmUninstallResponse);
 
   // ---- forwarded agent surface (minimal; no policy RPCs) ----
   rpc Health(agent.v1.HealthRequest) returns (agent.v1.HealthResponse);
