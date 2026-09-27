@@ -60,7 +60,7 @@
       "sandbox-file-upload",
       "sandbox-checkout"
     ],
-    "max_turns": 50
+    "max_turns": 0
   },
   {
     "id": "maintainer",
@@ -118,7 +118,7 @@
       "sandbox-file-upload",
       "sandbox-checkout"
     ],
-    "max_turns": 50
+    "max_turns": 0
   },
   {
     "id": "developer",
@@ -177,7 +177,7 @@
       "sandbox-checkout",
       "sandbox-port"
     ],
-    "max_turns": 50
+    "max_turns": 0
   },
   {
     "id": "explorer",
@@ -224,6 +224,6 @@
       "service-list",
       "service-logs"
     ],
-    "max_turns": 25
+    "max_turns": 0
   }
 ]

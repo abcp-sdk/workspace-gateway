@@ -123,28 +123,31 @@ func All() []Entry {
 			SystemPrompt:     execEN + "\n\n" + adminRole,
 			SystemPromptI18n: i18n(execEN+"\n\n"+adminRole, execZH+"\n\n"+adminRoleZH),
 			Tools:            roles.ToolsFor(roles.Admin),
-			MaxTurns:         50,
+			// 0 = unlimited steps (opencode parity). The agent's doom-loop
+			// guard ends a turn that repeats an identical tool call instead of
+			// a hard step cap truncating long legitimate tasks.
+			MaxTurns: 0,
 		},
 		{
 			ID:               "maintainer",
 			SystemPrompt:     execEN + "\n\n" + maintainerRole,
 			SystemPromptI18n: i18n(execEN+"\n\n"+maintainerRole, execZH+"\n\n"+maintainerRoleZH),
 			Tools:            roles.ToolsFor(roles.Maintainer),
-			MaxTurns:         50,
+			MaxTurns:         0,
 		},
 		{
 			ID:               "developer",
 			SystemPrompt:     execEN + "\n\n" + developerRole,
 			SystemPromptI18n: i18n(execEN+"\n\n"+developerRole, execZH+"\n\n"+developerRoleZH),
 			Tools:            roles.ToolsFor(roles.Developer),
-			MaxTurns:         50,
+			MaxTurns:         0,
 		},
 		{
 			ID:               "explorer",
 			SystemPrompt:     execEN + "\n\n" + explorerRole,
 			SystemPromptI18n: i18n(execEN+"\n\n"+explorerRole, execZH+"\n\n"+explorerRoleZH),
 			Tools:            roles.ToolsFor(roles.Explorer),
-			MaxTurns:         25,
+			MaxTurns:         0,
 		},
 	}
 }
