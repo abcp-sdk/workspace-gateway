@@ -292,6 +292,12 @@ const (
 	// BranchSessionServiceHelmUninstallProcedure is the fully-qualified name of the
 	// BranchSessionService's HelmUninstall RPC.
 	BranchSessionServiceHelmUninstallProcedure = "/workspace.v1.BranchSessionService/HelmUninstall"
+	// BranchSessionServiceHelmPromoteProcedure is the fully-qualified name of the
+	// BranchSessionService's HelmPromote RPC.
+	BranchSessionServiceHelmPromoteProcedure = "/workspace.v1.BranchSessionService/HelmPromote"
+	// BranchSessionServiceHelmRollbackReleaseProcedure is the fully-qualified name of the
+	// BranchSessionService's HelmRollbackRelease RPC.
+	BranchSessionServiceHelmRollbackReleaseProcedure = "/workspace.v1.BranchSessionService/HelmRollbackRelease"
 	// BranchSessionServiceHealthProcedure is the fully-qualified name of the BranchSessionService's
 	// Health RPC.
 	BranchSessionServiceHealthProcedure = "/workspace.v1.BranchSessionService/Health"
@@ -511,6 +517,9 @@ type BranchSessionServiceClient interface {
 	HelmHistory(context.Context, *connect.Request[v1.HelmHistoryRequest]) (*connect.Response[v1.HelmHistoryResponse], error)
 	HelmRollback(context.Context, *connect.Request[v1.HelmRollbackRequest]) (*connect.Response[v1.HelmRollbackResponse], error)
 	HelmUninstall(context.Context, *connect.Request[v1.HelmUninstallRequest]) (*connect.Response[v1.HelmUninstallResponse], error)
+	// Blue-green slot switch for a Helm release.
+	HelmPromote(context.Context, *connect.Request[v1.HelmPromoteRequest]) (*connect.Response[v1.HelmPromoteResponse], error)
+	HelmRollbackRelease(context.Context, *connect.Request[v1.HelmRollbackReleaseRequest]) (*connect.Response[v1.HelmRollbackReleaseResponse], error)
 	// ---- forwarded agent surface (minimal; no policy RPCs) ----
 	Health(context.Context, *connect.Request[v11.HealthRequest]) (*connect.Response[v11.HealthResponse], error)
 	GetIdentity(context.Context, *connect.Request[v11.GetIdentityRequest]) (*connect.Response[v11.GetIdentityResponse], error)
@@ -1059,6 +1068,18 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(branchSessionServiceMethods.ByName("HelmUninstall")),
 			connect.WithClientOptions(opts...),
 		),
+		helmPromote: connect.NewClient[v1.HelmPromoteRequest, v1.HelmPromoteResponse](
+			httpClient,
+			baseURL+BranchSessionServiceHelmPromoteProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("HelmPromote")),
+			connect.WithClientOptions(opts...),
+		),
+		helmRollbackRelease: connect.NewClient[v1.HelmRollbackReleaseRequest, v1.HelmRollbackReleaseResponse](
+			httpClient,
+			baseURL+BranchSessionServiceHelmRollbackReleaseProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("HelmRollbackRelease")),
+			connect.WithClientOptions(opts...),
+		),
 		health: connect.NewClient[v11.HealthRequest, v11.HealthResponse](
 			httpClient,
 			baseURL+BranchSessionServiceHealthProcedure,
@@ -1350,6 +1371,8 @@ type branchSessionServiceClient struct {
 	helmHistory          *connect.Client[v1.HelmHistoryRequest, v1.HelmHistoryResponse]
 	helmRollback         *connect.Client[v1.HelmRollbackRequest, v1.HelmRollbackResponse]
 	helmUninstall        *connect.Client[v1.HelmUninstallRequest, v1.HelmUninstallResponse]
+	helmPromote          *connect.Client[v1.HelmPromoteRequest, v1.HelmPromoteResponse]
+	helmRollbackRelease  *connect.Client[v1.HelmRollbackReleaseRequest, v1.HelmRollbackReleaseResponse]
 	health               *connect.Client[v11.HealthRequest, v11.HealthResponse]
 	getIdentity          *connect.Client[v11.GetIdentityRequest, v11.GetIdentityResponse]
 	listSessions         *connect.Client[v11.ListSessionsRequest, v11.ListSessionsResponse]
@@ -1796,6 +1819,16 @@ func (c *branchSessionServiceClient) HelmUninstall(ctx context.Context, req *con
 	return c.helmUninstall.CallUnary(ctx, req)
 }
 
+// HelmPromote calls workspace.v1.BranchSessionService.HelmPromote.
+func (c *branchSessionServiceClient) HelmPromote(ctx context.Context, req *connect.Request[v1.HelmPromoteRequest]) (*connect.Response[v1.HelmPromoteResponse], error) {
+	return c.helmPromote.CallUnary(ctx, req)
+}
+
+// HelmRollbackRelease calls workspace.v1.BranchSessionService.HelmRollbackRelease.
+func (c *branchSessionServiceClient) HelmRollbackRelease(ctx context.Context, req *connect.Request[v1.HelmRollbackReleaseRequest]) (*connect.Response[v1.HelmRollbackReleaseResponse], error) {
+	return c.helmRollbackRelease.CallUnary(ctx, req)
+}
+
 // Health calls workspace.v1.BranchSessionService.Health.
 func (c *branchSessionServiceClient) Health(ctx context.Context, req *connect.Request[v11.HealthRequest]) (*connect.Response[v11.HealthResponse], error) {
 	return c.health.CallUnary(ctx, req)
@@ -2082,6 +2115,9 @@ type BranchSessionServiceHandler interface {
 	HelmHistory(context.Context, *connect.Request[v1.HelmHistoryRequest]) (*connect.Response[v1.HelmHistoryResponse], error)
 	HelmRollback(context.Context, *connect.Request[v1.HelmRollbackRequest]) (*connect.Response[v1.HelmRollbackResponse], error)
 	HelmUninstall(context.Context, *connect.Request[v1.HelmUninstallRequest]) (*connect.Response[v1.HelmUninstallResponse], error)
+	// Blue-green slot switch for a Helm release.
+	HelmPromote(context.Context, *connect.Request[v1.HelmPromoteRequest]) (*connect.Response[v1.HelmPromoteResponse], error)
+	HelmRollbackRelease(context.Context, *connect.Request[v1.HelmRollbackReleaseRequest]) (*connect.Response[v1.HelmRollbackReleaseResponse], error)
 	// ---- forwarded agent surface (minimal; no policy RPCs) ----
 	Health(context.Context, *connect.Request[v11.HealthRequest]) (*connect.Response[v11.HealthResponse], error)
 	GetIdentity(context.Context, *connect.Request[v11.GetIdentityRequest]) (*connect.Response[v11.GetIdentityResponse], error)
@@ -2626,6 +2662,18 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		connect.WithSchema(branchSessionServiceMethods.ByName("HelmUninstall")),
 		connect.WithHandlerOptions(opts...),
 	)
+	branchSessionServiceHelmPromoteHandler := connect.NewUnaryHandler(
+		BranchSessionServiceHelmPromoteProcedure,
+		svc.HelmPromote,
+		connect.WithSchema(branchSessionServiceMethods.ByName("HelmPromote")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceHelmRollbackReleaseHandler := connect.NewUnaryHandler(
+		BranchSessionServiceHelmRollbackReleaseProcedure,
+		svc.HelmRollbackRelease,
+		connect.WithSchema(branchSessionServiceMethods.ByName("HelmRollbackRelease")),
+		connect.WithHandlerOptions(opts...),
+	)
 	branchSessionServiceHealthHandler := connect.NewUnaryHandler(
 		BranchSessionServiceHealthProcedure,
 		svc.Health,
@@ -2996,6 +3044,10 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceHelmRollbackHandler.ServeHTTP(w, r)
 		case BranchSessionServiceHelmUninstallProcedure:
 			branchSessionServiceHelmUninstallHandler.ServeHTTP(w, r)
+		case BranchSessionServiceHelmPromoteProcedure:
+			branchSessionServiceHelmPromoteHandler.ServeHTTP(w, r)
+		case BranchSessionServiceHelmRollbackReleaseProcedure:
+			branchSessionServiceHelmRollbackReleaseHandler.ServeHTTP(w, r)
 		case BranchSessionServiceHealthProcedure:
 			branchSessionServiceHealthHandler.ServeHTTP(w, r)
 		case BranchSessionServiceGetIdentityProcedure:
@@ -3399,6 +3451,14 @@ func (UnimplementedBranchSessionServiceHandler) HelmRollback(context.Context, *c
 
 func (UnimplementedBranchSessionServiceHandler) HelmUninstall(context.Context, *connect.Request[v1.HelmUninstallRequest]) (*connect.Response[v1.HelmUninstallResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmUninstall is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) HelmPromote(context.Context, *connect.Request[v1.HelmPromoteRequest]) (*connect.Response[v1.HelmPromoteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmPromote is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) HelmRollbackRelease(context.Context, *connect.Request[v1.HelmRollbackReleaseRequest]) (*connect.Response[v1.HelmRollbackReleaseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmRollbackRelease is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) Health(context.Context, *connect.Request[v11.HealthRequest]) (*connect.Response[v11.HealthResponse], error) {

@@ -96,6 +96,7 @@ var repoReviewTools = []string{
 	"service-promote", "service-rollback",
 	"repo-build-preview", "service-preview",
 	"helm-deploy", "helm-list", "helm-history", "helm-rollback", "helm-uninstall",
+	"helm-promote", "helm-rollback-release",
 }
 
 // Admin tools: create org/repo, import repos AND images, configure push
@@ -110,6 +111,7 @@ var adminTools = []string{
 	"repo-build-preview", "service-preview",
 	"pvc-create", "pvc-list", "pvc-delete",
 	"helm-deploy", "helm-list", "helm-history", "helm-rollback", "helm-uninstall",
+	"helm-promote", "helm-rollback-release",
 }
 
 // ToolsFor returns a role's preset whitelist. The agent treats an EMPTY

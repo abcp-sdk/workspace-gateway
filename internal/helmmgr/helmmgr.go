@@ -28,7 +28,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/yaml"
+	sigsyaml "sigs.k8s.io/yaml"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -130,13 +132,38 @@ type Release struct {
 	Status    string     `json:"status"`
 	UpdatedAt int64      `json:"updatedAt"`
 	History   []Revision `json:"history"`
+	// Slot is "blue"/"green" for a slot release ("" = plain).
+	Slot string `json:"slot,omitempty"`
+	// Router is the logical release name a slot release belongs to (empty for a
+	// plain release). The router Service is named `Router`; its selector points
+	// at the ACTIVE slot's pods.
+	Router string `json:"router,omitempty"`
+	// ActiveSlot is set on the ROUTER record (Router == Name) to record which
+	// slot the router currently selects.
+	ActiveSlot string `json:"activeSlot,omitempty"`
 }
 
 const (
 	releaseLabel   = "workspace/helm-release"
 	releaseCMName  = "helm-release-"
 	annoReleaseName = "workspace/helm-release-name"
+	// slotLabel is injected into every workload pod template of a slot release,
+	// so the router Service can select the ACTIVE slot's pods.
+	slotLabel = "workspace/helm-slot"
+	// routerAnno marks the router Service of a blue-green Helm release.
+	routerAnno = "workspace/helm-router"
+	// routerActiveAnno records which slot the router currently selects.
+	routerActiveAnno = "workspace/helm-router-active"
 )
+
+// Slot names for a blue-green Helm release (mirrors servicesmgr).
+const (
+	SlotBlue  = "blue"
+	SlotGreen = "green"
+)
+
+// ValidHelmSlot reports whether s names a blue-green slot ("" = plain release).
+func ValidHelmSlot(s string) bool { return s == "" || s == SlotBlue || s == SlotGreen }
 
 // RenderOptions describes one render+apply request.
 type RenderOptions struct {
@@ -148,6 +175,10 @@ type RenderOptions struct {
 	ValuesYAML string
 	// Ref is the git ref the chart came from (recorded for history).
 	Ref string
+	// Slot is "blue"/"green" for a blue-green release ("" = plain). A slot
+	// release is stored under `<release>-<slot>` and its pods carry the slot
+	// label so a router Service can switch between slots.
+	Slot string
 }
 
 // Template renders the chart at chartDir (an extracted repo root + ChartPath)
@@ -202,6 +233,26 @@ func (c *Client) Template(chartDir string, o RenderOptions) (string, []Object, e
 		return "", nil, err
 	}
 	return manifest, objects, nil
+}
+
+// workloadPodSpecs are the unstructured paths to a workload's pod template
+// "spec" (where labels + selector live).
+var workloadPodSpecs = map[string][][]string{
+	"Deployment":  {{"spec", "template", "spec"}},
+	"StatefulSet": {{"spec", "template", "spec"}},
+	"DaemonSet":   {{"spec", "template", "spec"}},
+	"Job":         {{"spec", "template", "spec"}},
+	"CronJob":     {{"spec", "jobTemplate", "spec", "template", "spec"}},
+}
+
+// workloadPodLabels are the matching pod-template LABELS paths (so a Service
+// selector can match the pods).
+var workloadPodLabels = map[string][][]string{
+	"Deployment":  {{"spec", "template", "metadata", "labels"}},
+	"StatefulSet": {{"spec", "template", "metadata", "labels"}},
+	"DaemonSet":   {{"spec", "template", "metadata", "labels"}},
+	"Job":         {{"spec", "template", "metadata", "labels"}},
+	"CronJob":     {{"spec", "jobTemplate", "spec", "template", "metadata", "labels"}},
 }
 
 // validate parses every non-empty YAML doc, enforces the kind whitelist and
@@ -393,6 +444,448 @@ func (c *Client) Apply(ctx context.Context, chartDir string, o RenderOptions, cr
 		return Release{}, err
 	}
 	return cur, nil
+}
+
+// ---- blue-green slots ----
+
+// slotReleaseName is the stored release name for a slot: `<release>-<slot>`.
+func slotReleaseName(release, slot string) string { return release + "-" + slot }
+
+// ApplySlot renders + applies a chart as a SLOT release and manages the router
+// Service so the primary URL targets the ACTIVE slot. The router is created on
+// the first slot deploy (activating that slot); a green deploy does NOT
+// auto-promote (the router stays on blue).
+func (c *Client) ApplySlot(ctx context.Context, chartDir string, o RenderOptions, creator, session string) (Release, error) {
+	if !ValidHelmSlot(o.Slot) || o.Slot == "" {
+		return Release{}, fmt.Errorf("slot must be blue|green")
+	}
+	router := o.Release
+	stored := slotReleaseName(router, o.Slot)
+	// Render with the STORED release name so `.Release.Name` differs per slot
+	// and the two slots' objects never collide.
+	renderOpts := o
+	renderOpts.Release = stored
+	manifest, objects, err := c.Template(chartDir, renderOpts)
+	if err != nil {
+		return Release{}, err
+	}
+	// Inject the release + slot labels into every workload pod template so the
+	// router Service (selector release=<slotRelease>, slot=<active>) can target
+	// this slot's pods.
+	manifest, err = injectSlotLabel(manifest, stored, o.Slot)
+	if err != nil {
+		return Release{}, err
+	}
+	if err := c.applyManifest(ctx, manifest, stored); err != nil {
+		return Release{}, err
+	}
+	// Ensure the router Service exists (activate the slot just deployed if new).
+	if err := c.ensureRouter(ctx, router, o.Slot, manifest, creator, session); err != nil {
+		return Release{}, err
+	}
+	cur, ok, err := c.Get(ctx, stored)
+	if err != nil {
+		return Release{}, err
+	}
+	if !ok {
+		cur = Release{Name: stored, Namespace: c.namespace, Creator: creator, Session: session, Slot: o.Slot, Router: router}
+	}
+	cur.Ref = o.Ref
+	cur.ChartPath = o.ChartPath
+	cur.Slot = o.Slot
+	cur.Router = router
+	cur.Revision++
+	cur.Status = "deployed"
+	cur.UpdatedAt = time.Now().UnixMilli()
+	cur.History = append(cur.History, Revision{
+		Revision: cur.Revision, Ref: o.Ref, ChartPath: o.ChartPath, Values: o.ValuesYAML,
+		CreatedAt: cur.UpdatedAt, Objects: objects, Manifest: manifest,
+	})
+	if err := c.put(ctx, cur); err != nil {
+		return Release{}, err
+	}
+	return cur, nil
+}
+
+// Promote switches the router Service to the READY non-active slot.
+func (c *Client) Promote(ctx context.Context, router string, requireReady bool) (Release, error) {
+	active, has, err := c.routerActive(ctx, router)
+	if err != nil {
+		return Release{}, err
+	}
+	if !has {
+		return Release{}, fmt.Errorf("release %q is not blue-green (no router)", router)
+	}
+	target := SlotGreen
+	if active == SlotGreen {
+		target = SlotBlue
+	}
+	if _, ok, gerr := c.Get(ctx, slotReleaseName(router, target)); gerr != nil {
+		return Release{}, gerr
+	} else if !ok {
+		return Release{}, fmt.Errorf("slot %q does not exist", target)
+	}
+	if requireReady {
+		ready, rerr := c.slotReady(ctx, slotReleaseName(router, target))
+		if rerr != nil {
+			return Release{}, rerr
+		}
+		if !ready {
+			return Release{}, fmt.Errorf("slot %q is not ready", target)
+		}
+	}
+	return c.setRouterActive(ctx, router, target)
+}
+
+// Rollback switches the router back to the other slot (inverse of Promote).
+func (c *Client) RollbackRouter(ctx context.Context, router string) (Release, error) {
+	active, has, err := c.routerActive(ctx, router)
+	if err != nil {
+		return Release{}, err
+	}
+	if !has {
+		return Release{}, fmt.Errorf("release %q is not blue-green (no router)", router)
+	}
+	target := SlotGreen
+	if active == SlotGreen {
+		target = SlotBlue
+	}
+	if _, ok, gerr := c.Get(ctx, slotReleaseName(router, target)); gerr != nil {
+		return Release{}, gerr
+	} else if !ok {
+		return Release{}, fmt.Errorf("slot %q does not exist", target)
+	}
+	return c.setRouterActive(ctx, router, target)
+}
+
+// SlotInfo is one slot's live status.
+type SlotInfo struct {
+	Slot          string `json:"slot"`
+	Release       string `json:"release"`
+	Ready         bool   `json:"ready"`
+	ReadyWorkload int    `json:"readyWorkload"`
+	TotalWorkload int    `json:"totalWorkload"`
+}
+
+// Slots returns the live slots of a blue-green release + the active slot.
+func (c *Client) Slots(ctx context.Context, router string) ([]SlotInfo, string, error) {
+	active, has, err := c.routerActive(ctx, router)
+	if err != nil || !has {
+		return nil, "", err
+	}
+	var out []SlotInfo
+	for _, slot := range []string{SlotBlue, SlotGreen} {
+		name := slotReleaseName(router, slot)
+		_, ok, gerr := c.Get(ctx, name)
+		if gerr != nil {
+			return nil, "", gerr
+		}
+		if !ok {
+			continue
+		}
+		readyN, totalN, rerr := c.slotWorkloadReady(ctx, name)
+		if rerr != nil {
+			return nil, "", rerr
+		}
+		out = append(out, SlotInfo{Slot: slot, Release: name, Ready: totalN > 0 && readyN == totalN, ReadyWorkload: readyN, TotalWorkload: totalN})
+	}
+	return out, active, nil
+}
+
+// UninstallRouter removes a blue-green release: both slots, the router Service,
+// and the release records.
+func (c *Client) UninstallRouter(ctx context.Context, router string) (bool, error) {
+	any := false
+	for _, slot := range []string{SlotBlue, SlotGreen} {
+		if ok, err := c.Uninstall(ctx, slotReleaseName(router, slot)); err != nil {
+			return false, err
+		} else if ok {
+			any = true
+		}
+	}
+	// Delete the router Service + its record.
+	if err := c.deleteRouterService(ctx, router); err != nil {
+		return false, err
+	}
+	if _, ok, _ := c.Get(ctx, router); ok {
+		_ = c.cs.CoreV1().ConfigMaps(c.namespace).Delete(ctx, c.cmName(router), metav1.DeleteOptions{})
+		any = true
+	}
+	return any, nil
+}
+
+// ---- router internals ----
+
+// routerServiceName is the router Service name (the logical release name).
+func (c *Client) routerServiceName(router string) string { return router }
+
+// ensureRouter creates the router Service if absent. The FIRST slot deployed
+// activates that slot; an existing router is left on its current active slot.
+func (c *Client) ensureRouter(ctx context.Context, router, slot, manifest, creator, session string) error {
+	// Reuse the first Service in the slot manifest for ports (the chart's own
+	// Service). If none, derive from the first workload's container port.
+	ports := routerPortsFromManifest(manifest)
+	if len(ports) == 0 {
+		return fmt.Errorf("blue-green requires the chart to render a Service (or a containerPort)")
+	}
+	cur, err := c.cs.CoreV1().Services(c.namespace).Get(ctx, c.routerServiceName(router), metav1.GetOptions{})
+	if err == nil {
+		// Existing router: keep its active slot (do not auto-promote).
+		if cur.Annotations[routerActiveAnno] == "" {
+			// Adopt as blue.
+			if _, err := c.setRouterActive(ctx, router, SlotBlue); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return err
+	}
+	active := slot
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: c.routerServiceName(router), Namespace: c.namespace,
+			Labels: map[string]string{
+				releaseLabel: router, routerAnno: "1",
+				"app.kubernetes.io/managed-by": "workspace-gateway",
+			},
+			Annotations: map[string]string{routerActiveAnno: active},
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{releaseLabel: slotReleaseName(router, active), slotLabel: active},
+			Ports:    ports,
+		},
+	}
+	if _, err := c.cs.CoreV1().Services(c.namespace).Create(ctx, svc, metav1.CreateOptions{}); err != nil {
+		return err
+	}
+	// Record a router entry so List/History can surface it.
+	rec := Release{
+		Name: router, Namespace: c.namespace, Creator: creator, Session: session,
+		ActiveSlot: active, Status: "deployed", UpdatedAt: time.Now().UnixMilli(),
+	}
+	return c.put(ctx, rec)
+}
+
+// routerActive reads the router Service's active-slot annotation.
+func (c *Client) routerActive(ctx context.Context, router string) (string, bool, error) {
+	svc, err := c.cs.CoreV1().Services(c.namespace).Get(ctx, c.routerServiceName(router), metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	a := svc.Annotations[routerActiveAnno]
+	return a, a != "", nil
+}
+
+// setRouterActive repoints the router Service at `slot` and records it.
+func (c *Client) setRouterActive(ctx context.Context, router, slot string) (Release, error) {
+	svc, err := c.cs.CoreV1().Services(c.namespace).Get(ctx, c.routerServiceName(router), metav1.GetOptions{})
+	if err != nil {
+		return Release{}, err
+	}
+	svc.Spec.Selector = map[string]string{releaseLabel: slotReleaseName(router, slot), slotLabel: slot}
+	if svc.Annotations == nil {
+		svc.Annotations = map[string]string{}
+	}
+	svc.Annotations[routerActiveAnno] = slot
+	if _, err := c.cs.CoreV1().Services(c.namespace).Update(ctx, svc, metav1.UpdateOptions{}); err != nil {
+		return Release{}, err
+	}
+	rec, ok, err := c.Get(ctx, router)
+	if err != nil {
+		return Release{}, err
+	}
+	if !ok {
+		rec = Release{Name: router, Namespace: c.namespace}
+	}
+	rec.ActiveSlot = slot
+	rec.Status = "deployed"
+	rec.UpdatedAt = time.Now().UnixMilli()
+	if err := c.put(ctx, rec); err != nil {
+		return Release{}, err
+	}
+	return rec, nil
+}
+
+func (c *Client) deleteRouterService(ctx context.Context, router string) error {
+	err := c.cs.CoreV1().Services(c.namespace).Delete(ctx, c.routerServiceName(router), metav1.DeleteOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
+// slotWorkloadReady counts ready/total workload objects of a slot release.
+func (c *Client) slotWorkloadReady(ctx context.Context, release string) (int, int, error) {
+	deps, err := c.cs.AppsV1().Deployments(c.namespace).List(ctx, metav1.ListOptions{LabelSelector: releaseLabel + "=" + release})
+	if err != nil {
+		return 0, 0, err
+	}
+	ready, total := 0, 0
+	for i := range deps.Items {
+		d := &deps.Items[i]
+		total++
+		reps := int32(0)
+		if d.Spec.Replicas != nil {
+			reps = *d.Spec.Replicas
+		}
+		if reps > 0 && d.Status.ReadyReplicas >= reps {
+			ready++
+		}
+	}
+	// Also count StatefulSets.
+	stss, _ := c.cs.AppsV1().StatefulSets(c.namespace).List(ctx, metav1.ListOptions{LabelSelector: releaseLabel + "=" + release})
+	for i := range stss.Items {
+		s := &stss.Items[i]
+		total++
+		reps := int32(0)
+		if s.Spec.Replicas != nil {
+			reps = *s.Spec.Replicas
+		}
+		if reps > 0 && s.Status.ReadyReplicas >= reps {
+			ready++
+		}
+	}
+	return ready, total, nil
+}
+
+func (c *Client) slotReady(ctx context.Context, release string) (bool, error) {
+	ready, total, err := c.slotWorkloadReady(ctx, release)
+	if err != nil {
+		return false, err
+	}
+	return total > 0 && ready == total, nil
+}
+
+// injectSlotLabel parses the manifest and adds the release + slot labels to
+// every workload pod template so the router Service can select this slot's pods.
+func injectSlotLabel(manifest, release, slot string) (string, error) {
+	var out []string
+	for _, doc := range strings.Split(manifest, "\n---") {
+		if strings.TrimSpace(doc) == "" {
+			continue
+		}
+		var u unstructured.Unstructured
+		if err := yaml.Unmarshal([]byte(doc), &u.Object); err != nil {
+			return "", err
+		}
+		if len(u.Object) == 0 || u.GetKind() == "" {
+			out = append(out, doc)
+			continue
+		}
+		if metas, ok := workloadPodLabels[u.GetKind()]; ok {
+			for _, meta := range metas {
+				labels, _, _ := unstructured.NestedStringMap(u.Object, meta...)
+				if labels == nil {
+					labels = map[string]string{}
+				}
+				labels[releaseLabel] = release
+				labels[slotLabel] = slot
+				_ = unstructured.SetNestedStringMap(u.Object, labels, meta...)
+			}
+		}
+		b, err := sigsyaml.Marshal(u.Object)
+		if err != nil {
+			return "", err
+		}
+		out = append(out, strings.TrimRight(string(b), "\n"))
+	}
+	return strings.Join(out, "\n---\n"), nil
+}
+
+// routerPortsFromManifest extracts the first Service's ports; if the chart
+// renders no Service, derive a single tcp port from the first containerPort.
+func routerPortsFromManifest(manifest string) []corev1.ServicePort {
+	for _, doc := range strings.Split(manifest, "\n---") {
+		if strings.TrimSpace(doc) == "" {
+			continue
+		}
+		var u unstructured.Unstructured
+		if err := yaml.Unmarshal([]byte(doc), &u.Object); err != nil {
+			continue
+		}
+		if u.GetKind() != "Service" {
+			continue
+		}
+		var ports []corev1.ServicePort
+		raw, _, _ := unstructured.NestedSlice(u.Object, "spec", "ports")
+		for _, p := range raw {
+			m, ok := p.(map[string]any)
+			if !ok {
+				continue
+			}
+			port := toInt32(m["port"])
+			target := m["targetPort"]
+			if port == 0 {
+				continue
+			}
+			sp := corev1.ServicePort{Name: "http", Port: port, Protocol: corev1.ProtocolTCP}
+			switch t := target.(type) {
+			case int64:
+				sp.TargetPort = intstr.FromInt32(int32(t))
+			case int:
+				sp.TargetPort = intstr.FromInt32(int32(t))
+			case float64:
+				sp.TargetPort = intstr.FromInt32(int32(t))
+			case string:
+				sp.TargetPort = intstr.FromString(t)
+			default:
+				sp.TargetPort = intstr.FromInt32(port)
+			}
+			ports = append(ports, sp)
+		}
+		if len(ports) > 0 {
+			return ports
+		}
+	}
+	// No Service: derive from the first containerPort.
+	for _, doc := range strings.Split(manifest, "\n---") {
+		if strings.TrimSpace(doc) == "" {
+			continue
+		}
+		var u unstructured.Unstructured
+		if err := yaml.Unmarshal([]byte(doc), &u.Object); err != nil {
+			continue
+		}
+		if _, ok := workloadPodSpecs[u.GetKind()]; !ok {
+			continue
+		}
+		specs := workloadPodSpecs[u.GetKind()]
+		containers, _, _ := unstructured.NestedSlice(u.Object, append(append([]string{}, specs[0]...), "containers")...)
+		for _, cn := range containers {
+			m, ok := cn.(map[string]any)
+			if !ok {
+				continue
+			}
+			ports, _ := m["ports"].([]any)
+			for _, p := range ports {
+				pm, ok := p.(map[string]any)
+				if !ok {
+					continue
+				}
+				if cp := toInt32(pm["containerPort"]); cp > 0 {
+					return []corev1.ServicePort{{Name: "http", Port: cp, Protocol: corev1.ProtocolTCP, TargetPort: intstr.FromInt32(cp)}}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func toInt32(v any) int32 {
+	switch t := v.(type) {
+	case int64:
+		return int32(t)
+	case int:
+		return int32(t)
+	case float64:
+		return int32(t)
+	}
+	return 0
 }
 
 // Rollback re-applies a prior revision's manifest and records a new revision.

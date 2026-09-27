@@ -2433,7 +2433,26 @@ func toHelmReleaseInfo(r helmmgr.Release) *wsv1.HelmReleaseInfo {
 		Name: r.Name, Namespace: r.Namespace, Creator: r.Creator, Session: r.Session,
 		Ref: r.Ref, ChartPath: r.ChartPath, Revision: int32(r.Revision),
 		Status: r.Status, UpdatedAt: r.UpdatedAt,
+		Slot: r.Slot, Router: r.Router, ActiveSlot: r.ActiveSlot,
 	}
+}
+
+// helmReleaseInfoWithSlots attaches the live slot list (for a blue-green
+// release's router entry).
+func (s *Service) helmReleaseInfoWithSlots(ctx context.Context, r helmmgr.Release) *wsv1.HelmReleaseInfo {
+	info := toHelmReleaseInfo(r)
+	if r.Router == "" && r.ActiveSlot != "" {
+		if slots, active, err := s.helm.Slots(ctx, r.Name); err == nil {
+			info.ActiveSlot = active
+			for _, sl := range slots {
+				info.Slots = append(info.Slots, &wsv1.HelmSlotInfo{
+					Slot: sl.Slot, Release: sl.Release, Ready: sl.Ready,
+					ReadyWorkload: int32(sl.ReadyWorkload), TotalWorkload: int32(sl.TotalWorkload),
+				})
+			}
+		}
+	}
+	return info
 }
 
 // helmChartDir extracts the repo archive and resolves the chart directory,
@@ -2489,9 +2508,12 @@ func (s *Service) HelmDeploy(ctx context.Context, req *connect.Request[wsv1.Helm
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	defer cleanup()
+	if !helmmgr.ValidHelmSlot(m.GetSlot()) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("slot must be blue|green"))
+	}
 	opts := helmmgr.RenderOptions{
 		Release: m.GetRelease(), ChartPath: m.GetChartPath(),
-		ValuesYAML: m.GetValues(), Ref: ref,
+		ValuesYAML: m.GetValues(), Ref: ref, Slot: m.GetSlot(),
 	}
 	if m.GetDryRun() {
 		manifest, objects, terr := s.helm.Template(chartDir, opts)
@@ -2504,12 +2526,17 @@ func (s *Service) HelmDeploy(ctx context.Context, req *connect.Request[wsv1.Helm
 		}
 		return connect.NewResponse(&wsv1.HelmDeployResponse{Manifest: manifest, Objects: names}), nil
 	}
-	rel, err := s.helm.Apply(ctx, chartDir, opts, tenant, sessionFromHeaders(req.Header()))
+	var rel helmmgr.Release
+	if m.GetSlot() != "" {
+		rel, err = s.helm.ApplySlot(ctx, chartDir, opts, tenant, sessionFromHeaders(req.Header()))
+	} else {
+		rel, err = s.helm.Apply(ctx, chartDir, opts, tenant, sessionFromHeaders(req.Header()))
+	}
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&wsv1.HelmDeployResponse{
-		Release: toHelmReleaseInfo(rel),
+		Release: s.helmReleaseInfoWithSlots(ctx, rel),
 		Manifest: func() string {
 			if len(rel.History) > 0 {
 				return rel.History[len(rel.History)-1].Manifest
@@ -2537,7 +2564,12 @@ func (s *Service) HelmList(ctx context.Context, req *connect.Request[wsv1.HelmLi
 		if r.Creator != "" && r.Creator != tenant {
 			continue
 		}
-		out = append(out, toHelmReleaseInfo(r))
+		// A slot release is surfaced through its router entry's Slots, not as
+		// its own row.
+		if r.Router != "" {
+			continue
+		}
+		out = append(out, s.helmReleaseInfoWithSlots(ctx, r))
 	}
 	return connect.NewResponse(&wsv1.HelmListResponse{Releases: out}), nil
 }
@@ -2569,7 +2601,7 @@ func (s *Service) HelmHistory(ctx context.Context, req *connect.Request[wsv1.Hel
 			Values: rv.Values, CreatedAt: rv.CreatedAt, Objects: objs,
 		})
 	}
-	return connect.NewResponse(&wsv1.HelmHistoryResponse{Release: toHelmReleaseInfo(rel), Revisions: revs}), nil
+	return connect.NewResponse(&wsv1.HelmHistoryResponse{Release: s.helmReleaseInfoWithSlots(ctx, rel), Revisions: revs}), nil
 }
 
 // HelmRollback re-applies a prior revision.
@@ -2615,11 +2647,67 @@ func (s *Service) HelmUninstall(ctx context.Context, req *connect.Request[wsv1.H
 	if !ok || (cur.Creator != "" && cur.Creator != tenant) {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("release not found"))
 	}
-	ok2, err := s.helm.Uninstall(ctx, req.Msg.GetRelease())
+	var ok2 bool
+	if cur.ActiveSlot != "" {
+		// Blue-green router entry: remove both slots + the router Service.
+		ok2, err = s.helm.UninstallRouter(ctx, req.Msg.GetRelease())
+	} else {
+		ok2, err = s.helm.Uninstall(ctx, req.Msg.GetRelease())
+	}
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&wsv1.HelmUninstallResponse{Ok: ok2}), nil
+}
+
+// HelmPromote switches a blue-green Helm release's router to the other slot.
+func (s *Service) HelmPromote(ctx context.Context, req *connect.Request[wsv1.HelmPromoteRequest]) (*connect.Response[wsv1.HelmPromoteResponse], error) {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	if s.helm == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("helm backend not configured"))
+	}
+	if err := s.ownedHelmRelease(ctx, tenant, req.Msg.GetRelease()); err != nil {
+		return nil, err
+	}
+	rel, err := s.helm.Promote(ctx, req.Msg.GetRelease(), !req.Msg.GetForce())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return connect.NewResponse(&wsv1.HelmPromoteResponse{Release: s.helmReleaseInfoWithSlots(ctx, rel)}), nil
+}
+
+// HelmRollbackRelease switches a blue-green Helm release's router back a slot.
+func (s *Service) HelmRollbackRelease(ctx context.Context, req *connect.Request[wsv1.HelmRollbackReleaseRequest]) (*connect.Response[wsv1.HelmRollbackReleaseResponse], error) {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	if s.helm == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("helm backend not configured"))
+	}
+	if err := s.ownedHelmRelease(ctx, tenant, req.Msg.GetRelease()); err != nil {
+		return nil, err
+	}
+	rel, err := s.helm.RollbackRouter(ctx, req.Msg.GetRelease())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return connect.NewResponse(&wsv1.HelmRollbackReleaseResponse{Release: s.helmReleaseInfoWithSlots(ctx, rel)}), nil
+}
+
+// ownedHelmRelease verifies the release exists and belongs to the tenant.
+func (s *Service) ownedHelmRelease(ctx context.Context, tenant, release string) error {
+	rel, ok, err := s.helm.Get(ctx, release)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, err)
+	}
+	if !ok || (rel.Creator != "" && rel.Creator != tenant) {
+		return connect.NewError(connect.CodeNotFound, errors.New("release not found"))
+	}
+	return nil
 }
 
 var helmReleaseRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,52}[a-z0-9])?$`)

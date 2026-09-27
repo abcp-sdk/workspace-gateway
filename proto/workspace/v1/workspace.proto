@@ -1298,6 +1298,24 @@ message HelmReleaseInfo {
   int32 revision = 7;
   string status = 8; // deployed | failed
   int64 updated_at = 9;
+  // Blue-green: "blue"/"green" for a slot release (empty = plain release).
+  string slot = 10;
+  // Router is the logical release name a slot release belongs to (empty for a
+  // plain release).
+  string router = 11;
+  // ActiveSlot is set on a blue-green release's router entry.
+  string active_slot = 12;
+  // Slots lists the live slots of a blue-green release (empty for plain).
+  repeated HelmSlotInfo slots = 13;
+}
+
+// HelmSlotInfo is one slot of a blue-green Helm release.
+message HelmSlotInfo {
+  string slot = 1;
+  string release = 2;
+  bool ready = 3;
+  int32 ready_workload = 4;
+  int32 total_workload = 5;
 }
 
 message HelmRevisionInfo {
@@ -1322,6 +1340,10 @@ message HelmDeployRequest {
   string values = 6;
   // Dry-run: render + validate only (no apply, no release record).
   bool dry_run = 7;
+  // Blue-green slot: "blue"/"green" (empty = a plain release). A slot deploy
+  // stores the release under `<release>-<slot>` and creates/keeps a router
+  // Service named `<release>`; the router targets the ACTIVE slot.
+  string slot = 8;
 }
 message HelmDeployResponse {
   HelmReleaseInfo release = 1;
@@ -1348,6 +1370,17 @@ message HelmRollbackResponse { HelmReleaseInfo release = 1; }
 
 message HelmUninstallRequest { string release = 1; }
 message HelmUninstallResponse { bool ok = 1; }
+
+// HelmPromoteRequest / HelmRollbackRelease switch a blue-green release's router
+// to the non-active / other slot.
+message HelmPromoteRequest {
+  string release = 1;
+  bool force = 2;
+}
+message HelmPromoteResponse { HelmReleaseInfo release = 1; }
+
+message HelmRollbackReleaseRequest { string release = 1; }
+message HelmRollbackReleaseResponse { HelmReleaseInfo release = 1; }
 
 // ---- service logs ----
 message ServiceLogsRequest {
@@ -1550,6 +1583,9 @@ service BranchSessionService {
   rpc HelmHistory(HelmHistoryRequest) returns (HelmHistoryResponse);
   rpc HelmRollback(HelmRollbackRequest) returns (HelmRollbackResponse);
   rpc HelmUninstall(HelmUninstallRequest) returns (HelmUninstallResponse);
+  // Blue-green slot switch for a Helm release.
+  rpc HelmPromote(HelmPromoteRequest) returns (HelmPromoteResponse);
+  rpc HelmRollbackRelease(HelmRollbackReleaseRequest) returns (HelmRollbackReleaseResponse);
 
   // ---- forwarded agent surface (minimal; no policy RPCs) ----
   rpc Health(agent.v1.HealthRequest) returns (agent.v1.HealthResponse);
