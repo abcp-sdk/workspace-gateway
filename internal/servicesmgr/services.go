@@ -45,6 +45,15 @@ const (
 	// service was paused (scaled to 0), so Resume can restore it. Presence of
 	// this annotation is what marks a service as PAUSED.
 	AnnoReplicasBeforePause = "workspace/service-replicas-before-pause"
+	// LabelSlot marks a blue-green pod/Deployment/Service with its slot
+	// ("blue" | "green"). The primary Service selects the ACTIVE slot via this
+	// label; slot Services select their own slot.
+	LabelSlot = "workspace/slot"
+	// AnnoActiveSlot (on the primary Service) records which slot the primary URL
+	// currently targets. Its presence is what marks a service as BLUE-GREEN.
+	AnnoActiveSlot = "workspace/service-active-slot"
+	// AnnoSlot (on a slot Service) records which slot it selects.
+	AnnoSlot = "workspace/service-slot"
 	// PVC labels/annotations stamped on every claim this manager creates.
 	LabelPVC       = "workspace/pvc"
 	LabelPVCName   = "workspace/pvc-name"
@@ -125,6 +134,9 @@ type Service struct {
 	StartupProbe   Probe
 	Rollout        Rollout
 	SidecarCount   int32
+	// ---- blue-green (empty/nil for a plain service) ----
+	ActiveSlot string
+	Slots      []ServiceSlot
 }
 
 // LogOptions selects which container log to read.
@@ -272,6 +284,9 @@ type Spec struct {
 	ContainerPort int32
 	ServicePort   int32
 	Creator       string
+	// Slot selects the blue-green slot to deploy into ("blue" | "green"; empty
+	// = "blue"). Blue keeps the base Deployment name; green is `<name>-green`.
+	Slot string
 	// Session is the session that deployed the service (empty = unbound).
 	Session string
 	// Stage is "release" (default) or "preview".
@@ -733,6 +748,13 @@ func (c *Client) applyService(ctx context.Context, svc *corev1.Service) error {
 
 // Get returns one service by name.
 func (c *Client) Get(ctx context.Context, name string) (Service, error) {
+	// A blue-green service is identified by its router Service's active-slot
+	// annotation; its base Deployment may not exist yet (green-first deploy).
+	if slots, active, err := c.Slots(ctx, name); err != nil {
+		return Service{}, err
+	} else if active != "" {
+		return c.slotServiceView(ctx, name, slots, active)
+	}
 	d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return Service{}, err
@@ -740,6 +762,53 @@ func (c *Client) Get(ctx context.Context, name string) (Service, error) {
 	svc := toService(c, d, c.portsFor(ctx, name))
 	svc.PodPhase, svc.Restarts, svc.Message = c.podDiagnostics(ctx, name)
 	return svc, nil
+}
+
+// slotServiceView builds the Service view for a blue-green service: identity
+// from the active slot, plus both slots in Slots.
+func (c *Client) slotServiceView(ctx context.Context, name string, slots []ServiceSlot, active string) (Service, error) {
+	depName := slotFor(name, active).DeployName
+	d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, depName, metav1.GetOptions{})
+	if err != nil {
+		return Service{}, err
+	}
+	svc := toService(c, d, c.portsFor(ctx, name))
+	// toService names the service after the Deployment; for a slot that is
+	// `<name>-green`, so restore the logical service name.
+	svc.Name = name
+	svc.PodPhase, svc.Restarts, svc.Message = c.podDiagnostics(ctx, depName)
+	svc.ActiveSlot = active
+	svc.Slots = slots
+	// Primary URL stays `<name>` (the router), so override the slot-derived URL.
+	svc.URL = fmt.Sprintf("http://%s.%s.svc.cluster.local:%d", name, c.namespace, c.routerPort(ctx, name))
+	for _, sl := range slots {
+		if sl.Slot == active {
+			svc.Image = sl.Image
+			svc.Ready = sl.Ready
+			svc.Replicas = sl.Replicas
+			svc.ReadyReplicas = sl.ReadyReplicas
+			svc.Phase = sl.PodPhase
+			svc.PodPhase = sl.PodPhase
+			svc.Restarts = sl.Restarts
+			svc.Message = sl.Message
+			break
+		}
+	}
+	return svc, nil
+}
+
+// routerPort is the primary Service's first TCP port (default 80).
+func (c *Client) routerPort(ctx context.Context, name string) int32 {
+	svc, err := c.cs.CoreV1().Services(c.namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return 80
+	}
+	for _, p := range svc.Spec.Ports {
+		if p.Protocol == corev1.ProtocolTCP {
+			return p.Port
+		}
+	}
+	return 80
 }
 
 // portsFor collects every port across the primary Service and its siblings.
@@ -751,6 +820,11 @@ func (c *Client) portsFor(ctx context.Context, name string) []Port {
 	out := []Port{}
 	for i := range list.Items {
 		svc := &list.Items[i]
+		// Slot Services (`<name>-blue` / `<name>-green`) are per-slot copies of
+		// the exposed ports; they are surfaced via Slots(), not as suffixes.
+		if svc.Labels[LabelSlot] != "" {
+			continue
+		}
 		suffix := ""
 		if svc.Name != name {
 			suffix = strings.TrimPrefix(svc.Name, name+"-")
@@ -784,10 +858,39 @@ func (c *Client) List(ctx context.Context) ([]Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Blue-green services are keyed by their router Service; enumerate those
+	// first (a green-first deploy has no base Deployment), then the plain
+	// Deployments, skipping the green slot (surfaced via its router's Slots).
+	seen := map[string]bool{}
 	out := make([]Service, 0, len(list.Items))
+	svcList, serr := c.cs.CoreV1().Services(c.namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: LabelManaged + "=1",
+	})
+	if serr == nil {
+		for i := range svcList.Items {
+			s := &svcList.Items[i]
+			if s.Annotations[AnnoActiveSlot] == "" || seen[s.Name] {
+				continue
+			}
+			slots, active, err := c.Slots(ctx, s.Name)
+			if err != nil || active == "" {
+				continue
+			}
+			view, verr := c.slotServiceView(ctx, s.Name, slots, active)
+			if verr != nil {
+				continue
+			}
+			seen[s.Name] = true
+			out = append(out, view)
+		}
+	}
 	for i := range list.Items {
-		svc := toService(c, &list.Items[i], c.portsFor(ctx, list.Items[i].Name))
-		svc.PodPhase, svc.Restarts, svc.Message = c.podDiagnostics(ctx, list.Items[i].Name)
+		d := &list.Items[i]
+		if d.Labels[LabelSlot] == SlotGreen || seen[d.Name] {
+			continue
+		}
+		svc := toService(c, d, c.portsFor(ctx, d.Name))
+		svc.PodPhase, svc.Restarts, svc.Message = c.podDiagnostics(ctx, d.Name)
 		out = append(out, svc)
 	}
 	return out, nil
@@ -958,7 +1061,7 @@ func toPVC(p *corev1.PersistentVolumeClaim, mountedBy []string) PVC {
 // it had (so Resume restores it). Idempotent: pausing an already-paused service
 // keeps the originally remembered count. Returns the updated view.
 func (c *Client) Pause(ctx context.Context, name string) (Service, error) {
-	d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, name, metav1.GetOptions{})
+	d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, c.activeDeployName(ctx, name), metav1.GetOptions{})
 	if err != nil {
 		return Service{}, err
 	}
@@ -987,7 +1090,7 @@ func (c *Client) Pause(ctx context.Context, name string) (Service, error) {
 // time (default 1 when absent) and clears the pause marker. Returns the
 // updated view.
 func (c *Client) Resume(ctx context.Context, name string) (Service, error) {
-	d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, name, metav1.GetOptions{})
+	d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, c.activeDeployName(ctx, name), metav1.GetOptions{})
 	if err != nil {
 		return Service{}, err
 	}
@@ -1011,7 +1114,7 @@ func (c *Client) Scale(ctx context.Context, name string, replicas int32) (Servic
 	if replicas < 0 {
 		return Service{}, fmt.Errorf("replicas must be >= 0")
 	}
-	d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, name, metav1.GetOptions{})
+	d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, c.activeDeployName(ctx, name), metav1.GetOptions{})
 	if err != nil {
 		return Service{}, err
 	}
@@ -1030,7 +1133,7 @@ func (c *Client) Scale(ctx context.Context, name string, replicas int32) (Servic
 // metadata (status, uid, resourceVersion, creationTimestamp, managedFields) is
 // stripped so the result is a clean, re-appliable spec.
 func (c *Client) Manifest(ctx context.Context, name string) (string, error) {
-	d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, name, metav1.GetOptions{})
+	d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, c.activeDeployName(ctx, name), metav1.GetOptions{})
 	if err != nil {
 		return "", err
 	}
@@ -1251,6 +1354,10 @@ func splitYAMLDocs(manifest string) []string {
 
 // Delete removes the Deployment + its Service(s) (primary + siblings).
 func (c *Client) Delete(ctx context.Context, name string) (bool, error) {
+	// Blue-green: remove the router, both slot Services, and both Deployments.
+	if c.IsSlotted(ctx, name) {
+		return c.DeleteSlot(ctx, name)
+	}
 	_, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return false, nil

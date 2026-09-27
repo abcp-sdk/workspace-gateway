@@ -93,6 +93,7 @@ var repoReviewTools = []string{
 	"repo-mr-list", "repo-mr-comment", "repo-mr-merge",
 	"repo-mail-send",
 	"service-deploy", "service-list", "service-delete", "service-logs",
+	"service-promote", "service-rollback",
 	"repo-build-preview", "service-preview",
 }
 
@@ -104,6 +105,7 @@ var adminTools = []string{
 	"repo-set-push-mirror", "repo-list-push-mirrors", "repo-delete-push-mirror",
 	"list-oci-images", "oci-import",
 	"service-deploy", "service-list", "service-delete", "service-logs",
+	"service-promote", "service-rollback",
 	"repo-build-preview", "service-preview",
 	"pvc-create", "pvc-list", "pvc-delete",
 }

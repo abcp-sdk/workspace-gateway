@@ -2296,15 +2296,54 @@ func (s *Service) DeployService(ctx context.Context, req *connect.Request[wsv1.D
 		Sidecars:       toSidecars(m.GetSidecars()),
 		NodeSelector:   m.GetNodeSelector(),
 		Tolerations:    toTolerations(m.GetTolerations()),
+		Slot:           m.GetSlot(),
 	}
 	if spec.Image == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("image is required"))
 	}
-	svc, err := s.services.Deploy(ctx, spec)
+	if !servicesmgr.ValidSlot(m.GetSlot()) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("slot must be blue|green"))
+	}
+	var svc servicesmgr.Service
+	if m.GetSlot() != "" {
+		svc, err = s.services.DeploySlot(ctx, spec)
+	} else {
+		svc, err = s.services.Deploy(ctx, spec)
+	}
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&wsv1.DeployServiceResponse{Service: toServiceInfo(svc, s.servicePublicURLs(svc, req.Header()))}), nil
+	return connect.NewResponse(&wsv1.DeployServiceResponse{Service: s.toServiceInfo(svc, req.Header())}), nil
+}
+
+// PromoteService switches a blue-green service's primary URL to the other slot.
+func (s *Service) PromoteService(ctx context.Context, req *connect.Request[wsv1.PromoteServiceRequest]) (*connect.Response[wsv1.PromoteServiceResponse], error) {
+	if _, err := s.ownedService(ctx, req.Header(), req.Msg.GetName()); err != nil {
+		return nil, err
+	}
+	if s.services == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+	}
+	svc, err := s.services.Promote(ctx, req.Msg.GetName(), !req.Msg.GetForce())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return connect.NewResponse(&wsv1.PromoteServiceResponse{Service: s.toServiceInfo(svc, req.Header())}), nil
+}
+
+// RollbackService switches a blue-green service's primary URL back a slot.
+func (s *Service) RollbackService(ctx context.Context, req *connect.Request[wsv1.RollbackServiceRequest]) (*connect.Response[wsv1.RollbackServiceResponse], error) {
+	if _, err := s.ownedService(ctx, req.Header(), req.Msg.GetName()); err != nil {
+		return nil, err
+	}
+	if s.services == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+	}
+	svc, err := s.services.Rollback(ctx, req.Msg.GetName())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return connect.NewResponse(&wsv1.RollbackServiceResponse{Service: s.toServiceInfo(svc, req.Header())}), nil
 }
 
 // servicePorts resolves the requested ports into servicesmgr.Port values. With
@@ -2587,7 +2626,7 @@ func (s *Service) listServices(ctx context.Context, tenant string, hdr map[strin
 		if svc.Creator != "" && svc.Creator != tenant {
 			continue
 		}
-		out = append(out, toServiceInfo(svc, s.servicePublicURLs(svc, hdr)))
+		out = append(out, s.toServiceInfo(svc, hdr))
 	}
 	sortByCreatedAtDesc(out)
 	return out, nil
@@ -2670,7 +2709,7 @@ func (s *Service) ScaleService(ctx context.Context, req *connect.Request[wsv1.Sc
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&wsv1.ScaleServiceResponse{Service: toServiceInfo(out, s.servicePublicURLs(out, req.Header()))}), nil
+	return connect.NewResponse(&wsv1.ScaleServiceResponse{Service: s.toServiceInfo(out, req.Header())}), nil
 }
 
 // GetServiceManifest returns the service's Deployment + Services as YAML.
@@ -2702,7 +2741,7 @@ func (s *Service) ApplyServiceManifest(ctx context.Context, req *connect.Request
 	}
 	resp := &wsv1.ApplyServiceManifestResponse{Yaml: y}
 	if !req.Msg.GetDryRun() {
-		resp.Service = toServiceInfo(out, s.servicePublicURLs(out, req.Header()))
+		resp.Service = s.toServiceInfo(out, req.Header())
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -2733,7 +2772,7 @@ func (s *Service) pauseResume(ctx context.Context, hdr map[string][]string, name
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return toServiceInfo(out, s.servicePublicURLs(out, hdr)), nil
+	return s.toServiceInfo(out, hdr), nil
 }
 
 // PreviewService deploys a session-bound, cluster-only PREVIEW service for
@@ -2805,7 +2844,7 @@ func (s *Service) PreviewService(ctx context.Context, req *connect.Request[wsv1.
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	// No public URLs: a preview is reachable only in-cluster.
-	return connect.NewResponse(&wsv1.PreviewServiceResponse{Service: toServiceInfo(svc, nil)}), nil
+	return connect.NewResponse(&wsv1.PreviewServiceResponse{Service: s.toServiceInfo(svc, nil)}), nil
 }
 
 // previewName prefixes a base name with the session slug, keeping it a legal
@@ -3076,7 +3115,33 @@ func sessionFromHeaders(hdr map[string][]string) string {
 	return ""
 }
 
-func toServiceInfo(svc servicesmgr.Service, publicURLs map[string]string) *wsv1.ServiceInfo {
+func (s *Service) toServiceInfo(svc servicesmgr.Service, hdr map[string][]string) *wsv1.ServiceInfo {
+	publicURLs := s.servicePublicURLs(svc, hdr)
+	slotURLs := s.slotPublicURLs(svc, hdr)
+	return toServiceInfoImpl(svc, publicURLs, slotURLs)
+}
+
+// slotPublicURLs returns each slot's own public URL (`https://<name>-<slot>.<ns>.<domain>`).
+func (s *Service) slotPublicURLs(svc servicesmgr.Service, hdr map[string][]string) map[string]string {
+	if len(svc.Slots) == 0 {
+		return nil
+	}
+	domain := s.publicDomainFor(hdr)
+	if domain == "" {
+		return nil
+	}
+	ns := s.sandboxNS
+	if ns == "" {
+		ns = "worker"
+	}
+	out := map[string]string{}
+	for _, sl := range svc.Slots {
+		out[sl.Slot] = "https://" + svc.Name + "-" + sl.Slot + "." + ns + "." + domain
+	}
+	return out
+}
+
+func toServiceInfoImpl(svc servicesmgr.Service, publicURLs, slotURLs map[string]string) *wsv1.ServiceInfo {
 	ports := make([]*wsv1.ServicePortInfo, 0, len(svc.Ports))
 	primary := ""
 	for _, p := range svc.Ports {
@@ -3124,7 +3189,26 @@ func toServiceInfo(svc servicesmgr.Service, publicURLs map[string]string) *wsv1.
 		StartupProbe:   fromProbeSpec(svc.StartupProbe),
 		Rollout:        fromRollout(svc.Rollout),
 		SidecarCount:   svc.SidecarCount,
+		ActiveSlot:     svc.ActiveSlot,
+		Slots:          toSlotInfos(svc.Slots, slotURLs),
 	}
+}
+
+// toSlotInfos maps the live slots to proto, attaching each slot's public URL.
+func toSlotInfos(slots []servicesmgr.ServiceSlot, slotURLs map[string]string) []*wsv1.ServiceSlotInfo {
+	if len(slots) == 0 {
+		return nil
+	}
+	out := make([]*wsv1.ServiceSlotInfo, 0, len(slots))
+	for _, sl := range slots {
+		out = append(out, &wsv1.ServiceSlotInfo{
+			Slot: sl.Slot, Image: sl.Image, Ready: sl.Ready,
+			Replicas: sl.Replicas, ReadyReplicas: sl.ReadyReplicas,
+			Url: sl.URL, PublicUrl: slotURLs[sl.Slot], CreatedAt: sl.CreatedAt,
+			PodPhase: sl.PodPhase, Restarts: sl.Restarts, Message: sl.Message,
+		})
+	}
+	return out
 }
 
 // ---- Tier 0 reverse mapping (servicesmgr -> proto) ----

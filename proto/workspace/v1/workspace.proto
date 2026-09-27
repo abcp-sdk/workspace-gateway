@@ -918,6 +918,12 @@ message ServiceInfo {
   ProbeSpec startup_probe = 28;
   RolloutSpec rollout = 29;
   int32 sidecar_count = 30;
+  // ---- blue-green ----
+  // The slot the primary URL currently targets: "blue" or "green". Empty for a
+  // non-slotted (plain) service.
+  string active_slot = 31;
+  // Every slot that exists (blue/green), with its own address + status.
+  repeated ServiceSlotInfo slots = 32;
 }
 
 // VolumeMountInfo is one PVC mounted into a service container.
@@ -1023,6 +1029,26 @@ message ConfigMountInfo {
   string mount_path = 3;
 }
 
+// ServiceSlotInfo describes one blue-green slot of a service. The service's
+// primary URL always targets the ACTIVE slot; each slot also has its own
+// address (`<name>-blue` / `<name>-green`).
+message ServiceSlotInfo {
+  // "blue" (the stable slot) or "green" (the candidate slot).
+  string slot = 1;
+  string image = 2;
+  bool ready = 3;
+  int32 replicas = 4;
+  int32 ready_replicas = 5;
+  // In-cluster URL of this slot's own Service.
+  string url = 6;
+  // Public URL of this slot's own Service (`https://<name>-<slot>.<domain>`).
+  string public_url = 7;
+  int64 created_at = 8;
+  string pod_phase = 9;
+  int32 restarts = 10;
+  string message = 11;
+}
+
 // ServicePortInfo is one exposed port of a service.
 message ServicePortInfo {
   // Service suffix ("" = the primary service `<name>`; else `<name>-<suffix>`).
@@ -1111,6 +1137,10 @@ message DeployServiceRequest {
   // Scheduling.
   map<string, string> node_selector = 23;
   repeated TolerationSpec tolerations = 24;
+  // Blue-green slot to deploy into: "blue" (default) or "green". Blue keeps the
+  // base Deployment; green is `<name>-green`. The primary URL always targets
+  // the ACTIVE slot (blue until a Promote); each slot has its own address.
+  string slot = 25;
 }
 message DeployServiceResponse { ServiceInfo service = 1; }
 
@@ -1151,6 +1181,20 @@ message PreviewServiceResponse { ServiceInfo service = 1; }
 
 message ListServicesRequest {}
 message ListServicesResponse { repeated ServiceInfo services = 1; }
+
+// PromoteService switches a blue-green service's primary URL to the non-active
+// slot (blue<->green). By default the target slot must be fully ready.
+message PromoteServiceRequest {
+  string name = 1;
+  // Allow promoting a slot that is not fully ready.
+  bool force = 2;
+}
+message PromoteServiceResponse { ServiceInfo service = 1; }
+
+// RollbackService switches the primary URL back to the other slot (the inverse
+// of PromoteService).
+message RollbackServiceRequest { string name = 1; }
+message RollbackServiceResponse { ServiceInfo service = 1; }
 
 message DeleteServiceRequest { string name = 1; }
 message DeleteServiceResponse { bool ok = 1; }
@@ -1411,6 +1455,9 @@ service BranchSessionService {
   rpc ResumeService(ResumeServiceRequest) returns (ResumeServiceResponse);
   // ScaleService sets the desired replica count (0 = scaled down).
   rpc ScaleService(ScaleServiceRequest) returns (ScaleServiceResponse);
+  // PromoteService / RollbackService: blue-green slot switch.
+  rpc PromoteService(PromoteServiceRequest) returns (PromoteServiceResponse);
+  rpc RollbackService(RollbackServiceRequest) returns (RollbackServiceResponse);
   // GetServiceManifest returns the Deployment + Services as YAML (read-only).
   rpc GetServiceManifest(GetServiceManifestRequest) returns (GetServiceManifestResponse);
   // ApplyServiceManifest replaces a service from edited YAML (owner-only).

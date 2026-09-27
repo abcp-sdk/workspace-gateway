@@ -244,6 +244,12 @@ const (
 	// BranchSessionServiceScaleServiceProcedure is the fully-qualified name of the
 	// BranchSessionService's ScaleService RPC.
 	BranchSessionServiceScaleServiceProcedure = "/workspace.v1.BranchSessionService/ScaleService"
+	// BranchSessionServicePromoteServiceProcedure is the fully-qualified name of the
+	// BranchSessionService's PromoteService RPC.
+	BranchSessionServicePromoteServiceProcedure = "/workspace.v1.BranchSessionService/PromoteService"
+	// BranchSessionServiceRollbackServiceProcedure is the fully-qualified name of the
+	// BranchSessionService's RollbackService RPC.
+	BranchSessionServiceRollbackServiceProcedure = "/workspace.v1.BranchSessionService/RollbackService"
 	// BranchSessionServiceGetServiceManifestProcedure is the fully-qualified name of the
 	// BranchSessionService's GetServiceManifest RPC.
 	BranchSessionServiceGetServiceManifestProcedure = "/workspace.v1.BranchSessionService/GetServiceManifest"
@@ -466,6 +472,9 @@ type BranchSessionServiceClient interface {
 	ResumeService(context.Context, *connect.Request[v1.ResumeServiceRequest]) (*connect.Response[v1.ResumeServiceResponse], error)
 	// ScaleService sets the desired replica count (0 = scaled down).
 	ScaleService(context.Context, *connect.Request[v1.ScaleServiceRequest]) (*connect.Response[v1.ScaleServiceResponse], error)
+	// PromoteService / RollbackService: blue-green slot switch.
+	PromoteService(context.Context, *connect.Request[v1.PromoteServiceRequest]) (*connect.Response[v1.PromoteServiceResponse], error)
+	RollbackService(context.Context, *connect.Request[v1.RollbackServiceRequest]) (*connect.Response[v1.RollbackServiceResponse], error)
 	// GetServiceManifest returns the Deployment + Services as YAML (read-only).
 	GetServiceManifest(context.Context, *connect.Request[v1.GetServiceManifestRequest]) (*connect.Response[v1.GetServiceManifestResponse], error)
 	// ApplyServiceManifest replaces a service from edited YAML (owner-only).
@@ -933,6 +942,18 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(branchSessionServiceMethods.ByName("ScaleService")),
 			connect.WithClientOptions(opts...),
 		),
+		promoteService: connect.NewClient[v1.PromoteServiceRequest, v1.PromoteServiceResponse](
+			httpClient,
+			baseURL+BranchSessionServicePromoteServiceProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("PromoteService")),
+			connect.WithClientOptions(opts...),
+		),
+		rollbackService: connect.NewClient[v1.RollbackServiceRequest, v1.RollbackServiceResponse](
+			httpClient,
+			baseURL+BranchSessionServiceRollbackServiceProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("RollbackService")),
+			connect.WithClientOptions(opts...),
+		),
 		getServiceManifest: connect.NewClient[v1.GetServiceManifestRequest, v1.GetServiceManifestResponse](
 			httpClient,
 			baseURL+BranchSessionServiceGetServiceManifestProcedure,
@@ -1262,6 +1283,8 @@ type branchSessionServiceClient struct {
 	pauseService         *connect.Client[v1.PauseServiceRequest, v1.PauseServiceResponse]
 	resumeService        *connect.Client[v1.ResumeServiceRequest, v1.ResumeServiceResponse]
 	scaleService         *connect.Client[v1.ScaleServiceRequest, v1.ScaleServiceResponse]
+	promoteService       *connect.Client[v1.PromoteServiceRequest, v1.PromoteServiceResponse]
+	rollbackService      *connect.Client[v1.RollbackServiceRequest, v1.RollbackServiceResponse]
 	getServiceManifest   *connect.Client[v1.GetServiceManifestRequest, v1.GetServiceManifestResponse]
 	applyServiceManifest *connect.Client[v1.ApplyServiceManifestRequest, v1.ApplyServiceManifestResponse]
 	createPVC            *connect.Client[v1.CreatePVCRequest, v1.CreatePVCResponse]
@@ -1637,6 +1660,16 @@ func (c *branchSessionServiceClient) ScaleService(ctx context.Context, req *conn
 	return c.scaleService.CallUnary(ctx, req)
 }
 
+// PromoteService calls workspace.v1.BranchSessionService.PromoteService.
+func (c *branchSessionServiceClient) PromoteService(ctx context.Context, req *connect.Request[v1.PromoteServiceRequest]) (*connect.Response[v1.PromoteServiceResponse], error) {
+	return c.promoteService.CallUnary(ctx, req)
+}
+
+// RollbackService calls workspace.v1.BranchSessionService.RollbackService.
+func (c *branchSessionServiceClient) RollbackService(ctx context.Context, req *connect.Request[v1.RollbackServiceRequest]) (*connect.Response[v1.RollbackServiceResponse], error) {
+	return c.rollbackService.CallUnary(ctx, req)
+}
+
 // GetServiceManifest calls workspace.v1.BranchSessionService.GetServiceManifest.
 func (c *branchSessionServiceClient) GetServiceManifest(ctx context.Context, req *connect.Request[v1.GetServiceManifestRequest]) (*connect.Response[v1.GetServiceManifestResponse], error) {
 	return c.getServiceManifest.CallUnary(ctx, req)
@@ -1944,6 +1977,9 @@ type BranchSessionServiceHandler interface {
 	ResumeService(context.Context, *connect.Request[v1.ResumeServiceRequest]) (*connect.Response[v1.ResumeServiceResponse], error)
 	// ScaleService sets the desired replica count (0 = scaled down).
 	ScaleService(context.Context, *connect.Request[v1.ScaleServiceRequest]) (*connect.Response[v1.ScaleServiceResponse], error)
+	// PromoteService / RollbackService: blue-green slot switch.
+	PromoteService(context.Context, *connect.Request[v1.PromoteServiceRequest]) (*connect.Response[v1.PromoteServiceResponse], error)
+	RollbackService(context.Context, *connect.Request[v1.RollbackServiceRequest]) (*connect.Response[v1.RollbackServiceResponse], error)
 	// GetServiceManifest returns the Deployment + Services as YAML (read-only).
 	GetServiceManifest(context.Context, *connect.Request[v1.GetServiceManifestRequest]) (*connect.Response[v1.GetServiceManifestResponse], error)
 	// ApplyServiceManifest replaces a service from edited YAML (owner-only).
@@ -2407,6 +2443,18 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		connect.WithSchema(branchSessionServiceMethods.ByName("ScaleService")),
 		connect.WithHandlerOptions(opts...),
 	)
+	branchSessionServicePromoteServiceHandler := connect.NewUnaryHandler(
+		BranchSessionServicePromoteServiceProcedure,
+		svc.PromoteService,
+		connect.WithSchema(branchSessionServiceMethods.ByName("PromoteService")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceRollbackServiceHandler := connect.NewUnaryHandler(
+		BranchSessionServiceRollbackServiceProcedure,
+		svc.RollbackService,
+		connect.WithSchema(branchSessionServiceMethods.ByName("RollbackService")),
+		connect.WithHandlerOptions(opts...),
+	)
 	branchSessionServiceGetServiceManifestHandler := connect.NewUnaryHandler(
 		BranchSessionServiceGetServiceManifestProcedure,
 		svc.GetServiceManifest,
@@ -2799,6 +2847,10 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceResumeServiceHandler.ServeHTTP(w, r)
 		case BranchSessionServiceScaleServiceProcedure:
 			branchSessionServiceScaleServiceHandler.ServeHTTP(w, r)
+		case BranchSessionServicePromoteServiceProcedure:
+			branchSessionServicePromoteServiceHandler.ServeHTTP(w, r)
+		case BranchSessionServiceRollbackServiceProcedure:
+			branchSessionServiceRollbackServiceHandler.ServeHTTP(w, r)
 		case BranchSessionServiceGetServiceManifestProcedure:
 			branchSessionServiceGetServiceManifestHandler.ServeHTTP(w, r)
 		case BranchSessionServiceApplyServiceManifestProcedure:
@@ -3156,6 +3208,14 @@ func (UnimplementedBranchSessionServiceHandler) ResumeService(context.Context, *
 
 func (UnimplementedBranchSessionServiceHandler) ScaleService(context.Context, *connect.Request[v1.ScaleServiceRequest]) (*connect.Response[v1.ScaleServiceResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ScaleService is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) PromoteService(context.Context, *connect.Request[v1.PromoteServiceRequest]) (*connect.Response[v1.PromoteServiceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.PromoteService is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) RollbackService(context.Context, *connect.Request[v1.RollbackServiceRequest]) (*connect.Response[v1.RollbackServiceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.RollbackService is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) GetServiceManifest(context.Context, *connect.Request[v1.GetServiceManifestRequest]) (*connect.Response[v1.GetServiceManifestResponse], error) {
