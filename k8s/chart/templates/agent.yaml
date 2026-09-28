@@ -53,6 +53,12 @@ spec:
             - name: DISABLED_TOOLS
               value: {{ .Values.agent.disabledTools | quote }}
             {{- end }}
+            # Idle-turn watchdog (owned by the agent): re-trigger a session that
+            # stopped mid-task after a tool call.
+            - name: IDLEWATCH_ENABLED
+              value: {{ .Values.agent.idlewatch.enabled | quote }}
+            - name: IDLEWATCH_INTERVAL
+              value: {{ .Values.agent.idlewatch.interval | quote }}
             # Seed extension config into the cfg KV (create-if-absent; a UI-set
             # value always wins). `tenant: "*"` fans out to every known tenant.
             # The gateway/forgejo endpoints come from this chart; sandboxes are

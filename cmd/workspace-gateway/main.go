@@ -24,7 +24,6 @@ import (
 	wsv1connect "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1/wsv1connect"
 	"github.com/abcp-sdk/workspace-gateway/internal/agentclient"
 	"github.com/abcp-sdk/workspace-gateway/internal/forgejo"
-	"github.com/abcp-sdk/workspace-gateway/internal/idlewatch"
 	"github.com/abcp-sdk/workspace-gateway/internal/imagebuild"
 	"github.com/abcp-sdk/workspace-gateway/internal/members"
 	"github.com/abcp-sdk/workspace-gateway/internal/provision"
@@ -34,8 +33,6 @@ import (
 	"github.com/abcp-sdk/workspace-gateway/internal/helmmgr"
 	"github.com/abcp-sdk/workspace-gateway/internal/servicesmgr"
 	"github.com/abcp-sdk/workspace-gateway/internal/workspacesvc"
-
-	natstransport "github.com/abcp-sdk/abc-protocol-go/v2/transport/nats"
 )
 
 func envOr(k, def string) string {
@@ -193,29 +190,10 @@ func main() {
 		}()
 	}
 
-	// Re-trigger stalled sessions: a session that is IDLE and whose latest
-	// message is an assistant step ending on a `tool_result` (the model ran a
-	// tool then stopped) gets a mailbox `trigger`, unless the agent's turn-end
-	// marker says the last turn was a user interrupt.
-	if envOr("IDLEWATCH_ENABLED", "true") == "true" {
-		if natsURL := os.Getenv("NATS_URL"); natsURL != "" {
-			if nbus, err := natstransport.Connect(natsURL); err != nil {
-				log.Printf("warn: idlewatch: nats connect: %v", err)
-			} else {
-				watch := &idlewatch.Watchdog{
-					Agent:        ac.Raw(),
-					Admin:        ac.Admin(),
-					AdminToken:   os.Getenv("AGENT_ADMIN_TOKEN"),
-					ServiceToken: os.Getenv("GATEWAY_SERVICE_TOKEN"),
-					Bus:          nbus,
-					Interval:     envOrDuration("IDLEWATCH_INTERVAL", 2*time.Minute),
-				}
-				go watch.Run(context.Background())
-			}
-		} else {
-			log.Printf("idlewatch: disabled (NATS_URL unset)")
-		}
-	}
+	// Re-trigger stalled sessions (a session that stopped mid-task after a tool
+	// call) is now owned by the AGENT (`IDLEWATCH_ENABLED` on the workspace-agent
+	// deployment) — single source of truth. The gateway no longer runs a
+	// duplicate watchdog.
 
 	mux := http.NewServeMux()
 	// workspace.v1 is the gateway's ONLY surface.

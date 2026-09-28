@@ -62,7 +62,7 @@ agent:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/agent
-    tag: "20260927103748"
+    tag: "20260928104205"
     pullPolicy: IfNotPresent
   port: 8080
   service:
@@ -72,6 +72,12 @@ agent:
   # Tools the agent hard-disables for every workspace session (subsession/mail
   # are replaced by role tooling in this deployment).
   disabledTools: "bundled.subsession-create,bundled.mail-send"
+  # Idle-turn watchdog (agent-owned): re-trigger a session whose tip is an
+  # assistant step ending on a `tool_result`. Enabled by default for the
+  # workspace stack.
+  idlewatch:
+    enabled: true
+    interval: "2m"
   auth:
     adminToken: "dev-admin-token"
     bootstrapTenant: "workspace"
@@ -119,7 +125,7 @@ gateway:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/workspace-gateway
-    tag: "20260927165500"
+    tag: "20260928114203"
     pullPolicy: IfNotPresent
   # Namespace the sandbox/service backend manages, and where its RBAC lands.
   sandbox:
@@ -130,14 +136,6 @@ gateway:
   # infer from the request Host by dropping the first two labels (the edge
   # convention is `<svc>.<ns>.<domain>`), so a domain change needs no config.
   publicServiceDomain: ""
-  # Re-trigger stalled sessions: a session that is IDLE and whose latest
-  # message is an assistant step ending on a `tool_result` (the model ran a
-  # tool then stopped) gets a mailbox `trigger` (source `system:idlewatch`),
-  # unless the last turn was a user interrupt. Needs NATS_URL (set below) + the
-  # service/admin tokens.
-  idlewatch:
-    enabled: true
-    interval: "2m"
   # Developer preview services: session-bound, cluster-only, reclaimed on
   # session end or after previewTTL. serviceLogTail is the default number of
   # service-log lines returned.
@@ -200,7 +198,7 @@ gateway:
   runtime: ""
   resources:
     requests: { cpu: 50m, memory: 64Mi }
-    limits: { cpu: 500m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 2Gi }
   # Gateway sqlite (ownership table); hostPath persists it across restarts.
   persistence:
     enabled: true

@@ -45,11 +45,10 @@ spec:
             - name: AGENT_ADMIN_TOKEN
               valueFrom:
                 secretKeyRef: { name: workspace-gateway-secrets, key: agent-admin-token }
-            # Stalled-session watchdog: needs NATS + the service/admin tokens
-            # (all present above), so it is wired independently of provisioning.
+            # Stalled-session watchdog is owned by the AGENT (workspace-agent's
+            # IDLEWATCH_ENABLED), not the gateway. NATS_URL below still backs the
+            # boot-time preset cleanup (provision).
             - { name: NATS_URL, value: {{ include "workspace.natsUrl" . | quote }} }
-            - { name: IDLEWATCH_ENABLED, value: {{ .Values.gateway.idlewatch.enabled | quote }} }
-            - { name: IDLEWATCH_INTERVAL, value: {{ .Values.gateway.idlewatch.interval | quote }} }
             # Preview services (developer verification) + service logs.
             - { name: SERVICE_PREVIEW_TTL, value: {{ .Values.gateway.preview.ttl | quote }} }
             - { name: SERVICE_PREVIEW_REAP_INTERVAL, value: {{ .Values.gateway.preview.reapInterval | quote }} }
