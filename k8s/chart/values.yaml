@@ -211,7 +211,7 @@ webui:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/workspace-webui
-    tag: "20260927164500"
+    tag: "20260928140031"
     pullPolicy: IfNotPresent
   port: 8080
   service:
