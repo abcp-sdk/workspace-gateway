@@ -62,7 +62,7 @@ agent:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/agent
-    tag: "20260928104205"
+    tag: "20260928123414"
     pullPolicy: IfNotPresent
   port: 8080
   service:
