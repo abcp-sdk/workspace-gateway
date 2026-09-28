@@ -71,6 +71,10 @@ func (s *Service) Undo(ctx context.Context, r *connect.Request[agentv1.UndoReque
 	return s.agent.Undo(ctx, fwd(r))
 }
 
+func (s *Service) MarkRead(ctx context.Context, r *connect.Request[agentv1.MarkReadRequest]) (*connect.Response[agentv1.MarkReadResponse], error) {
+	return s.agent.MarkRead(ctx, fwd(r))
+}
+
 func (s *Service) State(ctx context.Context, r *connect.Request[agentv1.StateRequest]) (*connect.Response[agentv1.StateResponse], error) {
 	return s.agent.State(ctx, fwd(r))
 }

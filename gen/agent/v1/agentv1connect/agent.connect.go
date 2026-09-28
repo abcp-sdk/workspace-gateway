@@ -74,6 +74,8 @@ const (
 	AgentServiceSetModelProcedure = "/agent.v1.AgentService/SetModel"
 	// AgentServiceUndoProcedure is the fully-qualified name of the AgentService's Undo RPC.
 	AgentServiceUndoProcedure = "/agent.v1.AgentService/Undo"
+	// AgentServiceMarkReadProcedure is the fully-qualified name of the AgentService's MarkRead RPC.
+	AgentServiceMarkReadProcedure = "/agent.v1.AgentService/MarkRead"
 	// AgentServiceStateProcedure is the fully-qualified name of the AgentService's State RPC.
 	AgentServiceStateProcedure = "/agent.v1.AgentService/State"
 	// AgentServiceMailboxProcedure is the fully-qualified name of the AgentService's Mailbox RPC.
@@ -186,6 +188,7 @@ type AgentServiceClient interface {
 	Rename(context.Context, *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error)
 	SetModel(context.Context, *connect.Request[v1.SetModelRequest]) (*connect.Response[v1.SetModelResponse], error)
 	Undo(context.Context, *connect.Request[v1.UndoRequest]) (*connect.Response[v1.UndoResponse], error)
+	MarkRead(context.Context, *connect.Request[v1.MarkReadRequest]) (*connect.Response[v1.MarkReadResponse], error)
 	State(context.Context, *connect.Request[v1.StateRequest]) (*connect.Response[v1.StateResponse], error)
 	Mailbox(context.Context, *connect.Request[v1.MailboxRequest]) (*connect.Response[v1.MailboxResponse], error)
 	UpdateSettings(context.Context, *connect.Request[v1.UpdateSettingsRequest]) (*connect.Response[v1.UpdateSettingsResponse], error)
@@ -308,6 +311,12 @@ func NewAgentServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+AgentServiceUndoProcedure,
 			connect.WithSchema(agentServiceMethods.ByName("Undo")),
+			connect.WithClientOptions(opts...),
+		),
+		markRead: connect.NewClient[v1.MarkReadRequest, v1.MarkReadResponse](
+			httpClient,
+			baseURL+AgentServiceMarkReadProcedure,
+			connect.WithSchema(agentServiceMethods.ByName("MarkRead")),
 			connect.WithClientOptions(opts...),
 		),
 		state: connect.NewClient[v1.StateRequest, v1.StateResponse](
@@ -491,6 +500,7 @@ type agentServiceClient struct {
 	rename               *connect.Client[v1.RenameRequest, v1.RenameResponse]
 	setModel             *connect.Client[v1.SetModelRequest, v1.SetModelResponse]
 	undo                 *connect.Client[v1.UndoRequest, v1.UndoResponse]
+	markRead             *connect.Client[v1.MarkReadRequest, v1.MarkReadResponse]
 	state                *connect.Client[v1.StateRequest, v1.StateResponse]
 	mailbox              *connect.Client[v1.MailboxRequest, v1.MailboxResponse]
 	updateSettings       *connect.Client[v1.UpdateSettingsRequest, v1.UpdateSettingsResponse]
@@ -588,6 +598,11 @@ func (c *agentServiceClient) SetModel(ctx context.Context, req *connect.Request[
 // Undo calls agent.v1.AgentService.Undo.
 func (c *agentServiceClient) Undo(ctx context.Context, req *connect.Request[v1.UndoRequest]) (*connect.Response[v1.UndoResponse], error) {
 	return c.undo.CallUnary(ctx, req)
+}
+
+// MarkRead calls agent.v1.AgentService.MarkRead.
+func (c *agentServiceClient) MarkRead(ctx context.Context, req *connect.Request[v1.MarkReadRequest]) (*connect.Response[v1.MarkReadResponse], error) {
+	return c.markRead.CallUnary(ctx, req)
 }
 
 // State calls agent.v1.AgentService.State.
@@ -741,6 +756,7 @@ type AgentServiceHandler interface {
 	Rename(context.Context, *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error)
 	SetModel(context.Context, *connect.Request[v1.SetModelRequest]) (*connect.Response[v1.SetModelResponse], error)
 	Undo(context.Context, *connect.Request[v1.UndoRequest]) (*connect.Response[v1.UndoResponse], error)
+	MarkRead(context.Context, *connect.Request[v1.MarkReadRequest]) (*connect.Response[v1.MarkReadResponse], error)
 	State(context.Context, *connect.Request[v1.StateRequest]) (*connect.Response[v1.StateResponse], error)
 	Mailbox(context.Context, *connect.Request[v1.MailboxRequest]) (*connect.Response[v1.MailboxResponse], error)
 	UpdateSettings(context.Context, *connect.Request[v1.UpdateSettingsRequest]) (*connect.Response[v1.UpdateSettingsResponse], error)
@@ -859,6 +875,12 @@ func NewAgentServiceHandler(svc AgentServiceHandler, opts ...connect.HandlerOpti
 		AgentServiceUndoProcedure,
 		svc.Undo,
 		connect.WithSchema(agentServiceMethods.ByName("Undo")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentServiceMarkReadHandler := connect.NewUnaryHandler(
+		AgentServiceMarkReadProcedure,
+		svc.MarkRead,
+		connect.WithSchema(agentServiceMethods.ByName("MarkRead")),
 		connect.WithHandlerOptions(opts...),
 	)
 	agentServiceStateHandler := connect.NewUnaryHandler(
@@ -1053,6 +1075,8 @@ func NewAgentServiceHandler(svc AgentServiceHandler, opts ...connect.HandlerOpti
 			agentServiceSetModelHandler.ServeHTTP(w, r)
 		case AgentServiceUndoProcedure:
 			agentServiceUndoHandler.ServeHTTP(w, r)
+		case AgentServiceMarkReadProcedure:
+			agentServiceMarkReadHandler.ServeHTTP(w, r)
 		case AgentServiceStateProcedure:
 			agentServiceStateHandler.ServeHTTP(w, r)
 		case AgentServiceMailboxProcedure:
@@ -1170,6 +1194,10 @@ func (UnimplementedAgentServiceHandler) SetModel(context.Context, *connect.Reque
 
 func (UnimplementedAgentServiceHandler) Undo(context.Context, *connect.Request[v1.UndoRequest]) (*connect.Response[v1.UndoResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.Undo is not implemented"))
+}
+
+func (UnimplementedAgentServiceHandler) MarkRead(context.Context, *connect.Request[v1.MarkReadRequest]) (*connect.Response[v1.MarkReadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.MarkRead is not implemented"))
 }
 
 func (UnimplementedAgentServiceHandler) State(context.Context, *connect.Request[v1.StateRequest]) (*connect.Response[v1.StateResponse], error) {

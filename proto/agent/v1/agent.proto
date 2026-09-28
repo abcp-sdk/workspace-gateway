@@ -33,6 +33,10 @@ message Session {
   string org = 16;
   string repo = 17;
   string branch = 18;
+  // Number of messages the reader has NOT yet read: `message_seq - read_seq`,
+  // clamped at 0. The read watermark (`read_seq`) is stored SERVER-side and is
+  // SHARED across a tenant's devices (marking a session read on one device
+  // clears it everywhere) — call `MarkRead` to advance it.
   int32 unread_count = 19;
   string last_message_at = 20;
   string last_message_preview = 21;
@@ -40,9 +44,8 @@ message Session {
   // Empty means "no variant" (provider defaults; no providerOptions sent).
   string variant = 22;
   // Monotonic per-session message counter, bumped for every appended message
-  // (user/assistant/event/compaction). Clients derive the unread count as the
-  // number of messages with seq greater than their locally-persisted read
-  // watermark (read state is client-local; the agent never stores it).
+  // (user/assistant/event/compaction). `unread_count` is derived from this and
+  // the shared `read_seq` watermark.
   int32 message_seq = 23;
   // Generic grouping key for a session (free-form, tenant-scoped). Empty =
   // ungrouped. A subsession records its parent's session name here, but the
@@ -317,6 +320,14 @@ message SetModelResponse { Session session = 1; }
 message UndoRequest { string id = 1; string message_id = 2; }
 message UndoResponse { Session session = 1; }
 
+// MarkRead advances the session's SHARED read watermark (`read_seq`) to at least
+// `seq` (the session's current `message_seq` when omitted/0), clearing the
+// unread badge across ALL of the tenant's devices. `seq` may be supplied to
+// acknowledge only up to a known point (monotonic: an older value never lowers
+// the watermark). Returns the updated Session so the caller can refresh.
+message MarkReadRequest { string id = 1; int32 seq = 2; }
+message MarkReadResponse { Session session = 1; }
+
 message StateRequest { string id = 1; }
 message StateResponse { google.protobuf.Struct state = 1; }
 
@@ -539,6 +550,7 @@ service AgentService {
   rpc Rename(RenameRequest) returns (RenameResponse);
   rpc SetModel(SetModelRequest) returns (SetModelResponse);
   rpc Undo(UndoRequest) returns (UndoResponse);
+  rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
   rpc State(StateRequest) returns (StateResponse);
   rpc Mailbox(MailboxRequest) returns (MailboxResponse);
   rpc UpdateSettings(UpdateSettingsRequest) returns (UpdateSettingsResponse);

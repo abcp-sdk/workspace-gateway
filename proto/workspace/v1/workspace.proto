@@ -1601,6 +1601,7 @@ service BranchSessionService {
   rpc WatchSessions(agent.v1.WatchSessionsRequest) returns (stream agent.v1.WatchSessionsResponse);
   rpc SetModel(agent.v1.SetModelRequest) returns (agent.v1.SetModelResponse);
   rpc Undo(agent.v1.UndoRequest) returns (agent.v1.UndoResponse);
+  rpc MarkRead(agent.v1.MarkReadRequest) returns (agent.v1.MarkReadResponse);
   rpc State(agent.v1.StateRequest) returns (agent.v1.StateResponse);
   rpc Mailbox(agent.v1.MailboxRequest) returns (agent.v1.MailboxResponse);
   rpc Interrupt(agent.v1.InterruptRequest) returns (agent.v1.InterruptResponse);

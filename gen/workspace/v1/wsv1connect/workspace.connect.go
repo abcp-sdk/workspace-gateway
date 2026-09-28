@@ -328,6 +328,9 @@ const (
 	// BranchSessionServiceUndoProcedure is the fully-qualified name of the BranchSessionService's Undo
 	// RPC.
 	BranchSessionServiceUndoProcedure = "/workspace.v1.BranchSessionService/Undo"
+	// BranchSessionServiceMarkReadProcedure is the fully-qualified name of the BranchSessionService's
+	// MarkRead RPC.
+	BranchSessionServiceMarkReadProcedure = "/workspace.v1.BranchSessionService/MarkRead"
 	// BranchSessionServiceStateProcedure is the fully-qualified name of the BranchSessionService's
 	// State RPC.
 	BranchSessionServiceStateProcedure = "/workspace.v1.BranchSessionService/State"
@@ -534,6 +537,7 @@ type BranchSessionServiceClient interface {
 	WatchSessions(context.Context, *connect.Request[v11.WatchSessionsRequest]) (*connect.ServerStreamForClient[v11.WatchSessionsResponse], error)
 	SetModel(context.Context, *connect.Request[v11.SetModelRequest]) (*connect.Response[v11.SetModelResponse], error)
 	Undo(context.Context, *connect.Request[v11.UndoRequest]) (*connect.Response[v11.UndoResponse], error)
+	MarkRead(context.Context, *connect.Request[v11.MarkReadRequest]) (*connect.Response[v11.MarkReadResponse], error)
 	State(context.Context, *connect.Request[v11.StateRequest]) (*connect.Response[v11.StateResponse], error)
 	Mailbox(context.Context, *connect.Request[v11.MailboxRequest]) (*connect.Response[v11.MailboxResponse], error)
 	Interrupt(context.Context, *connect.Request[v11.InterruptRequest]) (*connect.Response[v11.InterruptResponse], error)
@@ -1140,6 +1144,12 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(branchSessionServiceMethods.ByName("Undo")),
 			connect.WithClientOptions(opts...),
 		),
+		markRead: connect.NewClient[v11.MarkReadRequest, v11.MarkReadResponse](
+			httpClient,
+			baseURL+BranchSessionServiceMarkReadProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("MarkRead")),
+			connect.WithClientOptions(opts...),
+		),
 		state: connect.NewClient[v11.StateRequest, v11.StateResponse](
 			httpClient,
 			baseURL+BranchSessionServiceStateProcedure,
@@ -1383,6 +1393,7 @@ type branchSessionServiceClient struct {
 	watchSessions        *connect.Client[v11.WatchSessionsRequest, v11.WatchSessionsResponse]
 	setModel             *connect.Client[v11.SetModelRequest, v11.SetModelResponse]
 	undo                 *connect.Client[v11.UndoRequest, v11.UndoResponse]
+	markRead             *connect.Client[v11.MarkReadRequest, v11.MarkReadResponse]
 	state                *connect.Client[v11.StateRequest, v11.StateResponse]
 	mailbox              *connect.Client[v11.MailboxRequest, v11.MailboxResponse]
 	interrupt            *connect.Client[v11.InterruptRequest, v11.InterruptResponse]
@@ -1879,6 +1890,11 @@ func (c *branchSessionServiceClient) Undo(ctx context.Context, req *connect.Requ
 	return c.undo.CallUnary(ctx, req)
 }
 
+// MarkRead calls workspace.v1.BranchSessionService.MarkRead.
+func (c *branchSessionServiceClient) MarkRead(ctx context.Context, req *connect.Request[v11.MarkReadRequest]) (*connect.Response[v11.MarkReadResponse], error) {
+	return c.markRead.CallUnary(ctx, req)
+}
+
 // State calls workspace.v1.BranchSessionService.State.
 func (c *branchSessionServiceClient) State(ctx context.Context, req *connect.Request[v11.StateRequest]) (*connect.Response[v11.StateResponse], error) {
 	return c.state.CallUnary(ctx, req)
@@ -2132,6 +2148,7 @@ type BranchSessionServiceHandler interface {
 	WatchSessions(context.Context, *connect.Request[v11.WatchSessionsRequest], *connect.ServerStream[v11.WatchSessionsResponse]) error
 	SetModel(context.Context, *connect.Request[v11.SetModelRequest]) (*connect.Response[v11.SetModelResponse], error)
 	Undo(context.Context, *connect.Request[v11.UndoRequest]) (*connect.Response[v11.UndoResponse], error)
+	MarkRead(context.Context, *connect.Request[v11.MarkReadRequest]) (*connect.Response[v11.MarkReadResponse], error)
 	State(context.Context, *connect.Request[v11.StateRequest]) (*connect.Response[v11.StateResponse], error)
 	Mailbox(context.Context, *connect.Request[v11.MailboxRequest]) (*connect.Response[v11.MailboxResponse], error)
 	Interrupt(context.Context, *connect.Request[v11.InterruptRequest]) (*connect.Response[v11.InterruptResponse], error)
@@ -2734,6 +2751,12 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		connect.WithSchema(branchSessionServiceMethods.ByName("Undo")),
 		connect.WithHandlerOptions(opts...),
 	)
+	branchSessionServiceMarkReadHandler := connect.NewUnaryHandler(
+		BranchSessionServiceMarkReadProcedure,
+		svc.MarkRead,
+		connect.WithSchema(branchSessionServiceMethods.ByName("MarkRead")),
+		connect.WithHandlerOptions(opts...),
+	)
 	branchSessionServiceStateHandler := connect.NewUnaryHandler(
 		BranchSessionServiceStateProcedure,
 		svc.State,
@@ -3068,6 +3091,8 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceSetModelHandler.ServeHTTP(w, r)
 		case BranchSessionServiceUndoProcedure:
 			branchSessionServiceUndoHandler.ServeHTTP(w, r)
+		case BranchSessionServiceMarkReadProcedure:
+			branchSessionServiceMarkReadHandler.ServeHTTP(w, r)
 		case BranchSessionServiceStateProcedure:
 			branchSessionServiceStateHandler.ServeHTTP(w, r)
 		case BranchSessionServiceMailboxProcedure:
@@ -3499,6 +3524,10 @@ func (UnimplementedBranchSessionServiceHandler) SetModel(context.Context, *conne
 
 func (UnimplementedBranchSessionServiceHandler) Undo(context.Context, *connect.Request[v11.UndoRequest]) (*connect.Response[v11.UndoResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Undo is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) MarkRead(context.Context, *connect.Request[v11.MarkReadRequest]) (*connect.Response[v11.MarkReadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.MarkRead is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) State(context.Context, *connect.Request[v11.StateRequest]) (*connect.Response[v11.StateResponse], error) {
