@@ -733,6 +733,11 @@ message SandboxInfo {
   string home = 10;
   string os = 11;
   string arch = 12;
+  // Pod diagnostics (best-effort): total container restarts and the first
+  // unhealthy container's reason+message (e.g. `OOMKilled`, `CrashLoopBackOff`,
+  // `RunContainerError`). Empty when healthy.
+  int32 restarts = 13;
+  string message = 14;
 }
 message ListSandboxesResponse { repeated SandboxInfo sandboxes = 1; }
 
@@ -771,6 +776,10 @@ message ResolveSandboxResponse {
   string name = 1;
   string url = 2;
   string token = 3;
+  // Live phase + failure reason of the sandbox. A caller should NOT drive a
+  // sandbox whose phase is `Failed` (it exited; see `message` for why).
+  string phase = 4;
+  string message = 5;
 }
 
 // ---- sandbox jobs (read-only observability) ----
@@ -1407,6 +1416,25 @@ message ServiceLogsResponse {
   bool available = 5;
 }
 
+// ---- sandbox logs ----
+message SandboxLogsRequest {
+  string name = 1;
+  // Number of trailing lines (0 = the deployment default).
+  int64 tail_lines = 2;
+  // Read the PREVIOUS container instance (the crash / OOM that terminated it).
+  bool previous = 3;
+}
+message SandboxLogsResponse {
+  repeated string lines = 1;
+  string phase = 2;
+  int32 restarts = 3;
+  // First unhealthy container's reason+message (e.g. `OOMKilled`); empty when
+  // healthy.
+  string message = 4;
+  // True when the container produced any log output.
+  bool available = 5;
+}
+
 message WatchServiceLogsRequest {
   string name = 1;
   bool previous = 2;
@@ -1595,6 +1623,9 @@ service BranchSessionService {
   // service logs (read a service's container logs; seam for a log backend)
   rpc ServiceLogs(ServiceLogsRequest) returns (ServiceLogsResponse);
   rpc WatchServiceLogs(WatchServiceLogsRequest) returns (stream WatchServiceLogsResponse);
+  // sandbox logs (read a sandbox pod's container logs; `previous` = the
+  // crashed/OOM-killed instance).
+  rpc SandboxLogs(SandboxLogsRequest) returns (SandboxLogsResponse);
   // WatchWorkspace streams the tenant's sandboxes/services/PVCs live.
   rpc WatchWorkspace(WatchWorkspaceRequest) returns (stream WatchWorkspaceResponse);
   // BuildPreviewImage builds a preview-tagged image (forced name/tag).

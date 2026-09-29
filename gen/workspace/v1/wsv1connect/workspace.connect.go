@@ -271,6 +271,9 @@ const (
 	// BranchSessionServiceWatchServiceLogsProcedure is the fully-qualified name of the
 	// BranchSessionService's WatchServiceLogs RPC.
 	BranchSessionServiceWatchServiceLogsProcedure = "/workspace.v1.BranchSessionService/WatchServiceLogs"
+	// BranchSessionServiceSandboxLogsProcedure is the fully-qualified name of the
+	// BranchSessionService's SandboxLogs RPC.
+	BranchSessionServiceSandboxLogsProcedure = "/workspace.v1.BranchSessionService/SandboxLogs"
 	// BranchSessionServiceWatchWorkspaceProcedure is the fully-qualified name of the
 	// BranchSessionService's WatchWorkspace RPC.
 	BranchSessionServiceWatchWorkspaceProcedure = "/workspace.v1.BranchSessionService/WatchWorkspace"
@@ -510,6 +513,9 @@ type BranchSessionServiceClient interface {
 	// service logs (read a service's container logs; seam for a log backend)
 	ServiceLogs(context.Context, *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error)
 	WatchServiceLogs(context.Context, *connect.Request[v1.WatchServiceLogsRequest]) (*connect.ServerStreamForClient[v1.WatchServiceLogsResponse], error)
+	// sandbox logs (read a sandbox pod's container logs; `previous` = the
+	// crashed/OOM-killed instance).
+	SandboxLogs(context.Context, *connect.Request[v1.SandboxLogsRequest]) (*connect.Response[v1.SandboxLogsResponse], error)
 	// WatchWorkspace streams the tenant's sandboxes/services/PVCs live.
 	WatchWorkspace(context.Context, *connect.Request[v1.WatchWorkspaceRequest]) (*connect.ServerStreamForClient[v1.WatchWorkspaceResponse], error)
 	// BuildPreviewImage builds a preview-tagged image (forced name/tag).
@@ -1030,6 +1036,12 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(branchSessionServiceMethods.ByName("WatchServiceLogs")),
 			connect.WithClientOptions(opts...),
 		),
+		sandboxLogs: connect.NewClient[v1.SandboxLogsRequest, v1.SandboxLogsResponse](
+			httpClient,
+			baseURL+BranchSessionServiceSandboxLogsProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("SandboxLogs")),
+			connect.WithClientOptions(opts...),
+		),
 		watchWorkspace: connect.NewClient[v1.WatchWorkspaceRequest, v1.WatchWorkspaceResponse](
 			httpClient,
 			baseURL+BranchSessionServiceWatchWorkspaceProcedure,
@@ -1374,6 +1386,7 @@ type branchSessionServiceClient struct {
 	deletePVC            *connect.Client[v1.DeletePVCRequest, v1.DeletePVCResponse]
 	serviceLogs          *connect.Client[v1.ServiceLogsRequest, v1.ServiceLogsResponse]
 	watchServiceLogs     *connect.Client[v1.WatchServiceLogsRequest, v1.WatchServiceLogsResponse]
+	sandboxLogs          *connect.Client[v1.SandboxLogsRequest, v1.SandboxLogsResponse]
 	watchWorkspace       *connect.Client[v1.WatchWorkspaceRequest, v1.WatchWorkspaceResponse]
 	buildPreviewImage    *connect.Client[v1.BuildPreviewImageRequest, v1.BuildPreviewImageResponse]
 	helmDeploy           *connect.Client[v1.HelmDeployRequest, v1.HelmDeployResponse]
@@ -1795,6 +1808,11 @@ func (c *branchSessionServiceClient) WatchServiceLogs(ctx context.Context, req *
 	return c.watchServiceLogs.CallServerStream(ctx, req)
 }
 
+// SandboxLogs calls workspace.v1.BranchSessionService.SandboxLogs.
+func (c *branchSessionServiceClient) SandboxLogs(ctx context.Context, req *connect.Request[v1.SandboxLogsRequest]) (*connect.Response[v1.SandboxLogsResponse], error) {
+	return c.sandboxLogs.CallUnary(ctx, req)
+}
+
 // WatchWorkspace calls workspace.v1.BranchSessionService.WatchWorkspace.
 func (c *branchSessionServiceClient) WatchWorkspace(ctx context.Context, req *connect.Request[v1.WatchWorkspaceRequest]) (*connect.ServerStreamForClient[v1.WatchWorkspaceResponse], error) {
 	return c.watchWorkspace.CallServerStream(ctx, req)
@@ -2121,6 +2139,9 @@ type BranchSessionServiceHandler interface {
 	// service logs (read a service's container logs; seam for a log backend)
 	ServiceLogs(context.Context, *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error)
 	WatchServiceLogs(context.Context, *connect.Request[v1.WatchServiceLogsRequest], *connect.ServerStream[v1.WatchServiceLogsResponse]) error
+	// sandbox logs (read a sandbox pod's container logs; `previous` = the
+	// crashed/OOM-killed instance).
+	SandboxLogs(context.Context, *connect.Request[v1.SandboxLogsRequest]) (*connect.Response[v1.SandboxLogsResponse], error)
 	// WatchWorkspace streams the tenant's sandboxes/services/PVCs live.
 	WatchWorkspace(context.Context, *connect.Request[v1.WatchWorkspaceRequest], *connect.ServerStream[v1.WatchWorkspaceResponse]) error
 	// BuildPreviewImage builds a preview-tagged image (forced name/tag).
@@ -2637,6 +2658,12 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		connect.WithSchema(branchSessionServiceMethods.ByName("WatchServiceLogs")),
 		connect.WithHandlerOptions(opts...),
 	)
+	branchSessionServiceSandboxLogsHandler := connect.NewUnaryHandler(
+		BranchSessionServiceSandboxLogsProcedure,
+		svc.SandboxLogs,
+		connect.WithSchema(branchSessionServiceMethods.ByName("SandboxLogs")),
+		connect.WithHandlerOptions(opts...),
+	)
 	branchSessionServiceWatchWorkspaceHandler := connect.NewServerStreamHandler(
 		BranchSessionServiceWatchWorkspaceProcedure,
 		svc.WatchWorkspace,
@@ -3053,6 +3080,8 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceServiceLogsHandler.ServeHTTP(w, r)
 		case BranchSessionServiceWatchServiceLogsProcedure:
 			branchSessionServiceWatchServiceLogsHandler.ServeHTTP(w, r)
+		case BranchSessionServiceSandboxLogsProcedure:
+			branchSessionServiceSandboxLogsHandler.ServeHTTP(w, r)
 		case BranchSessionServiceWatchWorkspaceProcedure:
 			branchSessionServiceWatchWorkspaceHandler.ServeHTTP(w, r)
 		case BranchSessionServiceBuildPreviewImageProcedure:
@@ -3448,6 +3477,10 @@ func (UnimplementedBranchSessionServiceHandler) ServiceLogs(context.Context, *co
 
 func (UnimplementedBranchSessionServiceHandler) WatchServiceLogs(context.Context, *connect.Request[v1.WatchServiceLogsRequest], *connect.ServerStream[v1.WatchServiceLogsResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.WatchServiceLogs is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) SandboxLogs(context.Context, *connect.Request[v1.SandboxLogsRequest]) (*connect.Response[v1.SandboxLogsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.SandboxLogs is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) WatchWorkspace(context.Context, *connect.Request[v1.WatchWorkspaceRequest], *connect.ServerStream[v1.WatchWorkspaceResponse]) error {

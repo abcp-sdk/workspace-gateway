@@ -319,10 +319,25 @@ type Spec struct {
 type Client struct {
 	cs        kubernetes.Interface
 	namespace string
+	res       serviceResources
+}
+
+// serviceResources holds the deployment's default service request/limit values.
+type serviceResources struct {
+	cpuReq, cpuLim, memReq, memLim string
 }
 
 // Config configures a Client.
-type Config struct{ Namespace string }
+type Config struct {
+	Namespace string
+	// Default resource REQUESTS/LIMITS applied when a service omits cpu/memory.
+	// Requests default to 500m / 1Gi; limits default to 2 / 4Gi. An explicit
+	// cpu/memory on the service still sets request == limit.
+	CPURequest    string
+	CPULimit      string
+	MemoryRequest string
+	MemoryLimit   string
+}
 
 // New builds a client from in-cluster config, or KUBECONFIG for dev.
 func New(cfg Config) (*Client, error) {
@@ -350,7 +365,13 @@ func NewWithClientset(cs kubernetes.Interface, cfg Config) *Client {
 	if ns == "" {
 		ns = "worker"
 	}
-	return &Client{cs: cs, namespace: ns}
+	return &Client{
+		cs: cs, namespace: ns,
+		res: serviceResources{
+			cpuReq: cfg.CPURequest, cpuLim: cfg.CPULimit,
+			memReq: cfg.MemoryRequest, memLim: cfg.MemoryLimit,
+		},
+	}
 }
 
 // Namespace returns the managed namespace.
@@ -472,7 +493,7 @@ func (c *Client) Deploy(ctx context.Context, s Spec) (Service, error) {
 			return Service{}, fmt.Errorf("env_from[%d]: set config_map or secret", i)
 		}
 	}
-	rr := resources(s.CPU, s.Memory)
+	rr := c.resources(s.CPU, s.Memory)
 	if !s.Resources.Empty() {
 		rr = buildResources(s.Resources)
 	}
@@ -558,7 +579,7 @@ func (c *Client) Deploy(ctx context.Context, s Spec) (Service, error) {
 			Name:      sc.Name,
 			Image:     sc.Image,
 			Command:   sc.Command,
-			Resources: resources(sc.CPU, sc.Memory),
+			Resources: c.resources(sc.CPU, sc.Memory),
 		}
 		for k, v := range sc.Env {
 			c.Env = append(c.Env, corev1.EnvVar{Name: k, Value: v})
@@ -1377,18 +1398,36 @@ func (c *Client) Delete(ctx context.Context, name string) (bool, error) {
 	return true, nil
 }
 
-func resources(cpu, mem string) corev1.ResourceRequirements {
-	if cpu == "" && mem == "" {
-		return corev1.ResourceRequirements{}
-	}
-	rl := corev1.ResourceList{}
+// resources builds a service container's resources. An explicit cpu/memory sets
+// request == limit to that value; when omitted, the deployment defaults apply
+// (requests 500m/1Gi, limits 2/4Gi => Burstable).
+func (c *Client) resources(cpu, mem string) corev1.ResourceRequirements {
+	req := corev1.ResourceList{}
+	lim := corev1.ResourceList{}
 	if cpu != "" {
-		rl[corev1.ResourceCPU] = resource.MustParse(cpu)
+		q := resource.MustParse(cpu)
+		req[corev1.ResourceCPU] = q
+		lim[corev1.ResourceCPU] = q
+	} else {
+		req[corev1.ResourceCPU] = resource.MustParse(svcOrDefault(c.res.cpuReq, "500m"))
+		lim[corev1.ResourceCPU] = resource.MustParse(svcOrDefault(c.res.cpuLim, "2"))
 	}
 	if mem != "" {
-		rl[corev1.ResourceMemory] = resource.MustParse(mem)
+		q := resource.MustParse(mem)
+		req[corev1.ResourceMemory] = q
+		lim[corev1.ResourceMemory] = q
+	} else {
+		req[corev1.ResourceMemory] = resource.MustParse(svcOrDefault(c.res.memReq, "1Gi"))
+		lim[corev1.ResourceMemory] = resource.MustParse(svcOrDefault(c.res.memLim, "4Gi"))
 	}
-	return corev1.ResourceRequirements{Requests: rl, Limits: rl}
+	return corev1.ResourceRequirements{Requests: req, Limits: lim}
+}
+
+func svcOrDefault(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
 }
 
 // buildResources maps a split request/limit spec to k8s requirements.

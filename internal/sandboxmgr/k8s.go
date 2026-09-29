@@ -57,6 +57,11 @@ type Sandbox struct {
 	Creator   string
 	Session   string
 	CreatedAt int64 // unix millis
+	// Pod diagnostics (best-effort): total container restarts and the first
+	// unhealthy container's reason+message (e.g. `OOMKilled`, `CrashLoopBackOff`,
+	// `RunContainerError`). Empty when healthy.
+	Restarts int32
+	Message  string
 }
 
 // Spec describes a sandbox to create.
@@ -78,11 +83,39 @@ type Spec struct {
 type Client struct {
 	cs        kubernetes.Interface
 	namespace string
+	res       resources
+	restart   corev1.RestartPolicy
+}
+
+// resources holds the deployment's default sandbox request/limit values.
+type resources struct {
+	cpuReq, cpuLim, memReq, memLim string
+}
+
+// orDefault returns v when non-empty, else def.
+func orDefault(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
 }
 
 // Config configures a Client.
 type Config struct {
 	Namespace string
+	// Default resource REQUESTS/LIMITS applied when a sandbox omits cpu/memory.
+	// Requests default to 500m / 1Gi; limits default to 2 / 4Gi (so a sandbox
+	// is Burstable: it reserves little but may burst). An explicit cpu/memory on
+	// the sandbox still sets request == limit.
+	CPURequest    string
+	CPULimit      string
+	MemoryRequest string
+	MemoryLimit   string
+	// RestartPolicy is the sandbox Pod's restart policy. Defaults to `Never`:
+	// a sandbox that exits (OOMKilled / crash) stays `Failed` with a readable
+	// reason instead of silently restarting, so callers see the failure. Set to
+	// `Always` to restore self-healing.
+	RestartPolicy string
 }
 
 // New builds a client from the in-cluster config (production) or, when
@@ -112,7 +145,17 @@ func NewWithClientset(cs kubernetes.Interface, cfg Config) *Client {
 	if ns == "" {
 		ns = "worker"
 	}
-	return &Client{cs: cs, namespace: ns}
+	rp := corev1.RestartPolicy(cfg.RestartPolicy)
+	if rp == "" {
+		rp = corev1.RestartPolicyNever
+	}
+	return &Client{
+		cs: cs, namespace: ns, restart: rp,
+		res: resources{
+			cpuReq: cfg.CPURequest, cpuLim: cfg.CPULimit,
+			memReq: cfg.MemoryRequest, memLim: cfg.MemoryLimit,
+		},
+	}
 }
 
 // Namespace returns the namespace the manager operates in.
@@ -140,18 +183,27 @@ func newToken() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
-func defaultResources(cpu, mem string) corev1.ResourceRequirements {
-	if cpu == "" {
-		cpu = "500m"
+func defaultResources(cpu, mem string, d resources) corev1.ResourceRequirements {
+	req := corev1.ResourceList{}
+	lim := corev1.ResourceList{}
+	if cpu != "" {
+		// Explicit cpu/memory keep request == limit.
+		q := resource.MustParse(cpu)
+		req[corev1.ResourceCPU] = q
+		lim[corev1.ResourceCPU] = q
+	} else {
+		req[corev1.ResourceCPU] = resource.MustParse(orDefault(d.cpuReq, "500m"))
+		lim[corev1.ResourceCPU] = resource.MustParse(orDefault(d.cpuLim, "2"))
 	}
-	if mem == "" {
-		mem = "1Gi"
+	if mem != "" {
+		q := resource.MustParse(mem)
+		req[corev1.ResourceMemory] = q
+		lim[corev1.ResourceMemory] = q
+	} else {
+		req[corev1.ResourceMemory] = resource.MustParse(orDefault(d.memReq, "1Gi"))
+		lim[corev1.ResourceMemory] = resource.MustParse(orDefault(d.memLim, "4Gi"))
 	}
-	rl := corev1.ResourceList{
-		corev1.ResourceCPU:    resource.MustParse(cpu),
-		corev1.ResourceMemory: resource.MustParse(mem),
-	}
-	return corev1.ResourceRequirements{Requests: rl, Limits: rl}
+	return corev1.ResourceRequirements{Requests: req, Limits: lim}
 }
 
 // ServiceDNS returns the in-cluster Service URL for a sandbox.
@@ -210,7 +262,7 @@ func (c *Client) Create(ctx context.Context, s Spec) (Sandbox, string, error) {
 	for k, v := range s.Runtime.Env {
 		env = append(env, corev1.EnvVar{Name: k, Value: v})
 	}
-	resources := defaultResources(s.CPU, s.Memory)
+	resources := defaultResources(s.CPU, s.Memory, c.res)
 	if s.Runtime.Resources != nil {
 		resources = *s.Runtime.Resources
 	}
@@ -229,7 +281,7 @@ func (c *Client) Create(ctx context.Context, s Spec) (Sandbox, string, error) {
 		SecurityContext: s.Runtime.SecurityContext,
 	}
 	podSpec := corev1.PodSpec{
-		RestartPolicy: corev1.RestartPolicyAlways,
+		RestartPolicy: c.restart,
 		Containers:    []corev1.Container{container},
 	}
 	if s.Runtime.RuntimeClass != "" {
@@ -374,9 +426,27 @@ func (c *Client) deleteObjects(ctx context.Context, res string) error {
 
 func toSandbox(c *Client, p *corev1.Pod) Sandbox {
 	ready := false
+	var restarts int32
+	message := ""
 	for _, cs := range p.Status.ContainerStatuses {
 		if cs.Ready {
 			ready = true
+		}
+		restarts += cs.RestartCount
+		// First failure reason wins (waiting => crash-loop/creating; terminated
+		// => OOMKilled / Error after a restart policy of Never).
+		if message == "" && cs.State.Waiting != nil && cs.State.Waiting.Reason != "" {
+			message = cs.State.Waiting.Reason
+			if cs.State.Waiting.Message != "" {
+				message += ": " + cs.State.Waiting.Message
+			}
+		}
+		if message == "" && cs.State.Terminated != nil && cs.State.Terminated.Reason != "" &&
+			cs.State.Terminated.Reason != "Completed" {
+			message = cs.State.Terminated.Reason
+			if cs.State.Terminated.Message != "" {
+				message += ": " + cs.State.Terminated.Message
+			}
 		}
 	}
 	phase := string(p.Status.Phase)
@@ -396,6 +466,8 @@ func toSandbox(c *Client, p *corev1.Pod) Sandbox {
 		Creator:   p.Annotations[AnnoCreator],
 		Session:   p.Annotations[AnnoSession],
 		CreatedAt: created,
+		Restarts:  restarts,
+		Message:   message,
 	}
 }
 

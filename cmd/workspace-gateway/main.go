@@ -95,11 +95,24 @@ func main() {
 
 	// The gateway owns the sandbox + service lifecycle in-process (worker-manager
 	// folded in). A k8s failure is non-fatal: git/session routes still work.
-	sbx, err := sandboxmgr.New(sandboxmgr.Config{Namespace: sandboxNS})
+	sbx, err := sandboxmgr.New(sandboxmgr.Config{
+		Namespace:     sandboxNS,
+		CPURequest:    os.Getenv("SANDBOX_CPU_REQUEST"),
+		CPULimit:      os.Getenv("SANDBOX_CPU_LIMIT"),
+		MemoryRequest: os.Getenv("SANDBOX_MEMORY_REQUEST"),
+		MemoryLimit:   os.Getenv("SANDBOX_MEMORY_LIMIT"),
+		RestartPolicy: os.Getenv("SANDBOX_RESTART_POLICY"),
+	})
 	if err != nil {
 		log.Fatalf("sandbox backend: %v", err)
 	}
-	services, err := servicesmgr.New(servicesmgr.Config{Namespace: sandboxNS})
+	services, err := servicesmgr.New(servicesmgr.Config{
+		Namespace:     sandboxNS,
+		CPURequest:    os.Getenv("SERVICE_CPU_REQUEST"),
+		CPULimit:      os.Getenv("SERVICE_CPU_LIMIT"),
+		MemoryRequest: os.Getenv("SERVICE_MEMORY_REQUEST"),
+		MemoryLimit:   os.Getenv("SERVICE_MEMORY_LIMIT"),
+	})
 	if err != nil {
 		log.Fatalf("service backend: %v", err)
 	}

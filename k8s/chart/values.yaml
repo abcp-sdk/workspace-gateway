@@ -62,7 +62,7 @@ agent:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/agent
-    tag: "20260929091500"
+    tag: "20260929141000"
     pullPolicy: IfNotPresent
   port: 8080
   service:
@@ -97,7 +97,7 @@ workspaceExtension:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/workspace-extension
-    tag: "20260929090500"
+    tag: "20260929150000"
     pullPolicy: IfNotPresent
   # Tenant seeded with the gateway/forgejo defaults. `"*"` = every tenant.
   seedTenant: "*"
@@ -125,13 +125,29 @@ gateway:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/workspace-gateway
-    tag: "20260929090000"
+    tag: "20260929140000"
     pullPolicy: IfNotPresent
   # Namespace the sandbox/service backend manages, and where its RBAC lands.
   sandbox:
     namespace: worker
     idleTTL: "24h"
     reapInterval: "10m"
+    # Default resource REQUESTS/LIMITS for a sandbox when the tool omits
+    # cpu/memory (Burstable: reserves little, may burst). An explicit
+    # cpu/memory on the tool still sets request == limit.
+    resources:
+      requests: { cpu: "500m", memory: "1Gi" }
+      limits: { cpu: "2", memory: "4Gi" }
+    # Restart policy for sandbox pods. `Never` = a sandbox that exits
+    # (OOMKilled / crash) stays Failed with a readable reason instead of
+    # silently restarting. Set `Always` to restore self-healing.
+    restartPolicy: "Never"
+  # Default resource requests/limits for a service when service-deploy omits
+  # cpu/memory (same Burstable defaults as sandboxes).
+  service:
+    resources:
+      requests: { cpu: "500m", memory: "1Gi" }
+      limits: { cpu: "2", memory: "4Gi" }
   # Public domain services are published under (`<name>.<ns>.<domain>`). Empty =
   # infer from the request Host by dropping the first two labels (the edge
   # convention is `<svc>.<ns>.<domain>`), so a domain change needs no config.
@@ -211,7 +227,7 @@ webui:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/workspace-webui
-    tag: "20260929091500"
+    tag: "20260929141000"
     pullPolicy: IfNotPresent
   port: 8080
   service:

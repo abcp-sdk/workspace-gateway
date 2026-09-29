@@ -2123,7 +2123,32 @@ func (s *Service) ResolveSandbox(ctx context.Context, req *connect.Request[wsv1.
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	return connect.NewResponse(&wsv1.ResolveSandboxResponse{Name: req.Msg.GetName(), Url: url, Token: token}), nil
+	return connect.NewResponse(&wsv1.ResolveSandboxResponse{
+		Name: req.Msg.GetName(), Url: url, Token: token,
+		Phase: sb.Phase, Message: sb.Message,
+	}), nil
+}
+
+// SandboxLogs reads a sandbox pod's container log (current or previous
+// instance), plus its live phase + failure reason.
+func (s *Service) SandboxLogs(ctx context.Context, req *connect.Request[wsv1.SandboxLogsRequest]) (*connect.Response[wsv1.SandboxLogsResponse], error) {
+	if _, _, err := s.ownedSandbox(ctx, req.Header(), req.Msg.GetName()); err != nil {
+		return nil, err
+	}
+	tail := req.Msg.GetTailLines()
+	if tail <= 0 {
+		tail = s.serviceLogTail
+	}
+	lines, phase, restarts, message, err := s.sbx.TailLogs(ctx, req.Msg.GetName(), sandboxmgr.LogOptions{
+		TailLines: tail, Previous: req.Msg.GetPrevious(),
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.SandboxLogsResponse{
+		Lines: lines, Phase: phase, Restarts: restarts, Message: message,
+		Available: len(lines) > 0,
+	}), nil
 }
 
 // ---- sandbox jobs (read-only observability) ----
@@ -3865,7 +3890,8 @@ func toSandboxInfo(sb sandboxmgr.Sandbox) *wsv1.SandboxInfo {
 	return &wsv1.SandboxInfo{
 		Name: sb.Name, Image: sb.Image, Phase: sb.Phase, Ready: sb.Ready,
 		Url: sb.URL, Creator: sb.Creator, CreatedAt: sb.CreatedAt,
-		Session: sb.Session,
+		Session:  sb.Session,
+		Restarts: sb.Restarts, Message: sb.Message,
 	}
 }
 

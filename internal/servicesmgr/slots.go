@@ -449,7 +449,7 @@ func (c *Client) buildPodSpec(s Spec, ports []Port) (corev1.PodSpec, error) {
 			return corev1.PodSpec{}, fmt.Errorf("env_from[%d]: set config_map or secret", i)
 		}
 	}
-	rr := resources(s.CPU, s.Memory)
+	rr := c.resources(s.CPU, s.Memory)
 	if !s.Resources.Empty() {
 		rr = buildResources(s.Resources)
 	}
@@ -520,7 +520,7 @@ func (c *Client) buildPodSpec(s Spec, ports []Port) (corev1.PodSpec, error) {
 		if sc.Name == "" || sc.Image == "" {
 			return corev1.PodSpec{}, fmt.Errorf("sidecars[%d]: name and image are required", i)
 		}
-		cc := corev1.Container{Name: sc.Name, Image: sc.Image, Command: sc.Command, Resources: resources(sc.CPU, sc.Memory)}
+		cc := corev1.Container{Name: sc.Name, Image: sc.Image, Command: sc.Command, Resources: c.resources(sc.CPU, sc.Memory)}
 		for k, v := range sc.Env {
 			cc.Env = append(cc.Env, corev1.EnvVar{Name: k, Value: v})
 		}

@@ -172,3 +172,49 @@ func TestGetMissing(t *testing.T) {
 }
 
 var _ = corev1.Secret{}
+
+func TestDefaultResourcesSplit(t *testing.T) {
+	c := newTestClient()
+	ctx := context.Background()
+	// Omitted cpu/memory => Burstable: requests 500m/1Gi, limits 2/4Gi.
+	if _, _, err := c.Create(ctx, Spec{Name: "dflt", Image: "img:1", Creator: "a"}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	pod, err := c.cs.CoreV1().Pods("worker").Get(ctx, resourceName("dflt"), metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := pod.Spec.Containers[0].Resources
+	if got := r.Requests.Cpu().String(); got != "500m" {
+		t.Fatalf("cpu request = %s, want 500m", got)
+	}
+	if got := r.Limits.Cpu().String(); got != "2" {
+		t.Fatalf("cpu limit = %s, want 2", got)
+	}
+	if got := r.Requests.Memory().String(); got != "1Gi" {
+		t.Fatalf("mem request = %s, want 1Gi", got)
+	}
+	if got := r.Limits.Memory().String(); got != "4Gi" {
+		t.Fatalf("mem limit = %s, want 4Gi", got)
+	}
+	// Default restart policy is Never (a killed sandbox must not self-heal).
+	if pod.Spec.RestartPolicy != corev1.RestartPolicyNever {
+		t.Fatalf("restartPolicy = %s, want Never", pod.Spec.RestartPolicy)
+	}
+}
+
+func TestExplicitResourcesKeepRequestEqualLimit(t *testing.T) {
+	c := newTestClient()
+	ctx := context.Background()
+	if _, _, err := c.Create(ctx, Spec{Name: "exp", Image: "img:1", CPU: "1", Memory: "2Gi"}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	pod, _ := c.cs.CoreV1().Pods("worker").Get(ctx, resourceName("exp"), metav1.GetOptions{})
+	r := pod.Spec.Containers[0].Resources
+	if r.Requests.Cpu().String() != "1" || r.Limits.Cpu().String() != "1" {
+		t.Fatalf("cpu = %s/%s, want 1/1", r.Requests.Cpu(), r.Limits.Cpu())
+	}
+	if r.Requests.Memory().String() != "2Gi" || r.Limits.Memory().String() != "2Gi" {
+		t.Fatalf("mem = %s/%s, want 2Gi/2Gi", r.Requests.Memory(), r.Limits.Memory())
+	}
+}

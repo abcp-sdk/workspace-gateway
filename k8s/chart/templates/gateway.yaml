@@ -84,6 +84,16 @@ spec:
             - { name: DOCKER_CONFIG, value: /home/user/.docker }
             - { name: SANDBOX_IDLE_TTL, value: {{ .Values.gateway.sandbox.idleTTL | quote }} }
             - { name: SANDBOX_REAP_INTERVAL, value: {{ .Values.gateway.sandbox.reapInterval | quote }} }
+            # Sandbox/service default resources + sandbox restart policy.
+            - { name: SANDBOX_CPU_REQUEST, value: {{ .Values.gateway.sandbox.resources.requests.cpu | quote }} }
+            - { name: SANDBOX_CPU_LIMIT, value: {{ .Values.gateway.sandbox.resources.limits.cpu | quote }} }
+            - { name: SANDBOX_MEMORY_REQUEST, value: {{ .Values.gateway.sandbox.resources.requests.memory | quote }} }
+            - { name: SANDBOX_MEMORY_LIMIT, value: {{ .Values.gateway.sandbox.resources.limits.memory | quote }} }
+            - { name: SANDBOX_RESTART_POLICY, value: {{ .Values.gateway.sandbox.restartPolicy | quote }} }
+            - { name: SERVICE_CPU_REQUEST, value: {{ .Values.gateway.service.resources.requests.cpu | quote }} }
+            - { name: SERVICE_CPU_LIMIT, value: {{ .Values.gateway.service.resources.limits.cpu | quote }} }
+            - { name: SERVICE_MEMORY_REQUEST, value: {{ .Values.gateway.service.resources.requests.memory | quote }} }
+            - { name: SERVICE_MEMORY_LIMIT, value: {{ .Values.gateway.service.resources.limits.memory | quote }} }
             # MUST bypass the proxy for in-cluster + registry traffic.
             - { name: NO_PROXY, value: {{ include "workspace.noProxy" . | quote }} }
             - { name: no_proxy, value: {{ include "workspace.noProxy" . | quote }} }
