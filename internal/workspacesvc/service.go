@@ -41,9 +41,13 @@ import (
 	"github.com/abcp-sdk/workspace-gateway/internal/workerclient"
 )
 
+// serviceReadyTimeout bounds how long DeployService/PreviewService wait for a
+// freshly-deployed pod to become ready. A deterministic failure returns
+// immediately; a genuine slow start is reported as not-ready (non-fatal).
+const serviceReadyTimeout = 60 * time.Second
+
 // Service implements wsv1connect.BranchSessionServiceHandler.
-type Service struct {
-	agent    agentv1connect.AgentServiceClient
+type Service struct {	agent    agentv1connect.AgentServiceClient
 	members  *members.Store
 	git      *forgejo.Client
 	sbx      *sandboxmgr.Client
@@ -2322,7 +2326,37 @@ func (s *Service) DeployService(ctx context.Context, req *connect.Request[wsv1.D
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	// Bounded readiness wait: surface a deterministic start failure (bad
+	// command, image pull error, unschedulable pod) right away instead of
+	// returning a Pending shell the caller cannot distinguish from success.
+	if err := s.awaitServiceReady(ctx, name, spec.Slot); err != nil {
+		return nil, err
+	}
+	// Re-read so the response reflects the settled pod state.
+	if cur, gerr := s.services.Get(ctx, name); gerr == nil {
+		svc = cur
+	}
 	return connect.NewResponse(&wsv1.DeployServiceResponse{Service: s.toServiceInfo(svc, req.Header())}), nil
+}
+
+// awaitServiceReady waits up to serviceReadyTimeout for a just-deployed service
+// to become ready. Returns a FailedPrecondition error on a deterministic
+// failure; on timeout it returns nil (the service is left running; the response
+// view carries the observed phase/message).
+func (s *Service) awaitServiceReady(ctx context.Context, name, slot string) error {
+	deployName := name
+	if slot != "" {
+		deployName = servicesmgr.SlotDeployName(name, slot)
+	}
+	res, err := s.services.WaitReady(ctx, deployName, serviceReadyTimeout)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, err)
+	}
+	if res.Failed {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("service %q failed to start: %s", name, res.Reason))
+	}
+	return nil
 }
 
 // PromoteService switches a blue-green service's primary URL to the other slot.
@@ -3138,6 +3172,13 @@ func (s *Service) PreviewService(ctx context.Context, req *connect.Request[wsv1.
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	// Bounded readiness wait (same policy as DeployService).
+	if err := s.awaitServiceReady(ctx, name, ""); err != nil {
+		return nil, err
+	}
+	if cur, gerr := s.services.Get(ctx, name); gerr == nil {
+		svc = cur
+	}
 	// No public URLs: a preview is reachable only in-cluster.
 	return connect.NewResponse(&wsv1.PreviewServiceResponse{Service: s.toServiceInfo(svc, nil)}), nil
 }
@@ -3177,7 +3218,38 @@ func (s *Service) ServiceLogs(ctx context.Context, req *connect.Request[wsv1.Ser
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&wsv1.ServiceLogsResponse{Lines: lines}), nil
+	resp := &wsv1.ServiceLogsResponse{Lines: lines, Available: len(lines) > 0}
+	// A container that failed BEFORE producing any output (runc create error,
+	// image pull failure, crash loop, unschedulable pod) has no stdout/stderr,
+	// so the log stream is empty and the ONLY explanation lives in the pod
+	// status. Attach it so the caller/model is not left with a bare "no logs".
+	if len(lines) == 0 {
+		fillPodDiagnostics(ctx, s.services, req.Msg.GetName(), &resp.PodPhase, &resp.Restarts, &resp.Message)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// fillPodDiagnostics reads a service's pod diagnostics (phase / restarts /
+// waiting-terminated reason+message) into the given out-params. Best-effort:
+// on any error the out-params are left untouched.
+func fillPodDiagnostics(ctx context.Context, svc servicesReader, name string, phase *string, restarts *int32, message *string) {
+	s, err := svc.Get(ctx, name)
+	if err != nil {
+		return
+	}
+	if s.PodPhase != "" {
+		*phase = s.PodPhase
+	}
+	*restarts = s.Restarts
+	if s.Message != "" {
+		*message = s.Message
+	}
+}
+
+// servicesReader is the subset of the services client the log diagnostics need
+// (a seam for tests).
+type servicesReader interface {
+	Get(ctx context.Context, name string) (servicesmgr.Service, error)
 }
 
 // WatchServiceLogs streams a service's container log until the stream ends or
@@ -3189,15 +3261,23 @@ func (s *Service) WatchServiceLogs(ctx context.Context, req *connect.Request[wsv
 	lines, errc := s.services.LogSource().Follow(ctx, req.Msg.GetName(), servicesmgr.LogOptions{
 		Previous: req.Msg.GetPrevious(),
 	})
+	sent := false
 	for l := range lines {
+		sent = true
 		if err := st.Send(&wsv1.WatchServiceLogsResponse{Output: l + "\n"}); err != nil {
 			return err
 		}
 	}
-	if err := <-errc; err != nil {
-		return st.Send(&wsv1.WatchServiceLogsResponse{Done: true, Error: err.Error()})
+	// Terminal frame: carry pod diagnostics when the container never produced
+	// output, so a failed-to-start container is explained rather than blank.
+	done := &wsv1.WatchServiceLogsResponse{Done: true}
+	if !sent {
+		fillPodDiagnostics(ctx, s.services, req.Msg.GetName(), &done.PodPhase, &done.Restarts, &done.Message)
 	}
-	return st.Send(&wsv1.WatchServiceLogsResponse{Done: true})
+	if err := <-errc; err != nil {
+		done.Error = err.Error()
+	}
+	return st.Send(done)
 }
 
 // WatchWorkspace streams the tenant's sandboxes/services/PVCs live: an initial

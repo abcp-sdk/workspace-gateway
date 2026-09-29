@@ -41,6 +41,13 @@ func slotFor(service, slot string) Slot {
 	return Slot{Name: SlotBlue, DeployName: service}
 }
 
+// SlotDeployName is the Deployment name a slot writes to (`<name>` for blue,
+// `<name>-green` for green). Exported so the gateway can wait on the concrete
+// Deployment after a slot deploy.
+func SlotDeployName(service, slot string) string {
+	return slotFor(service, slot).DeployName
+}
+
 // ServiceSlot is one slot's live view (see Service.Slots).
 type ServiceSlot struct {
 	Slot          string

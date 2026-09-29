@@ -1390,7 +1390,22 @@ message ServiceLogsRequest {
   // Read the PREVIOUS container instance (the crash that restarted it).
   bool previous = 3;
 }
-message ServiceLogsResponse { repeated string lines = 1; }
+message ServiceLogsResponse {
+  repeated string lines = 1;
+  // Pod diagnostics (best-effort), so a container that produced NO logs still
+  // explains why: a create/run failure (RunContainerError), a crash loop, a
+  // pending/failed schedule, etc. These mirror ServiceInfo's diagnostic fields.
+  string pod_phase = 2;
+  int32 restarts = 3;
+  // Waiting/terminated reason + message of the first unhealthy container
+  // (e.g. `RunContainerError: ... exec: "--listen=:8080": executable file not
+  // found in $PATH`); empty when healthy.
+  string message = 4;
+  // True when the container has produced any log output (so `lines` is the
+  // container's own stdout/stderr). False means the container never started
+  // (or has not yet) and the diagnostics above are the whole story.
+  bool available = 5;
+}
 
 message WatchServiceLogsRequest {
   string name = 1;
@@ -1403,6 +1418,11 @@ message WatchServiceLogsResponse {
   bool done = 2;
   // Reason the stream ended (e.g. container exit); empty on a clean end.
   string error = 3;
+  // Pod diagnostics on the terminal frame (best-effort), for a container that
+  // never produced logs. Mirrors ServiceLogsResponse's fields.
+  string pod_phase = 4;
+  int32 restarts = 5;
+  string message = 6;
 }
 
 // ---- live workspace list (server push) ----

@@ -12907,8 +12907,21 @@ func (x *ServiceLogsRequest) GetPrevious() bool {
 }
 
 type ServiceLogsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Lines         []string               `protobuf:"bytes,1,rep,name=lines,proto3" json:"lines,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Lines []string               `protobuf:"bytes,1,rep,name=lines,proto3" json:"lines,omitempty"`
+	// Pod diagnostics (best-effort), so a container that produced NO logs still
+	// explains why: a create/run failure (RunContainerError), a crash loop, a
+	// pending/failed schedule, etc. These mirror ServiceInfo's diagnostic fields.
+	PodPhase string `protobuf:"bytes,2,opt,name=pod_phase,json=podPhase,proto3" json:"pod_phase,omitempty"`
+	Restarts int32  `protobuf:"varint,3,opt,name=restarts,proto3" json:"restarts,omitempty"`
+	// Waiting/terminated reason + message of the first unhealthy container
+	// (e.g. `RunContainerError: ... exec: "--listen=:8080": executable file not
+	// found in $PATH`); empty when healthy.
+	Message string `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	// True when the container has produced any log output (so `lines` is the
+	// container's own stdout/stderr). False means the container never started
+	// (or has not yet) and the diagnostics above are the whole story.
+	Available     bool `protobuf:"varint,5,opt,name=available,proto3" json:"available,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -12948,6 +12961,34 @@ func (x *ServiceLogsResponse) GetLines() []string {
 		return x.Lines
 	}
 	return nil
+}
+
+func (x *ServiceLogsResponse) GetPodPhase() string {
+	if x != nil {
+		return x.PodPhase
+	}
+	return ""
+}
+
+func (x *ServiceLogsResponse) GetRestarts() int32 {
+	if x != nil {
+		return x.Restarts
+	}
+	return 0
+}
+
+func (x *ServiceLogsResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *ServiceLogsResponse) GetAvailable() bool {
+	if x != nil {
+		return x.Available
+	}
+	return false
 }
 
 type WatchServiceLogsRequest struct {
@@ -13009,7 +13050,12 @@ type WatchServiceLogsResponse struct {
 	// Terminal event (always the last message): the stream ended.
 	Done bool `protobuf:"varint,2,opt,name=done,proto3" json:"done,omitempty"`
 	// Reason the stream ended (e.g. container exit); empty on a clean end.
-	Error         string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	Error string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	// Pod diagnostics on the terminal frame (best-effort), for a container that
+	// never produced logs. Mirrors ServiceLogsResponse's fields.
+	PodPhase      string `protobuf:"bytes,4,opt,name=pod_phase,json=podPhase,proto3" json:"pod_phase,omitempty"`
+	Restarts      int32  `protobuf:"varint,5,opt,name=restarts,proto3" json:"restarts,omitempty"`
+	Message       string `protobuf:"bytes,6,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -13061,6 +13107,27 @@ func (x *WatchServiceLogsResponse) GetDone() bool {
 func (x *WatchServiceLogsResponse) GetError() string {
 	if x != nil {
 		return x.Error
+	}
+	return ""
+}
+
+func (x *WatchServiceLogsResponse) GetPodPhase() string {
+	if x != nil {
+		return x.PodPhase
+	}
+	return ""
+}
+
+func (x *WatchServiceLogsResponse) GetRestarts() int32 {
+	if x != nil {
+		return x.Restarts
+	}
+	return 0
+}
+
+func (x *WatchServiceLogsResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
 	}
 	return ""
 }
@@ -14432,16 +14499,23 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
 	"tail_lines\x18\x02 \x01(\x03R\ttailLines\x12\x1a\n" +
-	"\bprevious\x18\x03 \x01(\bR\bprevious\"+\n" +
+	"\bprevious\x18\x03 \x01(\bR\bprevious\"\x9c\x01\n" +
 	"\x13ServiceLogsResponse\x12\x14\n" +
-	"\x05lines\x18\x01 \x03(\tR\x05lines\"I\n" +
+	"\x05lines\x18\x01 \x03(\tR\x05lines\x12\x1b\n" +
+	"\tpod_phase\x18\x02 \x01(\tR\bpodPhase\x12\x1a\n" +
+	"\brestarts\x18\x03 \x01(\x05R\brestarts\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\x12\x1c\n" +
+	"\tavailable\x18\x05 \x01(\bR\tavailable\"I\n" +
 	"\x17WatchServiceLogsRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
-	"\bprevious\x18\x02 \x01(\bR\bprevious\"\\\n" +
+	"\bprevious\x18\x02 \x01(\bR\bprevious\"\xaf\x01\n" +
 	"\x18WatchServiceLogsResponse\x12\x16\n" +
 	"\x06output\x18\x01 \x01(\tR\x06output\x12\x12\n" +
 	"\x04done\x18\x02 \x01(\bR\x04done\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"\x17\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\x12\x1b\n" +
+	"\tpod_phase\x18\x04 \x01(\tR\bpodPhase\x12\x1a\n" +
+	"\brestarts\x18\x05 \x01(\x05R\brestarts\x12\x18\n" +
+	"\amessage\x18\x06 \x01(\tR\amessage\"\x17\n" +
 	"\x15WatchWorkspaceRequest\"\xae\x02\n" +
 	"\x16WatchWorkspaceResponse\x127\n" +
 	"\tsandboxes\x18\x01 \x03(\v2\x19.workspace.v1.SandboxInfoR\tsandboxes\x125\n" +
