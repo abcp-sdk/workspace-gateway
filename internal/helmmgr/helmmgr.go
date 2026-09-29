@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/apimachinery/pkg/watch"
 	sigsyaml "sigs.k8s.io/yaml"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
@@ -407,6 +408,14 @@ func (c *Client) List(ctx context.Context) ([]Release, error) {
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].UpdatedAt > out[j].UpdatedAt })
 	return out, nil
+}
+
+// Watch streams changes to release-state ConfigMaps (create/update/delete), so
+// the gateway's WatchWorkspace can push a fresh Helm-release list live.
+func (c *Client) Watch(ctx context.Context) (watch.Interface, error) {
+	return c.cs.CoreV1().ConfigMaps(c.namespace).Watch(ctx, metav1.ListOptions{
+		LabelSelector: releaseLabel,
+	})
 }
 
 // ---- apply ----

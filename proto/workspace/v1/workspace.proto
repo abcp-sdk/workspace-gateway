@@ -1452,6 +1452,9 @@ message WatchWorkspaceResponse {
   bool sandboxes_changed = 4;
   bool services_changed = 5;
   bool pvcs_changed = 6;
+  // The Helm releases of the caller's tenant (same shape as HelmList).
+  repeated HelmReleaseInfo releases = 7;
+  bool releases_changed = 8;
 }
 
 // BuildPreviewImage builds a PREVIEW image from a repository Dockerfile. The

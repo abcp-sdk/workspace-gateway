@@ -62,7 +62,7 @@ agent:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/agent
-    tag: "20260928184052"
+    tag: "20260929091500"
     pullPolicy: IfNotPresent
   port: 8080
   service:
@@ -97,7 +97,7 @@ workspaceExtension:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/workspace-extension
-    tag: "20260928210500"
+    tag: "20260929090500"
     pullPolicy: IfNotPresent
   # Tenant seeded with the gateway/forgejo defaults. `"*"` = every tenant.
   seedTenant: "*"
@@ -125,7 +125,7 @@ gateway:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/workspace-gateway
-    tag: "20260928210000"
+    tag: "20260929090000"
     pullPolicy: IfNotPresent
   # Namespace the sandbox/service backend manages, and where its RBAC lands.
   sandbox:
@@ -211,7 +211,7 @@ webui:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/workspace-webui
-    tag: "20260928184052"
+    tag: "20260929091500"
     pullPolicy: IfNotPresent
   port: 8080
   service:

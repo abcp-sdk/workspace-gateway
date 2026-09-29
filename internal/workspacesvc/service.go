@@ -139,6 +139,9 @@ func New(d Deps) *Service {
 	if d.Services != nil {
 		sources = append(sources, d.Services.WatchDeployments, d.Services.WatchPVCs)
 	}
+	if d.Helm != nil {
+		sources = append(sources, d.Helm.Watch)
+	}
 	return &Service{
 		agent: d.Agent, members: d.Members, git: d.Forgejo, sbx: d.Sandbox,
 		services: d.Services,
@@ -2586,8 +2589,18 @@ func (s *Service) HelmList(ctx context.Context, req *connect.Request[wsv1.HelmLi
 	if err != nil {
 		return nil, err
 	}
+	out, err := s.listHelmReleases(ctx, tenant)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&wsv1.HelmListResponse{Releases: out}), nil
+}
+
+// listHelmReleases returns the tenant's visible Helm releases (slot releases
+// are folded into their router entry).
+func (s *Service) listHelmReleases(ctx context.Context, tenant string) ([]*wsv1.HelmReleaseInfo, error) {
 	if s.helm == nil {
-		return connect.NewResponse(&wsv1.HelmListResponse{}), nil
+		return []*wsv1.HelmReleaseInfo{}, nil
 	}
 	all, err := s.helm.List(ctx)
 	if err != nil {
@@ -2605,7 +2618,7 @@ func (s *Service) HelmList(ctx context.Context, req *connect.Request[wsv1.HelmLi
 		}
 		out = append(out, s.helmReleaseInfoWithSlots(ctx, r))
 	}
-	return connect.NewResponse(&wsv1.HelmListResponse{Releases: out}), nil
+	return out, nil
 }
 
 // HelmHistory returns a release and its revisions.
@@ -3305,9 +3318,14 @@ func (s *Service) WatchWorkspace(ctx context.Context, req *connect.Request[wsv1.
 		if err != nil {
 			return err
 		}
+		rels, err := s.listHelmReleases(ctx, tenant)
+		if err != nil {
+			return err
+		}
 		return st.Send(&wsv1.WatchWorkspaceResponse{
-			Sandboxes: sbxs, Services: svcs, Pvcs: pvcs,
+			Sandboxes: sbxs, Services: svcs, Pvcs: pvcs, Releases: rels,
 			SandboxesChanged: true, ServicesChanged: true, PvcsChanged: true,
+			ReleasesChanged: true,
 		})
 	}
 	// Initial snapshot.
