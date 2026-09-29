@@ -126,15 +126,15 @@ func ToolsFor(r Role) []string {
 	case Maintainer:
 		// Read, review/merge MRs, create+dispatch branches, sandbox. NOT
 		// sandbox-port (would write main) and NOT repo-file-write/edit/commit.
-		return concat(generalTools, repoReadTools, repoReviewTools, sandboxBase)
+		return concat(generalTools, repoReadTools, repoReviewTools, sandboxBase, []string{"pvc-list"})
 	case Developer:
 		// Work on its branch (incl. sandbox-port), propose MRs, sandbox.
-		return concat(generalTools, repoReadTools, repoProposeTools, sandboxBase, []string{"sandbox-port"})
+		return concat(generalTools, repoReadTools, repoProposeTools, sandboxBase, []string{"sandbox-port", "pvc-list"})
 	case Explorer:
 		// Read every visible repo; may run a sandbox for analysis, but has NO
 		// tool that writes back to a repo (no repo-file-write/edit/commit, no
 		// sandbox-port). May read services + their logs (observability only).
-		return concat(generalTools, repoReadTools, sandboxBase, []string{"service-list", "service-logs"})
+		return concat(generalTools, repoReadTools, sandboxBase, []string{"service-list", "service-logs", "pvc-list"})
 	}
 	return concat(generalTools, repoReadTools)
 }

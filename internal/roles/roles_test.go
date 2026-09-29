@@ -158,8 +158,24 @@ func TestOnlyAdminManagesPushMirrors(t *testing.T) {
 	}
 }
 
-func TestParseSession(t *testing.T) {
-	org, repo, branch, ok := ParseSession("acme:web:main")
+func TestEveryRoleListsPVCsButOnlyAdminMutates(t *testing.T) {
+	// pvc-list is read-only observability: every role may see the tenant's
+	// volumes. pvc-create/pvc-delete stay admin-only.
+	for _, r := range []Role{Admin, Maintainer, Developer, Explorer} {
+		if !has(ToolsFor(r), "pvc-list") {
+			t.Fatalf("%s must have pvc-list", r)
+		}
+	}
+	for _, r := range []Role{Maintainer, Developer, Explorer} {
+		for _, forbidden := range []string{"pvc-create", "pvc-delete"} {
+			if has(ToolsFor(r), forbidden) {
+				t.Fatalf("%s must not have %q (admin-only)", r, forbidden)
+			}
+		}
+	}
+}
+
+func TestParseSession(t *testing.T) {	org, repo, branch, ok := ParseSession("acme:web:main")
 	if !ok || org != "acme" || repo != "web" || branch != "main" {
 		t.Fatalf("bad parse: %q %q %q %v", org, repo, branch, ok)
 	}

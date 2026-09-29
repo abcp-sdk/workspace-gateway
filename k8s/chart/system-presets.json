@@ -134,7 +134,8 @@
       "sandbox-file-rm",
       "sandbox-file-download",
       "sandbox-file-upload",
-      "sandbox-checkout"
+      "sandbox-checkout",
+      "pvc-list"
     ],
     "max_turns": 0
   },
@@ -193,7 +194,8 @@
       "sandbox-file-download",
       "sandbox-file-upload",
       "sandbox-checkout",
-      "sandbox-port"
+      "sandbox-port",
+      "pvc-list"
     ],
     "max_turns": 0
   },
@@ -240,7 +242,8 @@
       "sandbox-file-upload",
       "sandbox-checkout",
       "service-list",
-      "service-logs"
+      "service-logs",
+      "pvc-list"
     ],
     "max_turns": 0
   }
