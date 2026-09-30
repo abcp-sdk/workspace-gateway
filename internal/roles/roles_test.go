@@ -15,51 +15,40 @@ func has(tools []string, name string) bool {
 }
 
 func TestRoleForBranch(t *testing.T) {
-	if RoleForBranch("main") != Maintainer {
-		t.Fatal("main must be maintainer")
+	// Every branch session is the SAME developer role (merge rights come from
+	// the MR's base, not the session's branch).
+	if RoleForBranch("main") != Developer {
+		t.Fatal("main must be developer")
 	}
 	if RoleForBranch("feat/x") != Developer {
 		t.Fatal("non-main must be developer")
 	}
 }
 
-func TestMaintainerCannotWriteMain(t *testing.T) {
-	tools := ToolsFor(Maintainer)
-	// Maintainer must NOT have any tool that writes git, and no sandbox-port.
+func TestDeveloperEditsOnlyViaSandbox(t *testing.T) {
+	tools := ToolsFor(Developer)
+	// No tool writes branch content directly, and no tool creates a branch.
 	for _, forbidden := range []string{
-		"repo-file-write", "repo-file-edit", "repo-file-delete", "repo-commit", "sandbox-port",
+		"repo-file-write", "repo-file-edit", "repo-file-delete", "repo-commit",
+		"sandbox-port", "repo-branch-create", "repo-branch-sync", "repo-file-restore",
+		"repo-mr-create",
 	} {
 		if has(tools, forbidden) {
-			t.Fatalf("maintainer must not have %q", forbidden)
+			t.Fatalf("developer must not have %q", forbidden)
 		}
 	}
-	// But it DOES need read, review/merge, branch+dispatch, sandbox.
+	// It edits in a sandbox and submits/merges/closes MRs.
 	for _, want := range []string{
-		"repo-file-read", "repo-file-list", "repo-mr-list", "repo-mr-merge",
-		"repo-branch-create", "sandbox-exec", "sandbox-create",
+		"repo-file-read", "repo-file-list", "sandbox-checkout", "sandbox-submit-mr",
+		"repo-mr-list", "repo-mr-comment", "repo-mr-merge", "repo-mr-close",
+		"repo-tag-create", "service-deploy", "sandbox-exec", "sandbox-create",
 	} {
 		if !has(tools, want) {
-			t.Fatalf("maintainer must have %q", want)
+			t.Fatalf("developer must have %q", want)
 		}
 	}
-	// Never empty (empty whitelist = all tools).
 	if len(tools) == 0 {
-		t.Fatal("maintainer tools must not be empty")
-	}
-}
-
-func TestDeveloperProposesNotMerges(t *testing.T) {
-	tools := ToolsFor(Developer)
-	if !has(tools, "repo-file-write") || !has(tools, "repo-mr-create") || !has(tools, "sandbox-port") {
-		t.Fatal("developer must write its branch + propose + port")
-	}
-	if has(tools, "repo-mr-merge") {
-		t.Fatal("developer must NOT merge")
-	}
-	// A developer session is bound to exactly one branch and must NOT spawn
-	// more; branch creation is the maintainer's job.
-	if has(tools, "repo-branch-create") {
-		t.Fatal("developer must NOT create branches")
+		t.Fatal("developer tools must not be empty")
 	}
 }
 
@@ -70,7 +59,7 @@ func TestExplorer(t *testing.T) {
 		t.Fatal("explorer: sandbox analysis tools missing")
 	}
 	// ...but has NO path back into a repository.
-	if has(e, "sandbox-port") || has(e, "repo-file-write") || has(e, "repo-file-edit") || has(e, "repo-commit") {
+	if has(e, "sandbox-submit-mr") || has(e, "repo-mr-merge") || has(e, "repo-file-write") {
 		t.Fatal("explorer: must have no repo write path")
 	}
 	if !has(e, "repo-file-read") {
@@ -106,14 +95,10 @@ func TestAdminCreatesRepoAndHasSandbox(t *testing.T) {
 func TestPreviewAndLogsAvailability(t *testing.T) {
 	// developer: may build a preview image + run a preview service + read logs.
 	d := ToolsFor(Developer)
-	for _, want := range []string{"repo-build-preview", "service-preview", "service-logs"} {
+	for _, want := range []string{"repo-build-preview", "service-preview", "service-logs", "service-deploy"} {
 		if !has(d, want) {
 			t.Fatalf("developer must have %q", want)
 		}
-	}
-	// developer must NOT deploy a release service.
-	if has(d, "service-deploy") {
-		t.Fatal("developer must not deploy a release service")
 	}
 	// explorer: read-only observability.
 	e := ToolsFor(Explorer)
@@ -123,18 +108,13 @@ func TestPreviewAndLogsAvailability(t *testing.T) {
 	if has(e, "service-preview") || has(e, "service-deploy") || has(e, "repo-build-preview") {
 		t.Fatal("explorer must not deploy or build")
 	}
-	// maintainer keeps release deploy + logs.
-	m := ToolsFor(Maintainer)
-	if !has(m, "service-deploy") || !has(m, "service-logs") {
-		t.Fatal("maintainer must deploy release services and read logs")
-	}
 }
 
 func TestOnlyAdminRemovesRepo(t *testing.T) {
 	if !has(ToolsFor(Admin), "repo-remove") {
 		t.Fatal("admin must remove repos")
 	}
-	for _, r := range []Role{Maintainer, Developer, Explorer} {
+	for _, r := range []Role{Developer, Explorer} {
 		if has(ToolsFor(r), "repo-remove") {
 			t.Fatalf("%s must not remove repos (admin-only)", r)
 		}
@@ -149,7 +129,7 @@ func TestOnlyAdminManagesPushMirrors(t *testing.T) {
 			t.Fatalf("admin must have %q", want)
 		}
 	}
-	for _, r := range []Role{Maintainer, Developer, Explorer} {
+	for _, r := range []Role{Developer, Explorer} {
 		for _, forbidden := range mirrorTools {
 			if has(ToolsFor(r), forbidden) {
 				t.Fatalf("%s must not have %q (admin-only)", r, forbidden)
@@ -161,12 +141,12 @@ func TestOnlyAdminManagesPushMirrors(t *testing.T) {
 func TestEveryRoleListsPVCsButOnlyAdminMutates(t *testing.T) {
 	// pvc-list is read-only observability: every role may see the tenant's
 	// volumes. pvc-create/pvc-delete stay admin-only.
-	for _, r := range []Role{Admin, Maintainer, Developer, Explorer} {
+	for _, r := range []Role{Admin, Developer, Explorer} {
 		if !has(ToolsFor(r), "pvc-list") {
 			t.Fatalf("%s must have pvc-list", r)
 		}
 	}
-	for _, r := range []Role{Maintainer, Developer, Explorer} {
+	for _, r := range []Role{Developer, Explorer} {
 		for _, forbidden := range []string{"pvc-create", "pvc-delete"} {
 			if has(ToolsFor(r), forbidden) {
 				t.Fatalf("%s must not have %q (admin-only)", r, forbidden)
@@ -187,7 +167,7 @@ func TestParseSession(t *testing.T) {	org, repo, branch, ok := ParseSession("acm
 }
 
 func TestNoToolsNeverEmpty(t *testing.T) {
-	for _, r := range []Role{Admin, Maintainer, Developer, Explorer} {
+	for _, r := range []Role{Admin, Developer, Explorer} {
 		if len(ToolsFor(r)) == 0 {
 			t.Fatalf("%s tools must not be empty (empty == all)", r)
 		}

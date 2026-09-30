@@ -290,6 +290,84 @@ func (m *Manager) forget(o Options) {
 	}
 }
 
+// Submit creates `newBranch` from `base`, applies `ops`, commits ONCE under
+// `message`, and pushes the new branch (a normal, non-force push). It is the
+// ONLY content-write path: the new branch is written exactly once and never
+// amended afterwards. Returns the new commit sha.
+//
+// `newBranch` must NOT already exist (the caller picks a fresh `mr/...` name);
+// an existing ref is refused so a submit can never rewrite history.
+func (m *Manager) Submit(ctx context.Context, o Options, base, newBranch, message string, ops []FileOp) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout(o.Timeout))
+	defer cancel()
+	if strings.TrimSpace(newBranch) == "" {
+		return "", errors.New("newBranch is required")
+	}
+	if strings.TrimSpace(message) == "" {
+		return "", errors.New("message is required")
+	}
+	if len(ops) == 0 {
+		return "", errors.New("no file operations given")
+	}
+	auth := &http.BasicAuth{Username: o.User, Password: o.Token}
+	dir, err := m.newDir()
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(dir)
+	repo, err := git.PlainCloneContext(ctx, dir, false, &git.CloneOptions{
+		URL:           o.RepoURL,
+		Auth:          auth,
+		ReferenceName: plumbing.NewBranchReferenceName(base),
+		SingleBranch:  true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("clone %s: %w", base, err)
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return "", err
+	}
+	ignored, err := gitignoreMatcher(wt)
+	if err != nil {
+		return "", err
+	}
+	for _, op := range ops {
+		if err := applyFile(wt, op, ignored); err != nil {
+			return "", fmt.Errorf("apply %s: %w", op.Path, err)
+		}
+	}
+	if err := wt.AddWithOptions(&git.AddOptions{All: true}); err != nil {
+		return "", fmt.Errorf("stage: %w", err)
+	}
+	staged, err := hasStagedChanges(wt)
+	if err != nil {
+		return "", err
+	}
+	if !staged {
+		return "", ErrNoChanges
+	}
+	author := &object.Signature{Name: "workspace-gateway", Email: "gateway@workspace.local", When: time.Now()}
+	hash, err := wt.Commit(message, &git.CommitOptions{Author: author, Committer: author})
+	if err != nil {
+		return "", fmt.Errorf("commit: %w", err)
+	}
+	// Point the local branch at the new commit and push it WITHOUT force, so an
+	// accidental collision with an existing ref is rejected by the remote.
+	if err := repo.Storer.SetReference(plumbing.NewHashReference(plumbing.NewBranchReferenceName(newBranch), hash)); err != nil {
+		return "", err
+	}
+	err = repo.PushContext(ctx, &git.PushOptions{
+		RemoteName: "origin",
+		RefSpecs:   []config.RefSpec{config.RefSpec("refs/heads/" + newBranch + ":refs/heads/" + newBranch)},
+		Auth:       auth,
+	})
+	if err != nil && err != git.NoErrAlreadyUpToDate {
+		return "", fmt.Errorf("push %s: %w", newBranch, err)
+	}
+	return hash.String(), nil
+}
+
 // Status reports the branch's staging state.
 type Status struct {
 	// Placeholder is true when HEAD's message is the placeholder.

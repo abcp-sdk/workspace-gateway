@@ -334,35 +334,19 @@ message ContentsResponse {
   repeated ContentDirEntry entries = 5; // when is_dir
 }
 
-// CommitFiles creates one commit with several file operations.
+// CommitFileOp is one file change carried by SubmitMR.
 message CommitFileOp {
   string path = 1;
   string operation = 2; // create | update | delete
   string content = 3; // UTF-8 (when content_bytes empty)
   bytes content_bytes = 4; // raw bytes (binary-safe; wins over content)
-  string sha = 5; // optimistic lock for update/delete
-  string from_path = 6; // rename source
-}
-message CommitFilesRequest {
-  string org = 1;
-  string repo = 2;
-  string message = 3;
-  string ref = 4;
-  string new_branch = 5;
-  repeated CommitFileOp files = 6;
-}
-message CommitFilesResponse {
-  string sha = 1;
-  string message = 2;
 }
 
-// ---- branch staging (amend semantics) ----
+// ---- branch staging (read-only status) ----
 //
-// A branch session's writes AMEND one synthetic "staging" commit (message
-// sentinel `ABCP_XXX`) instead of appending a commit per edit. BranchStatus
-// reports whether that placeholder currently carries staged changes; CommitStaged
-// rewinds it to a real message and CLOSES the staging area (the next write opens
-// a fresh placeholder), so it never appends an empty commit.
+// A branch session's writes used to AMEND one synthetic "staging" commit. That
+// write path is gone; branch content now changes ONLY by merging an MR.
+// BranchStatus remains for read-only observability.
 
 // BranchStatus reports a branch's staging state.
 message BranchStatusRequest {
@@ -380,28 +364,6 @@ message BranchStatusResponse {
   // The sha an MR should merge (the placeholder's parent, else the tip).
   string merge_tip = 4;
 }
-
-// CommitStaged rewinds the placeholder to `message`, closing the staging area.
-// Refused when nothing is staged (never makes an empty commit).
-message CommitStagedRequest {
-  string org = 1;
-  string repo = 2;
-  string branch = 3;
-  string message = 4;
-}
-message CommitStagedResponse { string sha = 1; }
-
-// ApplyFiles applies file operations to a branch's staging commit (amending the
-// placeholder when one is open, otherwise opening it with the change). This is
-// the write path for repo-write/edit/delete/port; it rewrites HEAD, so it never
-// touches the default branch.
-message ApplyFilesRequest {
-  string org = 1;
-  string repo = 2;
-  string branch = 3;
-  repeated CommitFileOp files = 4;
-}
-message ApplyFilesResponse { string sha = 1; }
 
 // Compare returns per-file patches between two refs (`base...head`).
 message CompareRequest {
@@ -560,6 +522,9 @@ message MRInfo {
   int32 deletions = 13;
   int32 changed_files = 14;
   string html_url = 15;
+  // The session that submitted this MR (`org:repo:branch`), from the gateway's
+  // mr_submissions record. Empty for an MR not created via SubmitMR.
+  string origin_session = 16;
 }
 message ListMRsResponse { repeated MRInfo mrs = 1; }
 
@@ -594,15 +559,25 @@ message MRCommentInfo {
 }
 message ListMRCommentsResponse { repeated MRCommentInfo comments = 1; }
 
-message CreateMRRequest {
+// SubmitMR is the ONLY way branch content changes. It takes the diff between a
+// sandbox's repo directory (computed by the caller) and `base`, materializes it
+// onto a NEW immutable `mr/...` head branch, and opens an MR into `base`. The
+// caller's session must equal `org:repo:base` OR be submitting cross-repo (any
+// branch session may propose into any repo it can see); the MR records its
+// origin session so review notifications can find it.
+message SubmitMRRequest {
   string org = 1;
   string repo = 2;
-  string title = 3;
-  string head = 4; // source branch
-  string base = 5; // target branch (main)
-  string body = 6;
+  string base = 3; // REQUIRED target branch (e.g. main)
+  string title = 4;
+  string body = 5;
+  repeated CommitFileOp files = 6; // full change set vs base (incl. deletes)
 }
-message CreateMRResponse { int32 index = 1; string url = 2; }
+message SubmitMRResponse {
+  int32 index = 1;
+  string url = 2;
+  string head = 3; // the created mr/... branch
+}
 
 message CommentMRRequest {
   string org = 1;
@@ -612,7 +587,10 @@ message CommentMRRequest {
 }
 message CommentMRResponse { bool ok = 1; }
 
-// MergeMR is a MAINTAINER action (role=maintainer). It is how main changes.
+// MergeMR merges an MR. It is allowed ONLY when the caller's session equals
+// `org:repo:<base>` (self-merge of an MR targeting its own branch); a human
+// webui caller (no session header) is unrestricted. The `mr/...` head branch is
+// deleted on merge.
 message MergeMRRequest {
   string org = 1;
   string repo = 2;
@@ -620,24 +598,14 @@ message MergeMRRequest {
 }
 message MergeMRResponse { bool ok = 1; }
 
-// SyncBranch brings a NON-MAIN branch up to date with its base (`main`) by
-// committing a two-parent merge on the branch. Files changed on BOTH sides
-// since the merge base are merged three-way; genuine conflicts are written as
-// marker blocks (sentinel `ABCP-CONFLICT`, git-style with a base section) that
-// the branch session MUST resolve before CreateMR/MergeMR will succeed.
-message SyncBranchRequest {
+// CloseMR closes an MR (without merging). Same authorization as MergeMR; the
+// `mr/...` head branch is deleted on close.
+message CloseMRRequest {
   string org = 1;
   string repo = 2;
-  string branch = 3;
+  int32 index = 3;
 }
-message SyncBranchResponse {
-  // clean = no conflict markers were written.
-  bool clean = 1;
-  // conflicts lists the repo-relative paths that carry markers.
-  repeated string conflicts = 2;
-  // commit is the new branch-tip sha (equal to the old one when already current).
-  string commit = 3;
-}
+message CloseMRResponse { bool ok = 1; }
 
 // ---- OCI images ----
 //
@@ -1556,14 +1524,15 @@ service BranchSessionService {
   // Tenant-scoped repo operations (the extension's ONLY path to Forgejo).
   rpc RepoMeta(RepoMetaRequest) returns (RepoMetaResponse);
   rpc Contents(ContentsRequest) returns (ContentsResponse);
-  rpc CommitFiles(CommitFilesRequest) returns (CommitFilesResponse);
+  // BranchStatus reports a branch's staging state (read-only).
   rpc BranchStatus(BranchStatusRequest) returns (BranchStatusResponse);
-  rpc CommitStaged(CommitStagedRequest) returns (CommitStagedResponse);
-  rpc ApplyFiles(ApplyFilesRequest) returns (ApplyFilesResponse);
   rpc Compare(CompareRequest) returns (CompareResponse);
   rpc Blame(BlameRequest) returns (BlameResponse);
   rpc FileDiff(FileDiffRequest) returns (FileDiffResponse);
   rpc CreateTag(CreateTagRequest) returns (CreateTagResponse);
+  // CreateBranch is an INTERNAL primitive (no agent tool): it materializes a
+  // branch for a manually-created session (ForkBranchSession / lifecycle). It
+  // creates a ref only — it never changes branch CONTENT.
   rpc CreateBranch(CreateBranchRequest) returns (CreateBranchResponse);
   rpc Archive(ArchiveRequest) returns (ArchiveResponse);
   // ImportRepo migrates an EXTERNAL git repository into an org (admin).
@@ -1577,12 +1546,14 @@ service BranchSessionService {
   rpc GetMR(GetMRRequest) returns (GetMRResponse);
   rpc MRDiff(MRDiffRequest) returns (MRDiffResponse);
   rpc ListMRComments(ListMRCommentsRequest) returns (ListMRCommentsResponse);
-  rpc CreateMR(CreateMRRequest) returns (CreateMRResponse);
+  // SubmitMR is the ONLY way to change a branch: it materializes the sandbox
+  // diff onto a NEW, immutable `mr/...` head branch and opens an MR into `base`.
+  rpc SubmitMR(SubmitMRRequest) returns (SubmitMRResponse);
   rpc CommentMR(CommentMRRequest) returns (CommentMRResponse);
   rpc MergeMR(MergeMRRequest) returns (MergeMRResponse);
-  // SyncBranch (re)integrates the base into a feature branch, writing conflict
-  // markers for the branch session to resolve (developer action).
-  rpc SyncBranch(SyncBranchRequest) returns (SyncBranchResponse);
+  // CloseMR closes an MR whose base is the caller's own branch and deletes its
+  // `mr/...` head branch.
+  rpc CloseMR(CloseMRRequest) returns (CloseMRResponse);
   // OCI images
   rpc ListOCIImages(ListOCIImagesRequest) returns (ListOCIImagesResponse);
   rpc BuildSandboxImage(BuildSandboxImageRequest) returns (BuildSandboxImageResponse);

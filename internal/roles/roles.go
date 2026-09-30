@@ -1,18 +1,18 @@
 // Package roles maps a session's shape to its immutable role + preset, and
 // owns each role's tool whitelist.
 //
-// A tenant only ever sees the org/repo it maintains, so "visible ==
-// maintainer". A session's preset is decided at creation and never changes:
+// A tenant only ever sees the org/repo it maintains, so "visible" is the whole
+// tenant. A session's preset is decided at creation and never changes:
 //
 //	admin                -> create org/repo, read-only, NO sandbox
-//	org:repo:main        -> maintainer (read, review/merge MRs, branch+dispatch, sandbox)
-//	org:repo:<other>     -> developer  (write its branch, propose MRs, sandbox)
+//	org:repo:<branch>    -> developer (sandbox-only edits, submit/merge MRs)
 //	<free> role=explorer -> explorer   (read all visible repos only)
 //
-// RULE: the `main` branch can ONLY change by merging an MR. A maintainer
-// session therefore has NO tool that writes to main (no repo-file-write/edit/commit,
-// no sandbox-port); it reviews and merges change requests and creates branch
-// sessions. Branch protection (apply_to_admins) is the enforcement backstop.
+// RULE: branch content changes ONLY by merging an MR. No role has a tool that
+// writes a branch directly; a developer edits in a sandbox and submits an MR
+// (`sandbox-submit-mr`), which materializes onto an immutable `mr/...` branch.
+// A developer may MERGE only an MR whose base is its OWN branch (self-merge);
+// branch protection (apply_to_admins) is the enforcement backstop.
 package roles
 
 import (
@@ -26,7 +26,6 @@ type Role string
 
 const (
 	Admin      Role = "admin"
-	Maintainer Role = "maintainer"
 	Developer  Role = "developer"
 	Explorer   Role = "explorer"
 )
@@ -68,33 +67,21 @@ var repoReadTools = []string{
 	"repo-diff", "repo-branches", "repo-tags",
 }
 
-// Repo propose tools: write to the session's OWN branch and open/comment MRs.
-// Includes syncing the branch with main (`repo-branch-sync`) and restoring a
-// file (`repo-file-restore`) so a developer can resolve conflicts in place. A
-// developer can also build a PREVIEW image of its branch and run a PREVIEW
-// service to verify it, and read that service's logs.
-//
-// NO `repo-branch-create`: a developer session is bound to exactly ONE branch
-// and must not spawn more. Creating and dispatching branches is the
-// maintainer's job (see repoReviewTools).
-var repoProposeTools = []string{
-	"repo-file-write", "repo-file-edit", "repo-file-delete", "repo-commit",
-	"repo-branch-sync", "repo-file-restore",
-	"repo-mr-create", "repo-mr-list", "repo-mr-comment",
+// Repo propose + review tools. Every branch session has the SAME set:
+//  - edit ONLY in a sandbox, then submit an MR (`sandbox-submit-mr`);
+//  - open/comment on MRs, and merge/close an MR whose base is its OWN branch;
+//  - tag releases, build images, deploy/manage services + helm.
+// There is NO tool that writes branch content directly (no repo-file-write/edit/
+// commit, no sandbox-port) and NO tool that creates a branch.
+var repoDevTools = []string{
+	// MR lifecycle (the only content path is sandbox-submit-mr)
+	"sandbox-submit-mr", "repo-mr-list", "repo-mr-comment", "repo-mr-merge", "repo-mr-close",
+	// peer messaging between branch sessions
 	"repo-mail-send",
-	"repo-build-preview", "service-preview", "service-logs",
-}
-
-// Repo review tools: the maintainer reviews and merges MRs, creates the
-// branches it dispatches work to, tags releases, builds sandbox images from
-// the repo, and deploys long-lived services. It does NOT open MRs.
-var repoReviewTools = []string{
-	"repo-branch-create", "repo-tag-create", "repo-build-image",
-	"repo-mr-list", "repo-mr-comment", "repo-mr-merge",
-	"repo-mail-send",
+	// releases / images / services
+	"repo-tag-create", "repo-build-image", "repo-build-preview",
 	"service-deploy", "service-list", "service-delete", "service-logs",
-	"service-promote", "service-rollback",
-	"repo-build-preview", "service-preview",
+	"service-promote", "service-rollback", "service-preview",
 	"helm-deploy", "helm-list", "helm-history", "helm-rollback", "helm-uninstall",
 	"helm-promote", "helm-rollback-release",
 }
@@ -123,17 +110,15 @@ func ToolsFor(r Role) []string {
 		// ad-hoc work. Still NO repo writes and NO sandbox-port (admin sessions
 		// are not bound to a branch, so porting would write main).
 		return concat(generalTools, repoReadTools, adminTools, sandboxBase)
-	case Maintainer:
-		// Read, review/merge MRs, create+dispatch branches, sandbox. NOT
-		// sandbox-port (would write main) and NOT repo-file-write/edit/commit.
-		return concat(generalTools, repoReadTools, repoReviewTools, sandboxBase, []string{"pvc-list"})
 	case Developer:
-		// Work on its branch (incl. sandbox-port), propose MRs, sandbox.
-		return concat(generalTools, repoReadTools, repoProposeTools, sandboxBase, []string{"sandbox-port", "pvc-list"})
+		// The single repo-bound role: sandbox-only edits, submit/merge/close
+		// MRs (merge/close only when base == its own branch), releases, images,
+		// services. NOT sandbox-port and NOT any direct branch write.
+		return concat(generalTools, repoReadTools, repoDevTools, sandboxBase, []string{"pvc-list"})
 	case Explorer:
 		// Read every visible repo; may run a sandbox for analysis, but has NO
-		// tool that writes back to a repo (no repo-file-write/edit/commit, no
-		// sandbox-port). May read services + their logs (observability only).
+		// tool that writes back to a repo (no sandbox-port, no submit-mr). May
+		// read services + their logs (observability only).
 		return concat(generalTools, repoReadTools, sandboxBase, []string{"service-list", "service-logs", "pvc-list"})
 	}
 	return concat(generalTools, repoReadTools)
@@ -146,9 +131,6 @@ func concat(parts ...[]string) []string {
 	}
 	return out
 }
-
-// CanMerge reports whether a role may approve/merge MRs.
-func CanMerge(r Role) bool { return r == Maintainer }
 
 // CanCreateRepo reports whether a role may create org/repo.
 func CanCreateRepo(r Role) bool { return r == Admin }
@@ -205,18 +187,18 @@ func SessionName(org, repo, branch string) string {
 	return fmt.Sprintf("%s:%s:%s", org, repo, branch)
 }
 
-// RoleForBranch derives the role from the branch name (main = maintainer).
+// RoleForBranch derives the role from a branch session. Every branch session
+// (main included) is the SAME developer role; merge rights are enforced by the
+// MR's base, not by the session's branch.
 func RoleForBranch(branch string) Role {
-	if branch == MainBranch {
-		return Maintainer
-	}
+	_ = branch
 	return Developer
 }
 
 // ValidRole reports whether s is a known role id.
 func ValidRole(s string) bool {
 	switch Role(s) {
-	case Admin, Maintainer, Developer, Explorer:
+	case Admin, Developer, Explorer:
 		return true
 	}
 	return false

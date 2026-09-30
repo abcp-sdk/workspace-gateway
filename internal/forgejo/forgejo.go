@@ -620,7 +620,7 @@ func (c *Client) CommentMR(ctx context.Context, org, repo string, index int32, b
 	return c.do(ctx, "POST", "/repos/"+seg(org)+"/"+seg(repo)+"/issues/"+fmt.Sprint(index)+"/comments", nil, map[string]any{"body": body}, nil)
 }
 
-// MergeMR merges a pull request (maintainer action; the only path to main).
+// MergeMR merges a pull request (the only path to main).
 // Forgejo requires the merge style (`Do`); "merge" preserves the branch
 // commits and records a merge commit on main.
 //
@@ -628,11 +628,16 @@ func (c *Client) CommentMR(ctx context.Context, org, repo string, index int32, b
 // merge (409) if the head branch no longer sits on that commit, so a branch
 // that moved after review cannot change what lands on main.
 func (c *Client) MergeMR(ctx context.Context, org, repo string, index int32, headSHA string) error {
-	in := map[string]any{"Do": "merge"}
+	in := map[string]any{"Do": "merge", "delete_branch_after_merge": true}
 	if headSHA != "" {
 		in["head_commit_id"] = headSHA
 	}
 	return c.do(ctx, "POST", "/repos/"+seg(org)+"/"+seg(repo)+"/pulls/"+fmt.Sprint(index)+"/merge", nil, in, nil)
+}
+
+// CloseMR closes a pull request without merging it.
+func (c *Client) CloseMR(ctx context.Context, org, repo string, index int32) error {
+	return c.do(ctx, "PATCH", "/repos/"+seg(org)+"/"+seg(repo)+"/pulls/"+fmt.Sprint(index), nil, map[string]any{"state": "closed"}, nil)
 }
 
 // GetMR returns one pull request's detail (full MRInfo).

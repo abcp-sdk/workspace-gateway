@@ -19,7 +19,7 @@ func TestAllPresetsValid(t *testing.T) {
 		}
 		ids[p.ID] = true
 	}
-	for _, want := range []string{"admin", "maintainer", "developer", "explorer"} {
+	for _, want := range []string{"admin", "developer", "explorer"} {
 		if !ids[want] {
 			t.Fatalf("missing preset %s", want)
 		}
@@ -40,11 +40,11 @@ func TestJSONRoundTrips(t *testing.T) {
 	}
 }
 
-func TestMaintainerPresetMatchesRole(t *testing.T) {
+func TestDeveloperPresetMatchesRole(t *testing.T) {
 	for _, p := range All() {
-		if p.ID == "maintainer" {
-			if len(p.Tools) != len(roles.ToolsFor(roles.Maintainer)) {
-				t.Fatal("maintainer preset tools drift from roles.ToolsFor")
+		if p.ID == "developer" {
+			if len(p.Tools) != len(roles.ToolsFor(roles.Developer)) {
+				t.Fatal("developer preset tools drift from roles.ToolsFor")
 			}
 		}
 	}

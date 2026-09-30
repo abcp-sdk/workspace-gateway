@@ -118,18 +118,9 @@ const (
 	// BranchSessionServiceContentsProcedure is the fully-qualified name of the BranchSessionService's
 	// Contents RPC.
 	BranchSessionServiceContentsProcedure = "/workspace.v1.BranchSessionService/Contents"
-	// BranchSessionServiceCommitFilesProcedure is the fully-qualified name of the
-	// BranchSessionService's CommitFiles RPC.
-	BranchSessionServiceCommitFilesProcedure = "/workspace.v1.BranchSessionService/CommitFiles"
 	// BranchSessionServiceBranchStatusProcedure is the fully-qualified name of the
 	// BranchSessionService's BranchStatus RPC.
 	BranchSessionServiceBranchStatusProcedure = "/workspace.v1.BranchSessionService/BranchStatus"
-	// BranchSessionServiceCommitStagedProcedure is the fully-qualified name of the
-	// BranchSessionService's CommitStaged RPC.
-	BranchSessionServiceCommitStagedProcedure = "/workspace.v1.BranchSessionService/CommitStaged"
-	// BranchSessionServiceApplyFilesProcedure is the fully-qualified name of the BranchSessionService's
-	// ApplyFiles RPC.
-	BranchSessionServiceApplyFilesProcedure = "/workspace.v1.BranchSessionService/ApplyFiles"
 	// BranchSessionServiceCompareProcedure is the fully-qualified name of the BranchSessionService's
 	// Compare RPC.
 	BranchSessionServiceCompareProcedure = "/workspace.v1.BranchSessionService/Compare"
@@ -172,18 +163,18 @@ const (
 	// BranchSessionServiceListMRCommentsProcedure is the fully-qualified name of the
 	// BranchSessionService's ListMRComments RPC.
 	BranchSessionServiceListMRCommentsProcedure = "/workspace.v1.BranchSessionService/ListMRComments"
-	// BranchSessionServiceCreateMRProcedure is the fully-qualified name of the BranchSessionService's
-	// CreateMR RPC.
-	BranchSessionServiceCreateMRProcedure = "/workspace.v1.BranchSessionService/CreateMR"
+	// BranchSessionServiceSubmitMRProcedure is the fully-qualified name of the BranchSessionService's
+	// SubmitMR RPC.
+	BranchSessionServiceSubmitMRProcedure = "/workspace.v1.BranchSessionService/SubmitMR"
 	// BranchSessionServiceCommentMRProcedure is the fully-qualified name of the BranchSessionService's
 	// CommentMR RPC.
 	BranchSessionServiceCommentMRProcedure = "/workspace.v1.BranchSessionService/CommentMR"
 	// BranchSessionServiceMergeMRProcedure is the fully-qualified name of the BranchSessionService's
 	// MergeMR RPC.
 	BranchSessionServiceMergeMRProcedure = "/workspace.v1.BranchSessionService/MergeMR"
-	// BranchSessionServiceSyncBranchProcedure is the fully-qualified name of the BranchSessionService's
-	// SyncBranch RPC.
-	BranchSessionServiceSyncBranchProcedure = "/workspace.v1.BranchSessionService/SyncBranch"
+	// BranchSessionServiceCloseMRProcedure is the fully-qualified name of the BranchSessionService's
+	// CloseMR RPC.
+	BranchSessionServiceCloseMRProcedure = "/workspace.v1.BranchSessionService/CloseMR"
 	// BranchSessionServiceListOCIImagesProcedure is the fully-qualified name of the
 	// BranchSessionService's ListOCIImages RPC.
 	BranchSessionServiceListOCIImagesProcedure = "/workspace.v1.BranchSessionService/ListOCIImages"
@@ -446,14 +437,15 @@ type BranchSessionServiceClient interface {
 	// Tenant-scoped repo operations (the extension's ONLY path to Forgejo).
 	RepoMeta(context.Context, *connect.Request[v1.RepoMetaRequest]) (*connect.Response[v1.RepoMetaResponse], error)
 	Contents(context.Context, *connect.Request[v1.ContentsRequest]) (*connect.Response[v1.ContentsResponse], error)
-	CommitFiles(context.Context, *connect.Request[v1.CommitFilesRequest]) (*connect.Response[v1.CommitFilesResponse], error)
+	// BranchStatus reports a branch's staging state (read-only).
 	BranchStatus(context.Context, *connect.Request[v1.BranchStatusRequest]) (*connect.Response[v1.BranchStatusResponse], error)
-	CommitStaged(context.Context, *connect.Request[v1.CommitStagedRequest]) (*connect.Response[v1.CommitStagedResponse], error)
-	ApplyFiles(context.Context, *connect.Request[v1.ApplyFilesRequest]) (*connect.Response[v1.ApplyFilesResponse], error)
 	Compare(context.Context, *connect.Request[v1.CompareRequest]) (*connect.Response[v1.CompareResponse], error)
 	Blame(context.Context, *connect.Request[v1.BlameRequest]) (*connect.Response[v1.BlameResponse], error)
 	FileDiff(context.Context, *connect.Request[v1.FileDiffRequest]) (*connect.Response[v1.FileDiffResponse], error)
 	CreateTag(context.Context, *connect.Request[v1.CreateTagRequest]) (*connect.Response[v1.CreateTagResponse], error)
+	// CreateBranch is an INTERNAL primitive (no agent tool): it materializes a
+	// branch for a manually-created session (ForkBranchSession / lifecycle). It
+	// creates a ref only — it never changes branch CONTENT.
 	CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error)
 	Archive(context.Context, *connect.Request[v1.ArchiveRequest]) (*connect.Response[v1.ArchiveResponse], error)
 	// ImportRepo migrates an EXTERNAL git repository into an org (admin).
@@ -467,12 +459,14 @@ type BranchSessionServiceClient interface {
 	GetMR(context.Context, *connect.Request[v1.GetMRRequest]) (*connect.Response[v1.GetMRResponse], error)
 	MRDiff(context.Context, *connect.Request[v1.MRDiffRequest]) (*connect.Response[v1.MRDiffResponse], error)
 	ListMRComments(context.Context, *connect.Request[v1.ListMRCommentsRequest]) (*connect.Response[v1.ListMRCommentsResponse], error)
-	CreateMR(context.Context, *connect.Request[v1.CreateMRRequest]) (*connect.Response[v1.CreateMRResponse], error)
+	// SubmitMR is the ONLY way to change a branch: it materializes the sandbox
+	// diff onto a NEW, immutable `mr/...` head branch and opens an MR into `base`.
+	SubmitMR(context.Context, *connect.Request[v1.SubmitMRRequest]) (*connect.Response[v1.SubmitMRResponse], error)
 	CommentMR(context.Context, *connect.Request[v1.CommentMRRequest]) (*connect.Response[v1.CommentMRResponse], error)
 	MergeMR(context.Context, *connect.Request[v1.MergeMRRequest]) (*connect.Response[v1.MergeMRResponse], error)
-	// SyncBranch (re)integrates the base into a feature branch, writing conflict
-	// markers for the branch session to resolve (developer action).
-	SyncBranch(context.Context, *connect.Request[v1.SyncBranchRequest]) (*connect.Response[v1.SyncBranchResponse], error)
+	// CloseMR closes an MR whose base is the caller's own branch and deletes its
+	// `mr/...` head branch.
+	CloseMR(context.Context, *connect.Request[v1.CloseMRRequest]) (*connect.Response[v1.CloseMRResponse], error)
 	// OCI images
 	ListOCIImages(context.Context, *connect.Request[v1.ListOCIImagesRequest]) (*connect.Response[v1.ListOCIImagesResponse], error)
 	BuildSandboxImage(context.Context, *connect.Request[v1.BuildSandboxImageRequest]) (*connect.Response[v1.BuildSandboxImageResponse], error)
@@ -730,28 +724,10 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(branchSessionServiceMethods.ByName("Contents")),
 			connect.WithClientOptions(opts...),
 		),
-		commitFiles: connect.NewClient[v1.CommitFilesRequest, v1.CommitFilesResponse](
-			httpClient,
-			baseURL+BranchSessionServiceCommitFilesProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("CommitFiles")),
-			connect.WithClientOptions(opts...),
-		),
 		branchStatus: connect.NewClient[v1.BranchStatusRequest, v1.BranchStatusResponse](
 			httpClient,
 			baseURL+BranchSessionServiceBranchStatusProcedure,
 			connect.WithSchema(branchSessionServiceMethods.ByName("BranchStatus")),
-			connect.WithClientOptions(opts...),
-		),
-		commitStaged: connect.NewClient[v1.CommitStagedRequest, v1.CommitStagedResponse](
-			httpClient,
-			baseURL+BranchSessionServiceCommitStagedProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("CommitStaged")),
-			connect.WithClientOptions(opts...),
-		),
-		applyFiles: connect.NewClient[v1.ApplyFilesRequest, v1.ApplyFilesResponse](
-			httpClient,
-			baseURL+BranchSessionServiceApplyFilesProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ApplyFiles")),
 			connect.WithClientOptions(opts...),
 		),
 		compare: connect.NewClient[v1.CompareRequest, v1.CompareResponse](
@@ -838,10 +814,10 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(branchSessionServiceMethods.ByName("ListMRComments")),
 			connect.WithClientOptions(opts...),
 		),
-		createMR: connect.NewClient[v1.CreateMRRequest, v1.CreateMRResponse](
+		submitMR: connect.NewClient[v1.SubmitMRRequest, v1.SubmitMRResponse](
 			httpClient,
-			baseURL+BranchSessionServiceCreateMRProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("CreateMR")),
+			baseURL+BranchSessionServiceSubmitMRProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("SubmitMR")),
 			connect.WithClientOptions(opts...),
 		),
 		commentMR: connect.NewClient[v1.CommentMRRequest, v1.CommentMRResponse](
@@ -856,10 +832,10 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(branchSessionServiceMethods.ByName("MergeMR")),
 			connect.WithClientOptions(opts...),
 		),
-		syncBranch: connect.NewClient[v1.SyncBranchRequest, v1.SyncBranchResponse](
+		closeMR: connect.NewClient[v1.CloseMRRequest, v1.CloseMRResponse](
 			httpClient,
-			baseURL+BranchSessionServiceSyncBranchProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("SyncBranch")),
+			baseURL+BranchSessionServiceCloseMRProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("CloseMR")),
 			connect.WithClientOptions(opts...),
 		),
 		listOCIImages: connect.NewClient[v1.ListOCIImagesRequest, v1.ListOCIImagesResponse](
@@ -1335,10 +1311,7 @@ type branchSessionServiceClient struct {
 	listOrgs             *connect.Client[v1.ListOrgsRequest, v1.ListOrgsResponse]
 	repoMeta             *connect.Client[v1.RepoMetaRequest, v1.RepoMetaResponse]
 	contents             *connect.Client[v1.ContentsRequest, v1.ContentsResponse]
-	commitFiles          *connect.Client[v1.CommitFilesRequest, v1.CommitFilesResponse]
 	branchStatus         *connect.Client[v1.BranchStatusRequest, v1.BranchStatusResponse]
-	commitStaged         *connect.Client[v1.CommitStagedRequest, v1.CommitStagedResponse]
-	applyFiles           *connect.Client[v1.ApplyFilesRequest, v1.ApplyFilesResponse]
 	compare              *connect.Client[v1.CompareRequest, v1.CompareResponse]
 	blame                *connect.Client[v1.BlameRequest, v1.BlameResponse]
 	fileDiff             *connect.Client[v1.FileDiffRequest, v1.FileDiffResponse]
@@ -1353,10 +1326,10 @@ type branchSessionServiceClient struct {
 	getMR                *connect.Client[v1.GetMRRequest, v1.GetMRResponse]
 	mRDiff               *connect.Client[v1.MRDiffRequest, v1.MRDiffResponse]
 	listMRComments       *connect.Client[v1.ListMRCommentsRequest, v1.ListMRCommentsResponse]
-	createMR             *connect.Client[v1.CreateMRRequest, v1.CreateMRResponse]
+	submitMR             *connect.Client[v1.SubmitMRRequest, v1.SubmitMRResponse]
 	commentMR            *connect.Client[v1.CommentMRRequest, v1.CommentMRResponse]
 	mergeMR              *connect.Client[v1.MergeMRRequest, v1.MergeMRResponse]
-	syncBranch           *connect.Client[v1.SyncBranchRequest, v1.SyncBranchResponse]
+	closeMR              *connect.Client[v1.CloseMRRequest, v1.CloseMRResponse]
 	listOCIImages        *connect.Client[v1.ListOCIImagesRequest, v1.ListOCIImagesResponse]
 	buildSandboxImage    *connect.Client[v1.BuildSandboxImageRequest, v1.BuildSandboxImageResponse]
 	importImage          *connect.Client[v1.ImportImageRequest, v1.ImportImageResponse]
@@ -1553,24 +1526,9 @@ func (c *branchSessionServiceClient) Contents(ctx context.Context, req *connect.
 	return c.contents.CallUnary(ctx, req)
 }
 
-// CommitFiles calls workspace.v1.BranchSessionService.CommitFiles.
-func (c *branchSessionServiceClient) CommitFiles(ctx context.Context, req *connect.Request[v1.CommitFilesRequest]) (*connect.Response[v1.CommitFilesResponse], error) {
-	return c.commitFiles.CallUnary(ctx, req)
-}
-
 // BranchStatus calls workspace.v1.BranchSessionService.BranchStatus.
 func (c *branchSessionServiceClient) BranchStatus(ctx context.Context, req *connect.Request[v1.BranchStatusRequest]) (*connect.Response[v1.BranchStatusResponse], error) {
 	return c.branchStatus.CallUnary(ctx, req)
-}
-
-// CommitStaged calls workspace.v1.BranchSessionService.CommitStaged.
-func (c *branchSessionServiceClient) CommitStaged(ctx context.Context, req *connect.Request[v1.CommitStagedRequest]) (*connect.Response[v1.CommitStagedResponse], error) {
-	return c.commitStaged.CallUnary(ctx, req)
-}
-
-// ApplyFiles calls workspace.v1.BranchSessionService.ApplyFiles.
-func (c *branchSessionServiceClient) ApplyFiles(ctx context.Context, req *connect.Request[v1.ApplyFilesRequest]) (*connect.Response[v1.ApplyFilesResponse], error) {
-	return c.applyFiles.CallUnary(ctx, req)
 }
 
 // Compare calls workspace.v1.BranchSessionService.Compare.
@@ -1643,9 +1601,9 @@ func (c *branchSessionServiceClient) ListMRComments(ctx context.Context, req *co
 	return c.listMRComments.CallUnary(ctx, req)
 }
 
-// CreateMR calls workspace.v1.BranchSessionService.CreateMR.
-func (c *branchSessionServiceClient) CreateMR(ctx context.Context, req *connect.Request[v1.CreateMRRequest]) (*connect.Response[v1.CreateMRResponse], error) {
-	return c.createMR.CallUnary(ctx, req)
+// SubmitMR calls workspace.v1.BranchSessionService.SubmitMR.
+func (c *branchSessionServiceClient) SubmitMR(ctx context.Context, req *connect.Request[v1.SubmitMRRequest]) (*connect.Response[v1.SubmitMRResponse], error) {
+	return c.submitMR.CallUnary(ctx, req)
 }
 
 // CommentMR calls workspace.v1.BranchSessionService.CommentMR.
@@ -1658,9 +1616,9 @@ func (c *branchSessionServiceClient) MergeMR(ctx context.Context, req *connect.R
 	return c.mergeMR.CallUnary(ctx, req)
 }
 
-// SyncBranch calls workspace.v1.BranchSessionService.SyncBranch.
-func (c *branchSessionServiceClient) SyncBranch(ctx context.Context, req *connect.Request[v1.SyncBranchRequest]) (*connect.Response[v1.SyncBranchResponse], error) {
-	return c.syncBranch.CallUnary(ctx, req)
+// CloseMR calls workspace.v1.BranchSessionService.CloseMR.
+func (c *branchSessionServiceClient) CloseMR(ctx context.Context, req *connect.Request[v1.CloseMRRequest]) (*connect.Response[v1.CloseMRResponse], error) {
+	return c.closeMR.CallUnary(ctx, req)
 }
 
 // ListOCIImages calls workspace.v1.BranchSessionService.ListOCIImages.
@@ -2072,14 +2030,15 @@ type BranchSessionServiceHandler interface {
 	// Tenant-scoped repo operations (the extension's ONLY path to Forgejo).
 	RepoMeta(context.Context, *connect.Request[v1.RepoMetaRequest]) (*connect.Response[v1.RepoMetaResponse], error)
 	Contents(context.Context, *connect.Request[v1.ContentsRequest]) (*connect.Response[v1.ContentsResponse], error)
-	CommitFiles(context.Context, *connect.Request[v1.CommitFilesRequest]) (*connect.Response[v1.CommitFilesResponse], error)
+	// BranchStatus reports a branch's staging state (read-only).
 	BranchStatus(context.Context, *connect.Request[v1.BranchStatusRequest]) (*connect.Response[v1.BranchStatusResponse], error)
-	CommitStaged(context.Context, *connect.Request[v1.CommitStagedRequest]) (*connect.Response[v1.CommitStagedResponse], error)
-	ApplyFiles(context.Context, *connect.Request[v1.ApplyFilesRequest]) (*connect.Response[v1.ApplyFilesResponse], error)
 	Compare(context.Context, *connect.Request[v1.CompareRequest]) (*connect.Response[v1.CompareResponse], error)
 	Blame(context.Context, *connect.Request[v1.BlameRequest]) (*connect.Response[v1.BlameResponse], error)
 	FileDiff(context.Context, *connect.Request[v1.FileDiffRequest]) (*connect.Response[v1.FileDiffResponse], error)
 	CreateTag(context.Context, *connect.Request[v1.CreateTagRequest]) (*connect.Response[v1.CreateTagResponse], error)
+	// CreateBranch is an INTERNAL primitive (no agent tool): it materializes a
+	// branch for a manually-created session (ForkBranchSession / lifecycle). It
+	// creates a ref only — it never changes branch CONTENT.
 	CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error)
 	Archive(context.Context, *connect.Request[v1.ArchiveRequest]) (*connect.Response[v1.ArchiveResponse], error)
 	// ImportRepo migrates an EXTERNAL git repository into an org (admin).
@@ -2093,12 +2052,14 @@ type BranchSessionServiceHandler interface {
 	GetMR(context.Context, *connect.Request[v1.GetMRRequest]) (*connect.Response[v1.GetMRResponse], error)
 	MRDiff(context.Context, *connect.Request[v1.MRDiffRequest]) (*connect.Response[v1.MRDiffResponse], error)
 	ListMRComments(context.Context, *connect.Request[v1.ListMRCommentsRequest]) (*connect.Response[v1.ListMRCommentsResponse], error)
-	CreateMR(context.Context, *connect.Request[v1.CreateMRRequest]) (*connect.Response[v1.CreateMRResponse], error)
+	// SubmitMR is the ONLY way to change a branch: it materializes the sandbox
+	// diff onto a NEW, immutable `mr/...` head branch and opens an MR into `base`.
+	SubmitMR(context.Context, *connect.Request[v1.SubmitMRRequest]) (*connect.Response[v1.SubmitMRResponse], error)
 	CommentMR(context.Context, *connect.Request[v1.CommentMRRequest]) (*connect.Response[v1.CommentMRResponse], error)
 	MergeMR(context.Context, *connect.Request[v1.MergeMRRequest]) (*connect.Response[v1.MergeMRResponse], error)
-	// SyncBranch (re)integrates the base into a feature branch, writing conflict
-	// markers for the branch session to resolve (developer action).
-	SyncBranch(context.Context, *connect.Request[v1.SyncBranchRequest]) (*connect.Response[v1.SyncBranchResponse], error)
+	// CloseMR closes an MR whose base is the caller's own branch and deletes its
+	// `mr/...` head branch.
+	CloseMR(context.Context, *connect.Request[v1.CloseMRRequest]) (*connect.Response[v1.CloseMRResponse], error)
 	// OCI images
 	ListOCIImages(context.Context, *connect.Request[v1.ListOCIImagesRequest]) (*connect.Response[v1.ListOCIImagesResponse], error)
 	BuildSandboxImage(context.Context, *connect.Request[v1.BuildSandboxImageRequest]) (*connect.Response[v1.BuildSandboxImageResponse], error)
@@ -2352,28 +2313,10 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		connect.WithSchema(branchSessionServiceMethods.ByName("Contents")),
 		connect.WithHandlerOptions(opts...),
 	)
-	branchSessionServiceCommitFilesHandler := connect.NewUnaryHandler(
-		BranchSessionServiceCommitFilesProcedure,
-		svc.CommitFiles,
-		connect.WithSchema(branchSessionServiceMethods.ByName("CommitFiles")),
-		connect.WithHandlerOptions(opts...),
-	)
 	branchSessionServiceBranchStatusHandler := connect.NewUnaryHandler(
 		BranchSessionServiceBranchStatusProcedure,
 		svc.BranchStatus,
 		connect.WithSchema(branchSessionServiceMethods.ByName("BranchStatus")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceCommitStagedHandler := connect.NewUnaryHandler(
-		BranchSessionServiceCommitStagedProcedure,
-		svc.CommitStaged,
-		connect.WithSchema(branchSessionServiceMethods.ByName("CommitStaged")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceApplyFilesHandler := connect.NewUnaryHandler(
-		BranchSessionServiceApplyFilesProcedure,
-		svc.ApplyFiles,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ApplyFiles")),
 		connect.WithHandlerOptions(opts...),
 	)
 	branchSessionServiceCompareHandler := connect.NewUnaryHandler(
@@ -2460,10 +2403,10 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		connect.WithSchema(branchSessionServiceMethods.ByName("ListMRComments")),
 		connect.WithHandlerOptions(opts...),
 	)
-	branchSessionServiceCreateMRHandler := connect.NewUnaryHandler(
-		BranchSessionServiceCreateMRProcedure,
-		svc.CreateMR,
-		connect.WithSchema(branchSessionServiceMethods.ByName("CreateMR")),
+	branchSessionServiceSubmitMRHandler := connect.NewUnaryHandler(
+		BranchSessionServiceSubmitMRProcedure,
+		svc.SubmitMR,
+		connect.WithSchema(branchSessionServiceMethods.ByName("SubmitMR")),
 		connect.WithHandlerOptions(opts...),
 	)
 	branchSessionServiceCommentMRHandler := connect.NewUnaryHandler(
@@ -2478,10 +2421,10 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		connect.WithSchema(branchSessionServiceMethods.ByName("MergeMR")),
 		connect.WithHandlerOptions(opts...),
 	)
-	branchSessionServiceSyncBranchHandler := connect.NewUnaryHandler(
-		BranchSessionServiceSyncBranchProcedure,
-		svc.SyncBranch,
-		connect.WithSchema(branchSessionServiceMethods.ByName("SyncBranch")),
+	branchSessionServiceCloseMRHandler := connect.NewUnaryHandler(
+		BranchSessionServiceCloseMRProcedure,
+		svc.CloseMR,
+		connect.WithSchema(branchSessionServiceMethods.ByName("CloseMR")),
 		connect.WithHandlerOptions(opts...),
 	)
 	branchSessionServiceListOCIImagesHandler := connect.NewUnaryHandler(
@@ -2978,14 +2921,8 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceRepoMetaHandler.ServeHTTP(w, r)
 		case BranchSessionServiceContentsProcedure:
 			branchSessionServiceContentsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceCommitFilesProcedure:
-			branchSessionServiceCommitFilesHandler.ServeHTTP(w, r)
 		case BranchSessionServiceBranchStatusProcedure:
 			branchSessionServiceBranchStatusHandler.ServeHTTP(w, r)
-		case BranchSessionServiceCommitStagedProcedure:
-			branchSessionServiceCommitStagedHandler.ServeHTTP(w, r)
-		case BranchSessionServiceApplyFilesProcedure:
-			branchSessionServiceApplyFilesHandler.ServeHTTP(w, r)
 		case BranchSessionServiceCompareProcedure:
 			branchSessionServiceCompareHandler.ServeHTTP(w, r)
 		case BranchSessionServiceBlameProcedure:
@@ -3014,14 +2951,14 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceMRDiffHandler.ServeHTTP(w, r)
 		case BranchSessionServiceListMRCommentsProcedure:
 			branchSessionServiceListMRCommentsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceCreateMRProcedure:
-			branchSessionServiceCreateMRHandler.ServeHTTP(w, r)
+		case BranchSessionServiceSubmitMRProcedure:
+			branchSessionServiceSubmitMRHandler.ServeHTTP(w, r)
 		case BranchSessionServiceCommentMRProcedure:
 			branchSessionServiceCommentMRHandler.ServeHTTP(w, r)
 		case BranchSessionServiceMergeMRProcedure:
 			branchSessionServiceMergeMRHandler.ServeHTTP(w, r)
-		case BranchSessionServiceSyncBranchProcedure:
-			branchSessionServiceSyncBranchHandler.ServeHTTP(w, r)
+		case BranchSessionServiceCloseMRProcedure:
+			branchSessionServiceCloseMRHandler.ServeHTTP(w, r)
 		case BranchSessionServiceListOCIImagesProcedure:
 			branchSessionServiceListOCIImagesHandler.ServeHTTP(w, r)
 		case BranchSessionServiceBuildSandboxImageProcedure:
@@ -3275,20 +3212,8 @@ func (UnimplementedBranchSessionServiceHandler) Contents(context.Context, *conne
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Contents is not implemented"))
 }
 
-func (UnimplementedBranchSessionServiceHandler) CommitFiles(context.Context, *connect.Request[v1.CommitFilesRequest]) (*connect.Response[v1.CommitFilesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CommitFiles is not implemented"))
-}
-
 func (UnimplementedBranchSessionServiceHandler) BranchStatus(context.Context, *connect.Request[v1.BranchStatusRequest]) (*connect.Response[v1.BranchStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.BranchStatus is not implemented"))
-}
-
-func (UnimplementedBranchSessionServiceHandler) CommitStaged(context.Context, *connect.Request[v1.CommitStagedRequest]) (*connect.Response[v1.CommitStagedResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CommitStaged is not implemented"))
-}
-
-func (UnimplementedBranchSessionServiceHandler) ApplyFiles(context.Context, *connect.Request[v1.ApplyFilesRequest]) (*connect.Response[v1.ApplyFilesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ApplyFiles is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) Compare(context.Context, *connect.Request[v1.CompareRequest]) (*connect.Response[v1.CompareResponse], error) {
@@ -3347,8 +3272,8 @@ func (UnimplementedBranchSessionServiceHandler) ListMRComments(context.Context, 
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListMRComments is not implemented"))
 }
 
-func (UnimplementedBranchSessionServiceHandler) CreateMR(context.Context, *connect.Request[v1.CreateMRRequest]) (*connect.Response[v1.CreateMRResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CreateMR is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) SubmitMR(context.Context, *connect.Request[v1.SubmitMRRequest]) (*connect.Response[v1.SubmitMRResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.SubmitMR is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) CommentMR(context.Context, *connect.Request[v1.CommentMRRequest]) (*connect.Response[v1.CommentMRResponse], error) {
@@ -3359,8 +3284,8 @@ func (UnimplementedBranchSessionServiceHandler) MergeMR(context.Context, *connec
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.MergeMR is not implemented"))
 }
 
-func (UnimplementedBranchSessionServiceHandler) SyncBranch(context.Context, *connect.Request[v1.SyncBranchRequest]) (*connect.Response[v1.SyncBranchResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.SyncBranch is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) CloseMR(context.Context, *connect.Request[v1.CloseMRRequest]) (*connect.Response[v1.CloseMRResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CloseMR is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) ListOCIImages(context.Context, *connect.Request[v1.ListOCIImagesRequest]) (*connect.Response[v1.ListOCIImagesResponse], error) {

@@ -29,7 +29,6 @@ import (
 	"github.com/abcp-sdk/workspace-gateway/internal/forgejo"
 	"github.com/abcp-sdk/workspace-gateway/internal/gitcommit"
 	"github.com/abcp-sdk/workspace-gateway/internal/gitimport"
-	"github.com/abcp-sdk/workspace-gateway/internal/gitmerge"
 	"github.com/abcp-sdk/workspace-gateway/internal/helmmgr"
 	"github.com/abcp-sdk/workspace-gateway/internal/imagebuild"
 	"github.com/abcp-sdk/workspace-gateway/internal/k8swatch"
@@ -396,9 +395,8 @@ func (s *Service) ForkBranchSession(ctx context.Context, req *connect.Request[ws
 	if branch == "" || !roles.ValidComponent(branch) || branch == roles.MainBranch {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("branch must be a legal, non-main name"))
 	}
-	// Only a MAIN session (maintainer) may create branches. A developer session
-	// is bound to exactly one branch and must not spawn more — otherwise a
-	// feature-branch session could proliferate branches on its own.
+	// Only a MAIN session may create branches (manual fork). A feature-branch
+	// session is bound to exactly one branch and must not spawn more.
 	if parentBranch != roles.MainBranch {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New(
 			"only a main session can create branches; a feature branch cannot fork new branches"))
@@ -1005,7 +1003,13 @@ func (s *Service) GetMR(ctx context.Context, req *connect.Request[wsv1.GetMRRequ
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	return connect.NewResponse(&wsv1.GetMRResponse{Mr: toMRInfo(mr)}), nil
+	info := toMRInfo(mr)
+	// Attach the submitting session (best-effort; the head is an anonymous
+	// `mr/...` branch, so this is the only way to find the origin).
+	if sub, ok, serr := s.members.MRSubmission(s.tenantOf(ctx, req.Header()), m.GetOrg(), m.GetRepo(), m.GetIndex()); serr == nil && ok {
+		info.OriginSession = sub.OriginSession
+	}
+	return connect.NewResponse(&wsv1.GetMRResponse{Mr: info}), nil
 }
 
 // MRDiff returns the unified diff of one change request.
@@ -1140,29 +1144,6 @@ func (s *Service) Contents(ctx context.Context, req *connect.Request[wsv1.Conten
 	return connect.NewResponse(res), nil
 }
 
-// CommitFiles creates one commit of several file operations on a branch.
-func (s *Service) CommitFiles(ctx context.Context, req *connect.Request[wsv1.CommitFilesRequest]) (*connect.Response[wsv1.CommitFilesResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
-		return nil, err
-	}
-	if len(m.GetFiles()) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("files is required"))
-	}
-	ops := make([]forgejo.FileOp, 0, len(m.GetFiles()))
-	for _, f := range m.GetFiles() {
-		ops = append(ops, forgejo.FileOp{
-			Path: f.GetPath(), Op: f.GetOperation(), Content: f.GetContent(),
-			Bytes: f.GetContentBytes(), SHA: f.GetSha(), FromPath: f.GetFromPath(),
-		})
-	}
-	sha, err := s.git.CommitFiles(ctx, m.GetOrg(), m.GetRepo(), m.GetMessage(), m.GetRef(), m.GetNewBranch(), ops)
-	if err != nil {
-		return nil, mrError(err)
-	}
-	return connect.NewResponse(&wsv1.CommitFilesResponse{Sha: sha}), nil
-}
-
 // Compare returns per-file patches between two refs.
 func (s *Service) Compare(ctx context.Context, req *connect.Request[wsv1.CompareRequest]) (*connect.Response[wsv1.CompareResponse], error) {
 	m := req.Msg
@@ -1243,14 +1224,14 @@ func (s *Service) Archive(ctx context.Context, req *connect.Request[wsv1.Archive
 	return connect.NewResponse(&wsv1.ArchiveResponse{Data: data}), nil
 }
 
-// ensureMainSession idempotently creates the `org:repo:main` session bound to
-// the maintainer role. Best-effort: a repo is still usable if this fails.
+// ensureMainSession idempotently creates the `org:repo:main` session. Best-effort:
+// a repo is still usable if this fails.
 func (s *Service) ensureMainSession(ctx context.Context, hdr map[string][]string, org, repo string) {
 	session := roles.SessionName(org, repo, roles.MainBranch)
 	if s.sessionExists(ctx, hdr, session) {
 		return
 	}
-	if err := s.createSession(ctx, hdr, session, roles.PresetFor(roles.Maintainer), "", ""); err != nil {
+	if err := s.createSession(ctx, hdr, session, roles.PresetFor(roles.Developer), "", ""); err != nil {
 		log.Printf("warn: ensure main session %s: %v", session, err)
 	}
 }
@@ -1480,43 +1461,89 @@ func (s *Service) ListMRs(ctx context.Context, req *connect.Request[wsv1.ListMRs
 	return connect.NewResponse(&wsv1.ListMRsResponse{Mrs: out}), nil
 }
 
-// CreateMR is a developer action (propose). A maintainer cannot open MRs.
+// SubmitMR is the ONLY way branch content changes. It materializes the caller's
+// sandbox diff (computed by the extension) onto a NEW, immutable `mr/...` head
+// branch and opens an MR into `base`. No tool/RPC can write an existing branch.
 //
-// GATE: a branch whose changed files still carry unresolved conflict markers
-// (from SyncBranch) is refused — the markers must not reach a reviewer.
-//
-// STRIP: a branch whose HEAD is the (clean) empty staging placeholder is
-// force-pushed back to its parent first, so the synthetic `ABCP_XXX` commit
-// never appears in the change request. The branch is session-exclusive and
-// unprotected, so the gateway may rewrite it; the next write simply opens a
-// fresh placeholder.
-func (s *Service) CreateMR(ctx context.Context, req *connect.Request[wsv1.CreateMRRequest]) (*connect.Response[wsv1.CreateMRResponse], error) {
+// The head branch name is chosen by the gateway (never the caller), is written
+// exactly once (a plain, non-force push), and is deleted on merge/close.
+func (s *Service) SubmitMR(ctx context.Context, req *connect.Request[wsv1.SubmitMRRequest]) (*connect.Response[wsv1.SubmitMRResponse], error) {
 	m := req.Msg
 	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	base := m.GetBase()
 	if base == "" {
-		base = roles.MainBranch
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("base is required"))
 	}
-	if conflicts, err := s.unresolvedConflicts(ctx, m.GetOrg(), m.GetRepo(), m.GetHead()); err != nil {
-		return nil, err
-	} else if len(conflicts) > 0 {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"branch %s has unresolved conflict markers in: %s; resolve them (see the ABCP-CONFLICT blocks) before opening an MR",
-			m.GetHead(), strings.Join(conflicts, ", ")))
+	if !roles.ValidComponent(base) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("base must be a simple branch name"))
 	}
-	if err := s.stagingGate(ctx, m.GetOrg(), m.GetRepo(), m.GetHead()); err != nil {
-		return nil, err
+	if isMRBranch(base) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("base cannot be an mr/... branch"))
 	}
-	if err := s.stripStagingPlaceholder(ctx, m.GetOrg(), m.GetRepo(), m.GetHead()); err != nil {
-		return nil, err
+	if ok, berr := s.git.BranchExists(ctx, m.GetOrg(), m.GetRepo(), base); berr != nil {
+		return nil, connect.NewError(connect.CodeInternal, berr)
+	} else if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("base branch %q does not exist", base))
 	}
-	index, url, err := s.git.CreateMR(ctx, m.GetOrg(), m.GetRepo(), m.GetTitle(), m.GetHead(), base, m.GetBody())
+	if len(m.GetFiles()) == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("files is required"))
+	}
+	ops := make([]gitcommit.FileOp, 0, len(m.GetFiles()))
+	for _, f := range m.GetFiles() {
+		content := f.GetContentBytes()
+		if len(content) == 0 {
+			content = []byte(f.GetContent())
+		}
+		ops = append(ops, gitcommit.FileOp{Path: f.GetPath(), Op: f.GetOperation(), Content: content})
+	}
+
+	caller := sessionFromHeaders(req.Header())
+	origin := caller
+	if origin == "" {
+		origin = roles.SessionName(m.GetOrg(), m.GetRepo(), base)
+	}
+	head := mrBranchName(origin)
+	title := m.GetTitle()
+	if strings.TrimSpace(title) == "" {
+		title = fmt.Sprintf("MR from %s into %s", origin, base)
+	}
+
+	// The `mr/...` branch is created from `base` and written exactly once.
+	opts := gitcommit.Options{
+		RepoURL: s.git.GitURL(m.GetOrg(), m.GetRepo()),
+		Branch:  base,
+		User:    "root",
+		Token:   s.git.Token(),
+	}
+	if _, err := s.commits.Submit(ctx, opts, base, head, title, ops); err != nil {
+		if errors.Is(err, gitcommit.ErrNoChanges) || errors.Is(err, gitcommit.ErrIgnoredPath) {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	index, url, err := s.git.CreateMR(ctx, m.GetOrg(), m.GetRepo(), title, head, base, m.GetBody())
 	if err != nil {
+		// Best-effort cleanup: a failed MR must not strand the mr/ branch.
+		_ = s.git.DeleteBranch(ctx, m.GetOrg(), m.GetRepo(), head)
 		return nil, mrError(err)
 	}
-	return connect.NewResponse(&wsv1.CreateMRResponse{Index: index, Url: url}), nil
+	// Record the origin session so review notifications can find the submitter.
+	if err := s.members.AddMRSubmission(s.tenantOf(ctx, req.Header()), m.GetOrg(), m.GetRepo(), index, base, head, origin); err != nil {
+		log.Printf("warn: record MR submission %s/%s#%d: %v", m.GetOrg(), m.GetRepo(), index, err)
+	}
+	return connect.NewResponse(&wsv1.SubmitMRResponse{Index: index, Url: url, Head: head}), nil
+}
+
+// isMRBranch reports whether `ref` is a gateway-managed MR head branch.
+func isMRBranch(ref string) bool { return strings.HasPrefix(ref, "mr/") }
+
+// mrBranchName builds a fresh, non-colliding MR head branch for an origin
+// session. The `mr/` prefix is reserved (never a user branch, never a base).
+func mrBranchName(origin string) string {
+	slug := strings.NewReplacer(":", "-", "/", "-").Replace(origin)
+	return fmt.Sprintf("mr/%s-%d", slug, time.Now().UnixNano())
 }
 
 func (s *Service) CommentMR(ctx context.Context, req *connect.Request[wsv1.CommentMRRequest]) (*connect.Response[wsv1.CommentMRResponse], error) {
@@ -1530,11 +1557,10 @@ func (s *Service) CommentMR(ctx context.Context, req *connect.Request[wsv1.Comme
 	return connect.NewResponse(&wsv1.CommentMRResponse{Ok: true}), nil
 }
 
-// MergeMR is a MAINTAINER action: the only way main changes.
-//
-// GATE: refuse when the head branch still carries conflict markers. Git judges
-// "mergeable" purely by topology, so a branch that was synced (and is thus a
-// descendant of main) can still hold markers — this check closes that hole.
+// MergeMR merges an MR. It is allowed ONLY when the caller's session equals
+// `org:repo:<base>` (self-merge of an MR targeting its own branch); a human
+// webui caller (no session header) is unrestricted. The `mr/...` head branch is
+// deleted by Forgejo on merge.
 func (s *Service) MergeMR(ctx context.Context, req *connect.Request[wsv1.MergeMRRequest]) (*connect.Response[wsv1.MergeMRResponse], error) {
 	m := req.Msg
 	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
@@ -1544,150 +1570,70 @@ func (s *Service) MergeMR(ctx context.Context, req *connect.Request[wsv1.MergeMR
 	if err != nil {
 		return nil, mrError(err)
 	}
+	if err := s.authorizeMRTarget(req.Header(), m.GetOrg(), m.GetRepo(), mr.Base); err != nil {
+		return nil, err
+	}
 	if !mr.Mergeable {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"change request #%d is not mergeable (the base has diverged); sync the head branch %q with a merge commit and resolve any conflicts", m.GetIndex(), mr.Head))
+			"change request #%d is not mergeable (the base has diverged)", m.GetIndex()))
 	}
-	if conflicts, err := s.unresolvedConflicts(ctx, m.GetOrg(), m.GetRepo(), mr.Head); err != nil {
-		return nil, err
-	} else if len(conflicts) > 0 {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"change request #%d still has unresolved conflict markers in: %s", m.GetIndex(), strings.Join(conflicts, ", ")))
-	}
-	if err := s.stagingGate(ctx, m.GetOrg(), m.GetRepo(), mr.Head); err != nil {
-		return nil, err
-	}
-	// Pin the merge to the reviewed content: strip a trailing empty placeholder
-	// from the head branch (the gateway force-pushes the FEATURE branch, which
-	// is unprotected), then let Forgejo merge. Forgejo bypasses main's
-	// protection for an MR merge; a direct gateway push to main would be refused.
-	pin, err := s.mergeTipFor(ctx, m.GetOrg(), m.GetRepo(), mr.Head)
-	if err != nil {
-		return nil, err
-	}
-	if pin != "" && pin != mr.HeadSHA {
-		opts, oerr := s.commitOpts(ctx, m.GetOrg(), m.GetRepo(), mr.Head)
-		if oerr != nil {
-			return nil, oerr
-		}
-		if rerr := s.commits.ResetTo(ctx, opts, pin); rerr != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("pin head: %w", rerr))
-		}
-	}
-	if err := s.git.MergeMR(ctx, m.GetOrg(), m.GetRepo(), m.GetIndex(), pin); err != nil {
+	if err := s.git.MergeMR(ctx, m.GetOrg(), m.GetRepo(), m.GetIndex(), ""); err != nil {
 		return nil, mrError(err)
 	}
+	// Drop the submission record; the head branch is gone (merged).
+	_ = s.members.DeleteMRSubmission(s.tenantOf(ctx, req.Header()), m.GetOrg(), m.GetRepo(), m.GetIndex())
 	return connect.NewResponse(&wsv1.MergeMRResponse{Ok: true}), nil
 }
 
-// stripStagingPlaceholder rewrites `branch` back to its parent when HEAD is the
-// synthetic staging placeholder, so the `ABCP_XXX` commit never reaches an MR
-// or the merged history. A CLEAN placeholder (no staged changes) is stripped;
-// a placeholder carrying staged work is refused by stagingGate before this runs.
-// No-op when HEAD is a real commit. Best-effort on an inspection failure.
-func (s *Service) stripStagingPlaceholder(ctx context.Context, org, repo, branch string) error {
-	opts, err := s.commitOpts(ctx, org, repo, branch)
-	if err != nil {
-		return nil // main / invalid: nothing to strip
-	}
-	st, err := s.commits.Status(ctx, opts)
-	if err != nil {
-		return nil // best-effort: never block MR creation on inspection
-	}
-	if !st.Placeholder || st.Staged {
-		return nil
-	}
-	// HEAD is the empty placeholder: drop it (force-push the branch to its
-	// parent). ResetTo forgets the cached clone, so the next write re-clones.
-	if st.MergeTip == "" || st.MergeTip == st.Tip {
-		return nil
-	}
-	if err := s.commits.ResetTo(ctx, opts, st.MergeTip); err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("strip staging placeholder: %w", err))
-	}
-	return nil
-}
-
-// mergeTipFor returns the sha a merge of `branch` should pin (the parent of a
-// placeholder HEAD, else the tip). Empty when the branch cannot be inspected.
-func (s *Service) mergeTipFor(ctx context.Context, org, repo, branch string) (string, error) {
-	opts, err := s.commitOpts(ctx, org, repo, branch)
-	if err != nil {
-		return "", nil
-	}
-	st, err := s.commits.Status(ctx, opts)
-	if err != nil {
-		return "", connect.NewError(connect.CodeInternal, err)
-	}
-	if st.Placeholder {
-		return st.MergeTip, nil
-	}
-	return st.Tip, nil
-}
-
-// SyncBranch (re)integrates `main` into a NON-MAIN branch with a two-parent
-// merge commit, leaving marker blocks where the three-way merge cannot decide.
-// It is the developer's way to catch up with main; the markers are resolved on
-// the branch (and the CreateMR/MergeMR gates refuse a marker-carrying branch).
-func (s *Service) SyncBranch(ctx context.Context, req *connect.Request[wsv1.SyncBranchRequest]) (*connect.Response[wsv1.SyncBranchResponse], error) {
+// CloseMR closes an MR (without merging) and deletes its `mr/...` head branch.
+// Same authorization as MergeMR.
+func (s *Service) CloseMR(ctx context.Context, req *connect.Request[wsv1.CloseMRRequest]) (*connect.Response[wsv1.CloseMRResponse], error) {
 	m := req.Msg
 	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
-	branch := m.GetBranch()
-	if branch == "" || !roles.ValidComponent(branch) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("branch must be a simple name"))
-	}
-	if branch == roles.MainBranch {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("refusing to sync the default branch"))
-	}
-	if err := s.stagingGate(ctx, m.GetOrg(), m.GetRepo(), branch); err != nil {
-		return nil, err
-	}
-	res, err := gitmerge.Sync(ctx, gitmerge.Options{
-		RepoURL: s.git.GitURL(m.GetOrg(), m.GetRepo()),
-		Branch:  branch,
-		Base:    roles.MainBranch,
-		User:    "root",
-		Token:   s.git.Token(),
-	})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("sync: %w", err))
-	}
-	return connect.NewResponse(&wsv1.SyncBranchResponse{
-		Clean:     res.Clean,
-		Conflicts: res.Conflicts,
-		Commit:    res.Commit,
-	}), nil
-}
-
-// unresolvedConflicts returns the changed files on `branch` (vs main) that
-// still carry the conflict sentinel. Binary files are skipped (no markers).
-func (s *Service) unresolvedConflicts(ctx context.Context, org, repo, branch string) ([]string, error) {
-	paths, err := s.git.CompareFiles(ctx, org, repo, roles.MainBranch, branch)
+	mr, err := s.git.GetMR(ctx, m.GetOrg(), m.GetRepo(), m.GetIndex())
 	if err != nil {
 		return nil, mrError(err)
 	}
-	seen := map[string]struct{}{}
-	var carried []string
-	for _, p := range paths {
-		if p == "" {
-			continue
-		}
-		if _, dup := seen[p]; dup {
-			continue
-		}
-		seen[p] = struct{}{}
-		data, _, err := s.git.RawFile(ctx, org, repo, branch, p)
-		if err != nil {
-			// A path may be deleted on the branch; skip what we cannot read.
-			continue
-		}
-		if gitmerge.HasMarkers(data) {
-			carried = append(carried, p)
-		}
+	if err := s.authorizeMRTarget(req.Header(), m.GetOrg(), m.GetRepo(), mr.Base); err != nil {
+		return nil, err
 	}
-	return carried, nil
+	if err := s.git.CloseMR(ctx, m.GetOrg(), m.GetRepo(), m.GetIndex()); err != nil {
+		return nil, mrError(err)
+	}
+	if isMRBranch(mr.Head) {
+		_ = s.git.DeleteBranch(ctx, m.GetOrg(), m.GetRepo(), mr.Head)
+	}
+	_ = s.members.DeleteMRSubmission(s.tenantOf(ctx, req.Header()), m.GetOrg(), m.GetRepo(), m.GetIndex())
+	return connect.NewResponse(&wsv1.CloseMRResponse{Ok: true}), nil
+}
+
+// authorizeMRTarget enforces "an agent session may only merge/close an MR whose
+// base is its OWN branch". A human webui caller (no session header) is
+// unrestricted; a non-branch (free) session has no repo binding to compare, so
+// it is also refused for agent callers.
+func (s *Service) authorizeMRTarget(hdr map[string][]string, org, repo, base string) error {
+	caller := sessionFromHeaders(hdr)
+	if caller == "" {
+		return nil // human webui console
+	}
+	want := roles.SessionName(org, repo, base)
+	if caller != want {
+		return connect.NewError(connect.CodePermissionDenied, fmt.Errorf(
+			"only the %s session may merge or close this change request", want))
+	}
+	return nil
+}
+
+// tenantOf resolves the caller's tenant for a record write (best-effort: ""
+// on failure, which the store tolerates).
+func (s *Service) tenantOf(ctx context.Context, hdr map[string][]string) string {
+	t, err := s.resolveTenant(ctx, hdr)
+	if err != nil {
+		return ""
+	}
+	return t
 }
 
 // mrError maps a Forgejo error to a connect error, surfacing conflicts as
@@ -1712,68 +1658,10 @@ func (s *Service) BranchStatus(ctx context.Context, req *connect.Request[wsv1.Br
 	}), nil
 }
 
-// CommitStaged rewinds the branch's staging placeholder to `message`, CLOSING
-// the staging area (HEAD becomes a normal commit; the next write opens a fresh
-// placeholder). Refused when nothing is staged, so it never makes an empty
-// commit.
-func (s *Service) CommitStaged(ctx context.Context, req *connect.Request[wsv1.CommitStagedRequest]) (*connect.Response[wsv1.CommitStagedResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(m.GetMessage()) == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("message is required"))
-	}
-	opts, err := s.commitOpts(ctx, m.GetOrg(), m.GetRepo(), m.GetBranch())
-	if err != nil {
-		return nil, err
-	}
-	sha, err := s.commits.Commit(ctx, opts, m.GetMessage())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
-	}
-	return connect.NewResponse(&wsv1.CommitStagedResponse{Sha: sha}), nil
-}
-
-// ApplyFiles applies file operations to a branch's staging commit (amending the
-// placeholder when open). It is the write path for repo-file-write/edit/delete/port.
-func (s *Service) ApplyFiles(ctx context.Context, req *connect.Request[wsv1.ApplyFilesRequest]) (*connect.Response[wsv1.ApplyFilesResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
-		return nil, err
-	}
-	if len(m.GetFiles()) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("files is required"))
-	}
-	opts, err := s.commitOpts(ctx, m.GetOrg(), m.GetRepo(), m.GetBranch())
-	if err != nil {
-		return nil, err
-	}
-	ops := make([]gitcommit.FileOp, 0, len(m.GetFiles()))
-	for _, f := range m.GetFiles() {
-		content := f.GetContentBytes()
-		if len(content) == 0 {
-			content = []byte(f.GetContent())
-		}
-		ops = append(ops, gitcommit.FileOp{Path: f.GetPath(), Op: f.GetOperation(), Content: content})
-	}
-	sha, err := s.commits.ApplyFiles(ctx, opts, ops)
-	if err != nil {
-		if errors.Is(err, gitcommit.ErrNoChanges) || errors.Is(err, gitcommit.ErrIgnoredPath) {
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	return connect.NewResponse(&wsv1.ApplyFilesResponse{Sha: sha}), nil
-}
-
 // commitOpts builds the gitcommit options for one branch of a visible repo.
 func (s *Service) commitOpts(ctx context.Context, org, repo, branch string) (gitcommit.Options, error) {
 	if branch == "" || !roles.ValidComponent(branch) {
 		return gitcommit.Options{}, connect.NewError(connect.CodeInvalidArgument, errors.New("branch must be a simple name"))
-	}
-	if branch == roles.MainBranch {
-		return gitcommit.Options{}, connect.NewError(connect.CodeInvalidArgument, errors.New("refusing to rewrite the default branch"))
 	}
 	return gitcommit.Options{
 		RepoURL: s.git.GitURL(org, repo),
@@ -1781,25 +1669,6 @@ func (s *Service) commitOpts(ctx context.Context, org, repo, branch string) (git
 		User:    "root",
 		Token:   s.git.Token(),
 	}, nil
-}
-
-// stagingGate refuses an action when the branch still has staged changes (a
-// placeholder carrying a diff). A clean branch — including a fresh branch or an
-// empty placeholder — passes.
-func (s *Service) stagingGate(ctx context.Context, org, repo, branch string) error {
-	opts, err := s.commitOpts(ctx, org, repo, branch)
-	if err != nil {
-		return err
-	}
-	st, err := s.commits.Status(ctx, opts)
-	if err != nil {
-		return nil // best-effort: never block on an inspection failure
-	}
-	if st.Placeholder && st.Staged {
-		return connect.NewError(connect.CodeFailedPrecondition, errors.New(
-			"branch has staged changes; run repo-commit with a message to finalize them before this action"))
-	}
-	return nil
 }
 
 func mrError(err error) error {
@@ -3393,7 +3262,7 @@ func (s *Service) ownedService(ctx context.Context, hdr map[string][]string, nam
 
 // BuildPreviewImage builds a preview image: the image NAME is forced to the
 // repo, and the TAG is forced to `preview-<branch>-<sha>` (+ optional suffix),
-// so a preview build can never overwrite a release tag. Admin/maintainer/
+// so a preview build can never overwrite a release tag. Admin/developer/
 // developer may build; the destination is always under the source repo's org.
 func (s *Service) BuildPreviewImage(ctx context.Context, req *connect.Request[wsv1.BuildPreviewImageRequest]) (*connect.Response[wsv1.BuildPreviewImageResponse], error) {
 	if _, err := s.sandboxAuth(ctx, req.Header()); err != nil {

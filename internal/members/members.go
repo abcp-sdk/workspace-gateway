@@ -42,6 +42,19 @@ func Open(dsn string) (*Store, error) {
 	)`); err != nil {
 		return nil, err
 	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS mr_submissions (
+		tenant         TEXT NOT NULL,
+		org            TEXT NOT NULL,
+		repo           TEXT NOT NULL,
+		mr_index       INTEGER NOT NULL,
+		base           TEXT NOT NULL,
+		head_ref       TEXT NOT NULL,
+		origin_session TEXT NOT NULL,
+		created_at     INTEGER NOT NULL,
+		PRIMARY KEY (tenant, org, repo, mr_index)
+	)`); err != nil {
+		return nil, err
+	}
 	return &Store{db: db}, nil
 }
 
@@ -147,6 +160,54 @@ func (s *Store) ListRepos(tenant string) ([][2]string, error) {
 		out = append(out, [2]string{org, repo})
 	}
 	return out, rows.Err()
+}
+
+// MRSubmission records which session submitted an MR (its head is an anonymous
+// `mr/...` branch, so the origin cannot be derived from the ref).
+type MRSubmission struct {
+	Org           string
+	Repo          string
+	Index         int32
+	Base          string
+	HeadRef       string
+	OriginSession string
+	CreatedAt     int64
+}
+
+// AddMRSubmission records an MR's origin session (idempotent replace).
+func (s *Store) AddMRSubmission(tenant, org, repo string, index int32, base, headRef, origin string) error {
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO mr_submissions (tenant,org,repo,mr_index,base,head_ref,origin_session,created_at)
+		 VALUES (?,?,?,?,?,?,?,strftime('%s','now'))`,
+		tenant, org, repo, index, base, headRef, origin,
+	)
+	return err
+}
+
+// MRSubmission returns the record for one MR (ok=false when none).
+func (s *Store) MRSubmission(tenant, org, repo string, index int32) (MRSubmission, bool, error) {
+	var m MRSubmission
+	err := s.db.QueryRow(
+		`SELECT org,repo,mr_index,base,head_ref,origin_session,created_at
+		 FROM mr_submissions WHERE tenant=? AND org=? AND repo=? AND mr_index=?`,
+		tenant, org, repo, index,
+	).Scan(&m.Org, &m.Repo, &m.Index, &m.Base, &m.HeadRef, &m.OriginSession, &m.CreatedAt)
+	if err == sql.ErrNoRows {
+		return MRSubmission{}, false, nil
+	}
+	if err != nil {
+		return MRSubmission{}, false, err
+	}
+	return m, true, nil
+}
+
+// DeleteMRSubmission removes an MR's record (idempotent).
+func (s *Store) DeleteMRSubmission(tenant, org, repo string, index int32) error {
+	_, err := s.db.Exec(
+		`DELETE FROM mr_submissions WHERE tenant=? AND org=? AND repo=? AND mr_index=?`,
+		tenant, org, repo, index,
+	)
+	return err
 }
 
 // AddFreeSession records a standalone session's role (admin/explorer).
