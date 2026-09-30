@@ -342,29 +342,6 @@ message CommitFileOp {
   bytes content_bytes = 4; // raw bytes (binary-safe; wins over content)
 }
 
-// ---- branch staging (read-only status) ----
-//
-// A branch session's writes used to AMEND one synthetic "staging" commit. That
-// write path is gone; branch content now changes ONLY by merging an MR.
-// BranchStatus remains for read-only observability.
-
-// BranchStatus reports a branch's staging state.
-message BranchStatusRequest {
-  string org = 1;
-  string repo = 2;
-  string branch = 3;
-}
-message BranchStatusResponse {
-  // HEAD's message is the staging placeholder.
-  bool placeholder = 1;
-  // The placeholder carries changes (its tree differs from its parent).
-  bool staged = 2;
-  // HEAD's sha.
-  string tip = 3;
-  // The sha an MR should merge (the placeholder's parent, else the tip).
-  string merge_tip = 4;
-}
-
 // Compare returns per-file patches between two refs (`base...head`).
 message CompareRequest {
   string org = 1;
@@ -861,16 +838,13 @@ message ServiceInfo {
   string public_url = 9;
   // Every port this service exposes (one k8s Service per distinct `name`).
   repeated ServicePortInfo ports = 10;
-  // Stage: "release" (long-lived, public) or "preview" (developer verification:
-  // session-bound, cluster-only, TTL-reclaimed).
-  string stage = 11;
+  reserved 11; // was `stage` (release|preview)
+  reserved 15; // was `expires_at` (preview TTL)
   // Pod diagnostics (best-effort): the pod phase, total container restarts and
   // the first unhealthy container reason (e.g. CrashLoopBackOff).
   string pod_phase = 12;
   int32 restarts = 13;
   string message = 14;
-  // Unix-millis TTL deadline of a preview service (0 = none).
-  int64 expires_at = 15;
   // Paused is true when the service is scaled to zero replicas (PauseService);
   // ResumeService restores the replica count it had before the pause.
   bool paused = 16;
@@ -1120,41 +1094,6 @@ message DeployServiceRequest {
   string slot = 25;
 }
 message DeployServiceResponse { ServiceInfo service = 1; }
-
-// PreviewService deploys a PREVIEW service for verification: session-bound,
-// cluster-only (no public URL), and reclaimed on session end / TTL.
-message PreviewServiceRequest {
-  // Image to run as-is.
-  string image = 2;
-  // Base name (a DNS-1123 label); the gateway prefixes it with the session slug.
-  string name = 3;
-  int32 container_port = 4;
-  map<string, string> env = 5;
-  string cpu = 6;
-  string memory = 7;
-  repeated string command = 8;
-  bool kvm = 9;
-  int32 gpu_count = 10;
-  // Ports to expose (cluster-internal only). Empty = one port 80 -> container.
-  repeated ServicePortSpec services = 11;
-  // TTL in seconds (0 = the deployment default).
-  int32 ttl_seconds = 12;
-  // PVCs to mount into the container.
-  repeated VolumeMountSpec volumes = 13;
-  // ---- Tier 0: single-Deployment enhancements (same shape as DeployService) ----
-  ResourceSpec resources = 14;
-  ProbeSpec readiness_probe = 15;
-  ProbeSpec liveness_probe = 16;
-  ProbeSpec startup_probe = 17;
-  RolloutSpec rollout = 18;
-  repeated EnvRefSpec env_refs = 19;
-  repeated EnvFromSpec env_from = 20;
-  repeated ConfigMountSpec config_mounts = 21;
-  repeated SidecarSpec sidecars = 22;
-  map<string, string> node_selector = 23;
-  repeated TolerationSpec tolerations = 24;
-}
-message PreviewServiceResponse { ServiceInfo service = 1; }
 
 message ListServicesRequest {}
 message ListServicesResponse { repeated ServiceInfo services = 1; }
@@ -1453,26 +1392,6 @@ message WatchWorkspaceResponse {
   bool releases_changed = 8;
 }
 
-// BuildPreviewImage builds a PREVIEW image from a repository Dockerfile. The
-// image name is FORCED to the repo name and the tag is FORCED to
-// `preview-<branch>-<sha>` (the caller may add a suffix), so a preview build
-// can never overwrite a release tag.
-message BuildPreviewImageRequest {
-  string org = 1;
-  string repo = 2;
-  string ref = 3;
-  string dockerfile = 4;
-  string context = 5;
-  // Optional tag suffix appended after the forced preview prefix.
-  string tag_suffix = 6;
-  map<string, string> build_args = 7;
-}
-message BuildPreviewImageResponse {
-  string image_ref = 1;
-  string log = 2;
-  string tag = 3;
-}
-
 // ---- settings (NARROWED) ----
 
 // UpdateSettings lets a user change only what is safe to change on an existing
@@ -1524,8 +1443,6 @@ service BranchSessionService {
   // Tenant-scoped repo operations (the extension's ONLY path to Forgejo).
   rpc RepoMeta(RepoMetaRequest) returns (RepoMetaResponse);
   rpc Contents(ContentsRequest) returns (ContentsResponse);
-  // BranchStatus reports a branch's staging state (read-only).
-  rpc BranchStatus(BranchStatusRequest) returns (BranchStatusResponse);
   rpc Compare(CompareRequest) returns (CompareResponse);
   rpc Blame(BlameRequest) returns (BlameResponse);
   rpc FileDiff(FileDiffRequest) returns (FileDiffResponse);
@@ -1572,8 +1489,6 @@ service BranchSessionService {
   rpc ReadSandboxFile(ReadSandboxFileRequest) returns (ReadSandboxFileResponse);
   // services (long-lived Deployments)
   rpc DeployService(DeployServiceRequest) returns (DeployServiceResponse);
-  // PreviewService deploys a session-bound, cluster-only preview (developer).
-  rpc PreviewService(PreviewServiceRequest) returns (PreviewServiceResponse);
   rpc ListServices(ListServicesRequest) returns (ListServicesResponse);
   rpc DeleteService(DeleteServiceRequest) returns (DeleteServiceResponse);
   rpc PauseService(PauseServiceRequest) returns (PauseServiceResponse);
@@ -1595,12 +1510,11 @@ service BranchSessionService {
   rpc ServiceLogs(ServiceLogsRequest) returns (ServiceLogsResponse);
   rpc WatchServiceLogs(WatchServiceLogsRequest) returns (stream WatchServiceLogsResponse);
   // sandbox logs (read a sandbox pod's container logs; `previous` = the
-  // crashed/OOM-killed instance).
+  // crashed/OOM-killed instance). Read-only observability for the webui; NOT
+  // exposed as an agent tool.
   rpc SandboxLogs(SandboxLogsRequest) returns (SandboxLogsResponse);
   // WatchWorkspace streams the tenant's sandboxes/services/PVCs live.
   rpc WatchWorkspace(WatchWorkspaceRequest) returns (stream WatchWorkspaceResponse);
-  // BuildPreviewImage builds a preview-tagged image (forced name/tag).
-  rpc BuildPreviewImage(BuildPreviewImageRequest) returns (BuildPreviewImageResponse);
 
   // ---- Helm ----
   rpc HelmDeploy(HelmDeployRequest) returns (HelmDeployResponse);
@@ -1642,7 +1556,6 @@ service BranchSessionService {
   rpc ListModels(agent.v1.ListModelsRequest) returns (agent.v1.ListModelsResponse);
   // presets (READ-ONLY: no upsert/delete)
   rpc ListPresets(agent.v1.ListPresetsRequest) returns (agent.v1.ListPresetsResponse);
-  rpc PreviewPreset(agent.v1.PreviewPresetRequest) returns (agent.v1.PreviewPresetResponse);
   // config + tools (per-tenant config)
   rpc GetConfig(agent.v1.GetConfigRequest) returns (agent.v1.GetConfigResponse);
   rpc SetConfig(agent.v1.SetConfigRequest) returns (agent.v1.SetConfigResponse);

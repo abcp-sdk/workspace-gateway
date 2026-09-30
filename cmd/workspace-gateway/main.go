@@ -171,7 +171,6 @@ func main() {
 		GitCloneDir:         envOr("GIT_CLONE_DIR", "/data/git-clones"),
 		SandboxNamespace:    sandboxNS,
 		PublicServiceDomain: os.Getenv("PUBLIC_SERVICE_DOMAIN"),
-		PreviewTTL:          envOrDuration("SERVICE_PREVIEW_TTL", 2*time.Hour),
 		ServiceLogTail:      int64(envOrInt("SERVICE_LOG_TAIL", 500)),
 		PVCStorageClass:     envOr("PVC_STORAGE_CLASS", "workspace-local"),
 		PVCDefaultSize:      envOr("PVC_DEFAULT_SIZE", "1Gi"),
@@ -185,22 +184,6 @@ func main() {
 			Interval: envOrDuration("SANDBOX_REAP_INTERVAL", 10*time.Minute),
 		}
 		go reaper.Run(context.Background())
-	}
-
-	// Reclaim expired PREVIEW services (developer verification environments).
-	if ttl := envOrDuration("SERVICE_PREVIEW_TTL", 2*time.Hour); ttl > 0 {
-		interval := envOrDuration("SERVICE_PREVIEW_REAP_INTERVAL", 10*time.Minute)
-		go func() {
-			t := time.NewTicker(interval)
-			defer t.Stop()
-			for range t.C {
-				if names, err := svc.ReapPreviewServices(context.Background()); err != nil {
-					log.Printf("warn: preview reaper: %v", err)
-				} else if len(names) > 0 {
-					log.Printf("preview reaper: reclaimed %v", names)
-				}
-			}
-		}()
 	}
 
 	// Re-trigger stalled sessions (a session that stopped mid-task after a tool

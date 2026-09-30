@@ -138,10 +138,6 @@ func (s *Service) ListPresets(ctx context.Context, r *connect.Request[agentv1.Li
 	return s.agent.ListPresets(ctx, fwd(r))
 }
 
-func (s *Service) PreviewPreset(ctx context.Context, r *connect.Request[agentv1.PreviewPresetRequest]) (*connect.Response[agentv1.PreviewPresetResponse], error) {
-	return s.agent.PreviewPreset(ctx, fwd(r))
-}
-
 func (s *Service) GetConfig(ctx context.Context, r *connect.Request[agentv1.GetConfigRequest]) (*connect.Response[agentv1.GetConfigResponse], error) {
 	return s.agent.GetConfig(ctx, fwd(r))
 }

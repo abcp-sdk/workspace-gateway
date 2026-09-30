@@ -118,9 +118,6 @@ const (
 	// BranchSessionServiceContentsProcedure is the fully-qualified name of the BranchSessionService's
 	// Contents RPC.
 	BranchSessionServiceContentsProcedure = "/workspace.v1.BranchSessionService/Contents"
-	// BranchSessionServiceBranchStatusProcedure is the fully-qualified name of the
-	// BranchSessionService's BranchStatus RPC.
-	BranchSessionServiceBranchStatusProcedure = "/workspace.v1.BranchSessionService/BranchStatus"
 	// BranchSessionServiceCompareProcedure is the fully-qualified name of the BranchSessionService's
 	// Compare RPC.
 	BranchSessionServiceCompareProcedure = "/workspace.v1.BranchSessionService/Compare"
@@ -217,9 +214,6 @@ const (
 	// BranchSessionServiceDeployServiceProcedure is the fully-qualified name of the
 	// BranchSessionService's DeployService RPC.
 	BranchSessionServiceDeployServiceProcedure = "/workspace.v1.BranchSessionService/DeployService"
-	// BranchSessionServicePreviewServiceProcedure is the fully-qualified name of the
-	// BranchSessionService's PreviewService RPC.
-	BranchSessionServicePreviewServiceProcedure = "/workspace.v1.BranchSessionService/PreviewService"
 	// BranchSessionServiceListServicesProcedure is the fully-qualified name of the
 	// BranchSessionService's ListServices RPC.
 	BranchSessionServiceListServicesProcedure = "/workspace.v1.BranchSessionService/ListServices"
@@ -268,9 +262,6 @@ const (
 	// BranchSessionServiceWatchWorkspaceProcedure is the fully-qualified name of the
 	// BranchSessionService's WatchWorkspace RPC.
 	BranchSessionServiceWatchWorkspaceProcedure = "/workspace.v1.BranchSessionService/WatchWorkspace"
-	// BranchSessionServiceBuildPreviewImageProcedure is the fully-qualified name of the
-	// BranchSessionService's BuildPreviewImage RPC.
-	BranchSessionServiceBuildPreviewImageProcedure = "/workspace.v1.BranchSessionService/BuildPreviewImage"
 	// BranchSessionServiceHelmDeployProcedure is the fully-qualified name of the BranchSessionService's
 	// HelmDeploy RPC.
 	BranchSessionServiceHelmDeployProcedure = "/workspace.v1.BranchSessionService/HelmDeploy"
@@ -361,9 +352,6 @@ const (
 	// BranchSessionServiceListPresetsProcedure is the fully-qualified name of the
 	// BranchSessionService's ListPresets RPC.
 	BranchSessionServiceListPresetsProcedure = "/workspace.v1.BranchSessionService/ListPresets"
-	// BranchSessionServicePreviewPresetProcedure is the fully-qualified name of the
-	// BranchSessionService's PreviewPreset RPC.
-	BranchSessionServicePreviewPresetProcedure = "/workspace.v1.BranchSessionService/PreviewPreset"
 	// BranchSessionServiceGetConfigProcedure is the fully-qualified name of the BranchSessionService's
 	// GetConfig RPC.
 	BranchSessionServiceGetConfigProcedure = "/workspace.v1.BranchSessionService/GetConfig"
@@ -437,8 +425,6 @@ type BranchSessionServiceClient interface {
 	// Tenant-scoped repo operations (the extension's ONLY path to Forgejo).
 	RepoMeta(context.Context, *connect.Request[v1.RepoMetaRequest]) (*connect.Response[v1.RepoMetaResponse], error)
 	Contents(context.Context, *connect.Request[v1.ContentsRequest]) (*connect.Response[v1.ContentsResponse], error)
-	// BranchStatus reports a branch's staging state (read-only).
-	BranchStatus(context.Context, *connect.Request[v1.BranchStatusRequest]) (*connect.Response[v1.BranchStatusResponse], error)
 	Compare(context.Context, *connect.Request[v1.CompareRequest]) (*connect.Response[v1.CompareResponse], error)
 	Blame(context.Context, *connect.Request[v1.BlameRequest]) (*connect.Response[v1.BlameResponse], error)
 	FileDiff(context.Context, *connect.Request[v1.FileDiffRequest]) (*connect.Response[v1.FileDiffResponse], error)
@@ -485,8 +471,6 @@ type BranchSessionServiceClient interface {
 	ReadSandboxFile(context.Context, *connect.Request[v1.ReadSandboxFileRequest]) (*connect.Response[v1.ReadSandboxFileResponse], error)
 	// services (long-lived Deployments)
 	DeployService(context.Context, *connect.Request[v1.DeployServiceRequest]) (*connect.Response[v1.DeployServiceResponse], error)
-	// PreviewService deploys a session-bound, cluster-only preview (developer).
-	PreviewService(context.Context, *connect.Request[v1.PreviewServiceRequest]) (*connect.Response[v1.PreviewServiceResponse], error)
 	ListServices(context.Context, *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error)
 	DeleteService(context.Context, *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error)
 	PauseService(context.Context, *connect.Request[v1.PauseServiceRequest]) (*connect.Response[v1.PauseServiceResponse], error)
@@ -508,12 +492,11 @@ type BranchSessionServiceClient interface {
 	ServiceLogs(context.Context, *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error)
 	WatchServiceLogs(context.Context, *connect.Request[v1.WatchServiceLogsRequest]) (*connect.ServerStreamForClient[v1.WatchServiceLogsResponse], error)
 	// sandbox logs (read a sandbox pod's container logs; `previous` = the
-	// crashed/OOM-killed instance).
+	// crashed/OOM-killed instance). Read-only observability for the webui; NOT
+	// exposed as an agent tool.
 	SandboxLogs(context.Context, *connect.Request[v1.SandboxLogsRequest]) (*connect.Response[v1.SandboxLogsResponse], error)
 	// WatchWorkspace streams the tenant's sandboxes/services/PVCs live.
 	WatchWorkspace(context.Context, *connect.Request[v1.WatchWorkspaceRequest]) (*connect.ServerStreamForClient[v1.WatchWorkspaceResponse], error)
-	// BuildPreviewImage builds a preview-tagged image (forced name/tag).
-	BuildPreviewImage(context.Context, *connect.Request[v1.BuildPreviewImageRequest]) (*connect.Response[v1.BuildPreviewImageResponse], error)
 	// ---- Helm ----
 	HelmDeploy(context.Context, *connect.Request[v1.HelmDeployRequest]) (*connect.Response[v1.HelmDeployResponse], error)
 	HelmList(context.Context, *connect.Request[v1.HelmListRequest]) (*connect.Response[v1.HelmListResponse], error)
@@ -553,7 +536,6 @@ type BranchSessionServiceClient interface {
 	ListModels(context.Context, *connect.Request[v11.ListModelsRequest]) (*connect.Response[v11.ListModelsResponse], error)
 	// presets (READ-ONLY: no upsert/delete)
 	ListPresets(context.Context, *connect.Request[v11.ListPresetsRequest]) (*connect.Response[v11.ListPresetsResponse], error)
-	PreviewPreset(context.Context, *connect.Request[v11.PreviewPresetRequest]) (*connect.Response[v11.PreviewPresetResponse], error)
 	// config + tools (per-tenant config)
 	GetConfig(context.Context, *connect.Request[v11.GetConfigRequest]) (*connect.Response[v11.GetConfigResponse], error)
 	SetConfig(context.Context, *connect.Request[v11.SetConfigRequest]) (*connect.Response[v11.SetConfigResponse], error)
@@ -722,12 +704,6 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+BranchSessionServiceContentsProcedure,
 			connect.WithSchema(branchSessionServiceMethods.ByName("Contents")),
-			connect.WithClientOptions(opts...),
-		),
-		branchStatus: connect.NewClient[v1.BranchStatusRequest, v1.BranchStatusResponse](
-			httpClient,
-			baseURL+BranchSessionServiceBranchStatusProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("BranchStatus")),
 			connect.WithClientOptions(opts...),
 		),
 		compare: connect.NewClient[v1.CompareRequest, v1.CompareResponse](
@@ -922,12 +898,6 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(branchSessionServiceMethods.ByName("DeployService")),
 			connect.WithClientOptions(opts...),
 		),
-		previewService: connect.NewClient[v1.PreviewServiceRequest, v1.PreviewServiceResponse](
-			httpClient,
-			baseURL+BranchSessionServicePreviewServiceProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("PreviewService")),
-			connect.WithClientOptions(opts...),
-		),
 		listServices: connect.NewClient[v1.ListServicesRequest, v1.ListServicesResponse](
 			httpClient,
 			baseURL+BranchSessionServiceListServicesProcedure,
@@ -1022,12 +992,6 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+BranchSessionServiceWatchWorkspaceProcedure,
 			connect.WithSchema(branchSessionServiceMethods.ByName("WatchWorkspace")),
-			connect.WithClientOptions(opts...),
-		),
-		buildPreviewImage: connect.NewClient[v1.BuildPreviewImageRequest, v1.BuildPreviewImageResponse](
-			httpClient,
-			baseURL+BranchSessionServiceBuildPreviewImageProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("BuildPreviewImage")),
 			connect.WithClientOptions(opts...),
 		),
 		helmDeploy: connect.NewClient[v1.HelmDeployRequest, v1.HelmDeployResponse](
@@ -1210,12 +1174,6 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(branchSessionServiceMethods.ByName("ListPresets")),
 			connect.WithClientOptions(opts...),
 		),
-		previewPreset: connect.NewClient[v11.PreviewPresetRequest, v11.PreviewPresetResponse](
-			httpClient,
-			baseURL+BranchSessionServicePreviewPresetProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("PreviewPreset")),
-			connect.WithClientOptions(opts...),
-		),
 		getConfig: connect.NewClient[v11.GetConfigRequest, v11.GetConfigResponse](
 			httpClient,
 			baseURL+BranchSessionServiceGetConfigProcedure,
@@ -1311,7 +1269,6 @@ type branchSessionServiceClient struct {
 	listOrgs             *connect.Client[v1.ListOrgsRequest, v1.ListOrgsResponse]
 	repoMeta             *connect.Client[v1.RepoMetaRequest, v1.RepoMetaResponse]
 	contents             *connect.Client[v1.ContentsRequest, v1.ContentsResponse]
-	branchStatus         *connect.Client[v1.BranchStatusRequest, v1.BranchStatusResponse]
 	compare              *connect.Client[v1.CompareRequest, v1.CompareResponse]
 	blame                *connect.Client[v1.BlameRequest, v1.BlameResponse]
 	fileDiff             *connect.Client[v1.FileDiffRequest, v1.FileDiffResponse]
@@ -1344,7 +1301,6 @@ type branchSessionServiceClient struct {
 	listSandboxFiles     *connect.Client[v1.ListSandboxFilesRequest, v1.ListSandboxFilesResponse]
 	readSandboxFile      *connect.Client[v1.ReadSandboxFileRequest, v1.ReadSandboxFileResponse]
 	deployService        *connect.Client[v1.DeployServiceRequest, v1.DeployServiceResponse]
-	previewService       *connect.Client[v1.PreviewServiceRequest, v1.PreviewServiceResponse]
 	listServices         *connect.Client[v1.ListServicesRequest, v1.ListServicesResponse]
 	deleteService        *connect.Client[v1.DeleteServiceRequest, v1.DeleteServiceResponse]
 	pauseService         *connect.Client[v1.PauseServiceRequest, v1.PauseServiceResponse]
@@ -1361,7 +1317,6 @@ type branchSessionServiceClient struct {
 	watchServiceLogs     *connect.Client[v1.WatchServiceLogsRequest, v1.WatchServiceLogsResponse]
 	sandboxLogs          *connect.Client[v1.SandboxLogsRequest, v1.SandboxLogsResponse]
 	watchWorkspace       *connect.Client[v1.WatchWorkspaceRequest, v1.WatchWorkspaceResponse]
-	buildPreviewImage    *connect.Client[v1.BuildPreviewImageRequest, v1.BuildPreviewImageResponse]
 	helmDeploy           *connect.Client[v1.HelmDeployRequest, v1.HelmDeployResponse]
 	helmList             *connect.Client[v1.HelmListRequest, v1.HelmListResponse]
 	helmHistory          *connect.Client[v1.HelmHistoryRequest, v1.HelmHistoryResponse]
@@ -1392,7 +1347,6 @@ type branchSessionServiceClient struct {
 	testProvider         *connect.Client[v11.TestProviderRequest, v11.TestProviderResponse]
 	listModels           *connect.Client[v11.ListModelsRequest, v11.ListModelsResponse]
 	listPresets          *connect.Client[v11.ListPresetsRequest, v11.ListPresetsResponse]
-	previewPreset        *connect.Client[v11.PreviewPresetRequest, v11.PreviewPresetResponse]
 	getConfig            *connect.Client[v11.GetConfigRequest, v11.GetConfigResponse]
 	setConfig            *connect.Client[v11.SetConfigRequest, v11.SetConfigResponse]
 	listTools            *connect.Client[v11.ListToolsRequest, v11.ListToolsResponse]
@@ -1524,11 +1478,6 @@ func (c *branchSessionServiceClient) RepoMeta(ctx context.Context, req *connect.
 // Contents calls workspace.v1.BranchSessionService.Contents.
 func (c *branchSessionServiceClient) Contents(ctx context.Context, req *connect.Request[v1.ContentsRequest]) (*connect.Response[v1.ContentsResponse], error) {
 	return c.contents.CallUnary(ctx, req)
-}
-
-// BranchStatus calls workspace.v1.BranchSessionService.BranchStatus.
-func (c *branchSessionServiceClient) BranchStatus(ctx context.Context, req *connect.Request[v1.BranchStatusRequest]) (*connect.Response[v1.BranchStatusResponse], error) {
-	return c.branchStatus.CallUnary(ctx, req)
 }
 
 // Compare calls workspace.v1.BranchSessionService.Compare.
@@ -1691,11 +1640,6 @@ func (c *branchSessionServiceClient) DeployService(ctx context.Context, req *con
 	return c.deployService.CallUnary(ctx, req)
 }
 
-// PreviewService calls workspace.v1.BranchSessionService.PreviewService.
-func (c *branchSessionServiceClient) PreviewService(ctx context.Context, req *connect.Request[v1.PreviewServiceRequest]) (*connect.Response[v1.PreviewServiceResponse], error) {
-	return c.previewService.CallUnary(ctx, req)
-}
-
 // ListServices calls workspace.v1.BranchSessionService.ListServices.
 func (c *branchSessionServiceClient) ListServices(ctx context.Context, req *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error) {
 	return c.listServices.CallUnary(ctx, req)
@@ -1774,11 +1718,6 @@ func (c *branchSessionServiceClient) SandboxLogs(ctx context.Context, req *conne
 // WatchWorkspace calls workspace.v1.BranchSessionService.WatchWorkspace.
 func (c *branchSessionServiceClient) WatchWorkspace(ctx context.Context, req *connect.Request[v1.WatchWorkspaceRequest]) (*connect.ServerStreamForClient[v1.WatchWorkspaceResponse], error) {
 	return c.watchWorkspace.CallServerStream(ctx, req)
-}
-
-// BuildPreviewImage calls workspace.v1.BranchSessionService.BuildPreviewImage.
-func (c *branchSessionServiceClient) BuildPreviewImage(ctx context.Context, req *connect.Request[v1.BuildPreviewImageRequest]) (*connect.Response[v1.BuildPreviewImageResponse], error) {
-	return c.buildPreviewImage.CallUnary(ctx, req)
 }
 
 // HelmDeploy calls workspace.v1.BranchSessionService.HelmDeploy.
@@ -1931,11 +1870,6 @@ func (c *branchSessionServiceClient) ListPresets(ctx context.Context, req *conne
 	return c.listPresets.CallUnary(ctx, req)
 }
 
-// PreviewPreset calls workspace.v1.BranchSessionService.PreviewPreset.
-func (c *branchSessionServiceClient) PreviewPreset(ctx context.Context, req *connect.Request[v11.PreviewPresetRequest]) (*connect.Response[v11.PreviewPresetResponse], error) {
-	return c.previewPreset.CallUnary(ctx, req)
-}
-
 // GetConfig calls workspace.v1.BranchSessionService.GetConfig.
 func (c *branchSessionServiceClient) GetConfig(ctx context.Context, req *connect.Request[v11.GetConfigRequest]) (*connect.Response[v11.GetConfigResponse], error) {
 	return c.getConfig.CallUnary(ctx, req)
@@ -2030,8 +1964,6 @@ type BranchSessionServiceHandler interface {
 	// Tenant-scoped repo operations (the extension's ONLY path to Forgejo).
 	RepoMeta(context.Context, *connect.Request[v1.RepoMetaRequest]) (*connect.Response[v1.RepoMetaResponse], error)
 	Contents(context.Context, *connect.Request[v1.ContentsRequest]) (*connect.Response[v1.ContentsResponse], error)
-	// BranchStatus reports a branch's staging state (read-only).
-	BranchStatus(context.Context, *connect.Request[v1.BranchStatusRequest]) (*connect.Response[v1.BranchStatusResponse], error)
 	Compare(context.Context, *connect.Request[v1.CompareRequest]) (*connect.Response[v1.CompareResponse], error)
 	Blame(context.Context, *connect.Request[v1.BlameRequest]) (*connect.Response[v1.BlameResponse], error)
 	FileDiff(context.Context, *connect.Request[v1.FileDiffRequest]) (*connect.Response[v1.FileDiffResponse], error)
@@ -2078,8 +2010,6 @@ type BranchSessionServiceHandler interface {
 	ReadSandboxFile(context.Context, *connect.Request[v1.ReadSandboxFileRequest]) (*connect.Response[v1.ReadSandboxFileResponse], error)
 	// services (long-lived Deployments)
 	DeployService(context.Context, *connect.Request[v1.DeployServiceRequest]) (*connect.Response[v1.DeployServiceResponse], error)
-	// PreviewService deploys a session-bound, cluster-only preview (developer).
-	PreviewService(context.Context, *connect.Request[v1.PreviewServiceRequest]) (*connect.Response[v1.PreviewServiceResponse], error)
 	ListServices(context.Context, *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error)
 	DeleteService(context.Context, *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error)
 	PauseService(context.Context, *connect.Request[v1.PauseServiceRequest]) (*connect.Response[v1.PauseServiceResponse], error)
@@ -2101,12 +2031,11 @@ type BranchSessionServiceHandler interface {
 	ServiceLogs(context.Context, *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error)
 	WatchServiceLogs(context.Context, *connect.Request[v1.WatchServiceLogsRequest], *connect.ServerStream[v1.WatchServiceLogsResponse]) error
 	// sandbox logs (read a sandbox pod's container logs; `previous` = the
-	// crashed/OOM-killed instance).
+	// crashed/OOM-killed instance). Read-only observability for the webui; NOT
+	// exposed as an agent tool.
 	SandboxLogs(context.Context, *connect.Request[v1.SandboxLogsRequest]) (*connect.Response[v1.SandboxLogsResponse], error)
 	// WatchWorkspace streams the tenant's sandboxes/services/PVCs live.
 	WatchWorkspace(context.Context, *connect.Request[v1.WatchWorkspaceRequest], *connect.ServerStream[v1.WatchWorkspaceResponse]) error
-	// BuildPreviewImage builds a preview-tagged image (forced name/tag).
-	BuildPreviewImage(context.Context, *connect.Request[v1.BuildPreviewImageRequest]) (*connect.Response[v1.BuildPreviewImageResponse], error)
 	// ---- Helm ----
 	HelmDeploy(context.Context, *connect.Request[v1.HelmDeployRequest]) (*connect.Response[v1.HelmDeployResponse], error)
 	HelmList(context.Context, *connect.Request[v1.HelmListRequest]) (*connect.Response[v1.HelmListResponse], error)
@@ -2146,7 +2075,6 @@ type BranchSessionServiceHandler interface {
 	ListModels(context.Context, *connect.Request[v11.ListModelsRequest]) (*connect.Response[v11.ListModelsResponse], error)
 	// presets (READ-ONLY: no upsert/delete)
 	ListPresets(context.Context, *connect.Request[v11.ListPresetsRequest]) (*connect.Response[v11.ListPresetsResponse], error)
-	PreviewPreset(context.Context, *connect.Request[v11.PreviewPresetRequest]) (*connect.Response[v11.PreviewPresetResponse], error)
 	// config + tools (per-tenant config)
 	GetConfig(context.Context, *connect.Request[v11.GetConfigRequest]) (*connect.Response[v11.GetConfigResponse], error)
 	SetConfig(context.Context, *connect.Request[v11.SetConfigRequest]) (*connect.Response[v11.SetConfigResponse], error)
@@ -2311,12 +2239,6 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		BranchSessionServiceContentsProcedure,
 		svc.Contents,
 		connect.WithSchema(branchSessionServiceMethods.ByName("Contents")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceBranchStatusHandler := connect.NewUnaryHandler(
-		BranchSessionServiceBranchStatusProcedure,
-		svc.BranchStatus,
-		connect.WithSchema(branchSessionServiceMethods.ByName("BranchStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
 	branchSessionServiceCompareHandler := connect.NewUnaryHandler(
@@ -2511,12 +2433,6 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		connect.WithSchema(branchSessionServiceMethods.ByName("DeployService")),
 		connect.WithHandlerOptions(opts...),
 	)
-	branchSessionServicePreviewServiceHandler := connect.NewUnaryHandler(
-		BranchSessionServicePreviewServiceProcedure,
-		svc.PreviewService,
-		connect.WithSchema(branchSessionServiceMethods.ByName("PreviewService")),
-		connect.WithHandlerOptions(opts...),
-	)
 	branchSessionServiceListServicesHandler := connect.NewUnaryHandler(
 		BranchSessionServiceListServicesProcedure,
 		svc.ListServices,
@@ -2611,12 +2527,6 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		BranchSessionServiceWatchWorkspaceProcedure,
 		svc.WatchWorkspace,
 		connect.WithSchema(branchSessionServiceMethods.ByName("WatchWorkspace")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceBuildPreviewImageHandler := connect.NewUnaryHandler(
-		BranchSessionServiceBuildPreviewImageProcedure,
-		svc.BuildPreviewImage,
-		connect.WithSchema(branchSessionServiceMethods.ByName("BuildPreviewImage")),
 		connect.WithHandlerOptions(opts...),
 	)
 	branchSessionServiceHelmDeployHandler := connect.NewUnaryHandler(
@@ -2799,12 +2709,6 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		connect.WithSchema(branchSessionServiceMethods.ByName("ListPresets")),
 		connect.WithHandlerOptions(opts...),
 	)
-	branchSessionServicePreviewPresetHandler := connect.NewUnaryHandler(
-		BranchSessionServicePreviewPresetProcedure,
-		svc.PreviewPreset,
-		connect.WithSchema(branchSessionServiceMethods.ByName("PreviewPreset")),
-		connect.WithHandlerOptions(opts...),
-	)
 	branchSessionServiceGetConfigHandler := connect.NewUnaryHandler(
 		BranchSessionServiceGetConfigProcedure,
 		svc.GetConfig,
@@ -2921,8 +2825,6 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceRepoMetaHandler.ServeHTTP(w, r)
 		case BranchSessionServiceContentsProcedure:
 			branchSessionServiceContentsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceBranchStatusProcedure:
-			branchSessionServiceBranchStatusHandler.ServeHTTP(w, r)
 		case BranchSessionServiceCompareProcedure:
 			branchSessionServiceCompareHandler.ServeHTTP(w, r)
 		case BranchSessionServiceBlameProcedure:
@@ -2987,8 +2889,6 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceReadSandboxFileHandler.ServeHTTP(w, r)
 		case BranchSessionServiceDeployServiceProcedure:
 			branchSessionServiceDeployServiceHandler.ServeHTTP(w, r)
-		case BranchSessionServicePreviewServiceProcedure:
-			branchSessionServicePreviewServiceHandler.ServeHTTP(w, r)
 		case BranchSessionServiceListServicesProcedure:
 			branchSessionServiceListServicesHandler.ServeHTTP(w, r)
 		case BranchSessionServiceDeleteServiceProcedure:
@@ -3021,8 +2921,6 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceSandboxLogsHandler.ServeHTTP(w, r)
 		case BranchSessionServiceWatchWorkspaceProcedure:
 			branchSessionServiceWatchWorkspaceHandler.ServeHTTP(w, r)
-		case BranchSessionServiceBuildPreviewImageProcedure:
-			branchSessionServiceBuildPreviewImageHandler.ServeHTTP(w, r)
 		case BranchSessionServiceHelmDeployProcedure:
 			branchSessionServiceHelmDeployHandler.ServeHTTP(w, r)
 		case BranchSessionServiceHelmListProcedure:
@@ -3083,8 +2981,6 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceListModelsHandler.ServeHTTP(w, r)
 		case BranchSessionServiceListPresetsProcedure:
 			branchSessionServiceListPresetsHandler.ServeHTTP(w, r)
-		case BranchSessionServicePreviewPresetProcedure:
-			branchSessionServicePreviewPresetHandler.ServeHTTP(w, r)
 		case BranchSessionServiceGetConfigProcedure:
 			branchSessionServiceGetConfigHandler.ServeHTTP(w, r)
 		case BranchSessionServiceSetConfigProcedure:
@@ -3210,10 +3106,6 @@ func (UnimplementedBranchSessionServiceHandler) RepoMeta(context.Context, *conne
 
 func (UnimplementedBranchSessionServiceHandler) Contents(context.Context, *connect.Request[v1.ContentsRequest]) (*connect.Response[v1.ContentsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Contents is not implemented"))
-}
-
-func (UnimplementedBranchSessionServiceHandler) BranchStatus(context.Context, *connect.Request[v1.BranchStatusRequest]) (*connect.Response[v1.BranchStatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.BranchStatus is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) Compare(context.Context, *connect.Request[v1.CompareRequest]) (*connect.Response[v1.CompareResponse], error) {
@@ -3344,10 +3236,6 @@ func (UnimplementedBranchSessionServiceHandler) DeployService(context.Context, *
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeployService is not implemented"))
 }
 
-func (UnimplementedBranchSessionServiceHandler) PreviewService(context.Context, *connect.Request[v1.PreviewServiceRequest]) (*connect.Response[v1.PreviewServiceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.PreviewService is not implemented"))
-}
-
 func (UnimplementedBranchSessionServiceHandler) ListServices(context.Context, *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListServices is not implemented"))
 }
@@ -3410,10 +3298,6 @@ func (UnimplementedBranchSessionServiceHandler) SandboxLogs(context.Context, *co
 
 func (UnimplementedBranchSessionServiceHandler) WatchWorkspace(context.Context, *connect.Request[v1.WatchWorkspaceRequest], *connect.ServerStream[v1.WatchWorkspaceResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.WatchWorkspace is not implemented"))
-}
-
-func (UnimplementedBranchSessionServiceHandler) BuildPreviewImage(context.Context, *connect.Request[v1.BuildPreviewImageRequest]) (*connect.Response[v1.BuildPreviewImageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.BuildPreviewImage is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) HelmDeploy(context.Context, *connect.Request[v1.HelmDeployRequest]) (*connect.Response[v1.HelmDeployResponse], error) {
@@ -3534,10 +3418,6 @@ func (UnimplementedBranchSessionServiceHandler) ListModels(context.Context, *con
 
 func (UnimplementedBranchSessionServiceHandler) ListPresets(context.Context, *connect.Request[v11.ListPresetsRequest]) (*connect.Response[v11.ListPresetsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListPresets is not implemented"))
-}
-
-func (UnimplementedBranchSessionServiceHandler) PreviewPreset(context.Context, *connect.Request[v11.PreviewPresetRequest]) (*connect.Response[v11.PreviewPresetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.PreviewPreset is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) GetConfig(context.Context, *connect.Request[v11.GetConfigRequest]) (*connect.Response[v11.GetConfigResponse], error) {

@@ -35,12 +35,6 @@ const (
 	// AnnoSession binds a service to the session that deployed it, so the webui
 	// can show which session owns it (services stay tenant-visible).
 	AnnoSession = "workspace/service-session"
-	// AnnoStage is "release" (long-lived, public) or "preview" (developer
-	// verification: session-bound, cluster-only, TTL-reclaimed).
-	AnnoStage = "workspace/service-stage"
-	// AnnoExpiresAt is the unix-millis deadline after which a preview service is
-	// reclaimed (empty/0 = no TTL).
-	AnnoExpiresAt = "workspace/service-expires-at"
 	// AnnoReplicasBeforePause remembers the replica count in effect when a
 	// service was paused (scaled to 0), so Resume can restore it. Presence of
 	// this annotation is what marks a service as PAUSED.
@@ -81,12 +75,6 @@ type PVC struct {
 	MountedBy []string
 }
 
-// Stage values for AnnoStage.
-const (
-	StageRelease = "release"
-	StagePreview = "preview"
-)
-
 // Service is a live service view.
 type Service struct {
 	Name      string
@@ -101,10 +89,6 @@ type Service struct {
 	// Ports is every port this service exposes (across its primary Service and
 	// any sibling `<name>-<suffix>` Services).
 	Ports []Port
-	// Stage is "release" or "preview" (empty on legacy objects = release).
-	Stage string
-	// ExpiresAt is the unix-millis deadline for a preview service (0 = none).
-	ExpiresAt int64
 	// Paused is true when the service was scaled to zero by Pause (Replicas
 	// then reads 0). Resume restores the pre-pause replica count.
 	Paused bool
@@ -289,10 +273,6 @@ type Spec struct {
 	Slot string
 	// Session is the session that deployed the service (empty = unbound).
 	Session string
-	// Stage is "release" (default) or "preview".
-	Stage string
-	// ExpiresAt is the unix-millis TTL deadline for a preview (0 = none).
-	ExpiresAt int64
 	// Ports are the resolved ports to expose. Empty = the default single public
 	// port (tcp80 -> ContainerPort). Entries sharing a Suffix form one Service.
 	Ports []Port
@@ -435,16 +415,9 @@ func (c *Client) Deploy(ctx context.Context, s Spec) (Service, error) {
 	if reps <= 0 {
 		reps = 1
 	}
-	stage := s.Stage
-	if stage == "" {
-		stage = StageRelease
-	}
 	labels := map[string]string{LabelManaged: "1", LabelName: s.Name, "app": s.Name}
 	annotations := map[string]string{
-		AnnoImage: s.Image, AnnoCreator: s.Creator, AnnoSession: s.Session, AnnoStage: stage,
-	}
-	if s.ExpiresAt > 0 {
-		annotations[AnnoExpiresAt] = fmt.Sprint(s.ExpiresAt)
+		AnnoImage: s.Image, AnnoCreator: s.Creator, AnnoSession: s.Session,
 	}
 
 	env := []corev1.EnvVar{}
@@ -684,10 +657,7 @@ func (c *Client) Deploy(ctx context.Context, s Spec) (Service, error) {
 		svcLabels := map[string]string{LabelManaged: "1", LabelName: s.Name, "app": s.Name}
 		svcAnnotations := map[string]string{
 			AnnoImage: s.Image, AnnoCreator: s.Creator, AnnoSession: s.Session,
-			AnnoStage: stage, AnnoPrimary: s.Name,
-		}
-		if s.ExpiresAt > 0 {
-			svcAnnotations[AnnoExpiresAt] = fmt.Sprint(s.ExpiresAt)
+			AnnoPrimary: s.Name,
 		}
 		svc := &corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{Name: svcName, Namespace: c.namespace, Labels: svcLabels, Annotations: svcAnnotations},
@@ -915,48 +885,6 @@ func (c *Client) List(ctx context.Context) ([]Service, error) {
 		out = append(out, svc)
 	}
 	return out, nil
-}
-
-// DeleteBySession removes every service bound to a session. When onlyPreview
-// is true, only `preview` services are removed (a release service outlives its
-// session). Returns the names deleted.
-func (c *Client) DeleteBySession(ctx context.Context, session string, onlyPreview bool) ([]string, error) {
-	all, err := c.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var deleted []string
-	for _, s := range all {
-		if s.Session != session {
-			continue
-		}
-		if onlyPreview && s.Stage != StagePreview {
-			continue
-		}
-		if ok, derr := c.Delete(ctx, s.Name); derr == nil && ok {
-			deleted = append(deleted, s.Name)
-		}
-	}
-	return deleted, nil
-}
-
-// ReapExpired deletes preview services whose TTL has passed. Returns the names
-// deleted.
-func (c *Client) ReapExpired(ctx context.Context, now int64) ([]string, error) {
-	all, err := c.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var deleted []string
-	for _, s := range all {
-		if s.Stage != StagePreview || s.ExpiresAt <= 0 || now < s.ExpiresAt {
-			continue
-		}
-		if ok, derr := c.Delete(ctx, s.Name); derr == nil && ok {
-			deleted = append(deleted, s.Name)
-		}
-	}
-	return deleted, nil
 }
 
 // ---- persistent volume claims ----
@@ -1328,7 +1256,7 @@ func mergeAnnotations(base, over map[string]string) map[string]string {
 	for k, v := range over {
 		out[k] = v
 	}
-	for _, k := range []string{AnnoImage, AnnoCreator, AnnoSession, AnnoStage, AnnoExpiresAt} {
+	for _, k := range []string{AnnoImage, AnnoCreator, AnnoSession} {
 		if v, ok := base[k]; ok {
 			out[k] = v
 		}
@@ -1533,16 +1461,6 @@ func toService(c *Client, d *appsv1.Deployment, ports []Port) Service {
 			break
 		}
 	}
-	stage := d.Annotations[AnnoStage]
-	if stage == "" {
-		stage = StageRelease
-	}
-	expires := int64(0)
-	if v := d.Annotations[AnnoExpiresAt]; v != "" {
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
-			expires = n
-		}
-	}
 	_, paused := d.Annotations[AnnoReplicasBeforePause]
 	svc := Service{
 		Name: d.Name, Image: d.Annotations[AnnoImage], Phase: phase,
@@ -1552,7 +1470,7 @@ func toService(c *Client, d *appsv1.Deployment, ports []Port) Service {
 		Creator:       d.Annotations[AnnoCreator], Session: d.Annotations[AnnoSession],
 		CreatedAt: d.CreationTimestamp.UnixMilli(),
 		Ports:     ports,
-		Stage:     stage, ExpiresAt: expires, Paused: paused,
+		Paused:    paused,
 	}
 	// Container detail (first container only — every managed service has one).
 	if len(d.Spec.Template.Spec.Containers) > 0 {

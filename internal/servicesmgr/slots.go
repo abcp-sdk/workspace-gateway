@@ -116,17 +116,10 @@ func (c *Client) DeploySlot(ctx context.Context, s Spec) (Service, error) {
 	if reps <= 0 {
 		reps = 1
 	}
-	stage := s.Stage
-	if stage == "" {
-		stage = StageRelease
-	}
 	labels := map[string]string{LabelManaged: "1", LabelName: s.Name, "app": s.Name, LabelSlot: slot.Name}
 	annotations := map[string]string{
 		AnnoImage: s.Image, AnnoCreator: s.Creator, AnnoSession: s.Session,
-		AnnoStage: stage, AnnoSlot: slot.Name,
-	}
-	if s.ExpiresAt > 0 {
-		annotations[AnnoExpiresAt] = fmt.Sprint(s.ExpiresAt)
+		AnnoSlot: slot.Name,
 	}
 	podSpec, err := c.buildPodSpec(s, ports)
 	if err != nil {
@@ -160,7 +153,7 @@ func (c *Client) DeploySlot(ctx context.Context, s Spec) (Service, error) {
 		svcLabels := map[string]string{LabelManaged: "1", LabelName: s.Name, "app": s.Name, LabelSlot: slot.Name}
 		svcAnnotations := map[string]string{
 			AnnoImage: s.Image, AnnoCreator: s.Creator, AnnoSession: s.Session,
-			AnnoStage: stage, AnnoPrimary: s.Name, AnnoSlot: slot.Name,
+			AnnoPrimary: s.Name, AnnoSlot: slot.Name,
 		}
 		svc := &corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{Name: svcName, Namespace: c.namespace, Labels: svcLabels, Annotations: svcAnnotations},
@@ -180,14 +173,14 @@ func (c *Client) DeploySlot(ctx context.Context, s Spec) (Service, error) {
 	primary, err := c.cs.CoreV1().Services(c.namespace).Get(ctx, s.Name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		active := slot.Name
-		if err := c.applyRouter(ctx, s, active, groups, order, stage); err != nil {
+		if err := c.applyRouter(ctx, s, active, groups, order); err != nil {
 			return Service{}, err
 		}
 	} else if err != nil {
 		return Service{}, err
 	} else if primary.Annotations[AnnoActiveSlot] == "" {
 		// Adopt an existing plain Service as the router on blue (migration).
-		if err := c.applyRouter(ctx, s, SlotBlue, groups, order, stage); err != nil {
+		if err := c.applyRouter(ctx, s, SlotBlue, groups, order); err != nil {
 			return Service{}, err
 		}
 	}
@@ -288,7 +281,7 @@ func (c *Client) activeSlot(ctx context.Context, name string) (string, bool, err
 
 // applyRouter creates/updates the primary Service selecting `active`, carrying
 // the service's exposed ports.
-func (c *Client) applyRouter(ctx context.Context, s Spec, active string, groups map[string][]Port, order []string, stage string) error {
+func (c *Client) applyRouter(ctx context.Context, s Spec, active string, groups map[string][]Port, order []string) error {
 	// The primary router keeps the service's ports (union across suffixes is not
 	// used here: the primary Service carries the "" group; siblings carry
 	// their own). To stay compatible with the plain model we give the router
@@ -301,7 +294,7 @@ func (c *Client) applyRouter(ctx context.Context, s Spec, active string, groups 
 	labels := map[string]string{LabelManaged: "1", LabelName: s.Name, "app": s.Name}
 	annotations := map[string]string{
 		AnnoImage: s.Image, AnnoCreator: s.Creator, AnnoSession: s.Session,
-		AnnoStage: stage, AnnoActiveSlot: active,
+		AnnoActiveSlot: active,
 	}
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: s.Name, Namespace: c.namespace, Labels: labels, Annotations: annotations},

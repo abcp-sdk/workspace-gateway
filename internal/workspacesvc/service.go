@@ -40,9 +40,9 @@ import (
 	"github.com/abcp-sdk/workspace-gateway/internal/workerclient"
 )
 
-// serviceReadyTimeout bounds how long DeployService/PreviewService wait for a
-// freshly-deployed pod to become ready. A deterministic failure returns
-// immediately; a genuine slow start is reported as not-ready (non-fatal).
+// serviceReadyTimeout bounds how long DeployService waits for a freshly-
+// deployed pod to become ready. A deterministic failure returns immediately; a
+// genuine slow start is reported as not-ready (non-fatal).
 const serviceReadyTimeout = 60 * time.Second
 
 // Service implements wsv1connect.BranchSessionServiceHandler.
@@ -65,8 +65,6 @@ type Service struct {	agent    agentv1connect.AgentServiceClient
 	svcTenant           string // tenant the service token resolves to (sandbox ownership)
 	commits             *gitcommit.Manager
 	sandboxNS           string // namespace services/sandboxes live in (public-host inference)
-	// previewTTL reclaims a preview service after this long (0 = no TTL).
-	previewTTL time.Duration
 	// serviceLogTail is the default number of log lines returned.
 	serviceLogTail int64
 	// publicServiceDomain, when set, forces the domain services are published
@@ -116,8 +114,6 @@ type Deps struct {
 	// PublicServiceDomain forces the domain services are published under. Empty
 	// = infer from the request Host (see publicDomainFor).
 	PublicServiceDomain string
-	// PreviewTTL reclaims a preview service after this long (0 = no TTL).
-	PreviewTTL time.Duration
 	// ServiceLogTail is the default number of service-log lines returned.
 	ServiceLogTail int64
 	// PVCStorageClass is the StorageClass CreatePVC uses ("" = cluster default).
@@ -152,21 +148,11 @@ func New(d Deps) *Service {
 		commits:             commits,
 		sandboxNS:           d.SandboxNamespace,
 		publicServiceDomain: d.PublicServiceDomain,
-		previewTTL:          d.PreviewTTL,
 		serviceLogTail:      d.ServiceLogTail,
 		pvcStorageClass:     d.PVCStorageClass,
 		pvcDefaultSize:      d.PVCDefaultSize,
 		hub:                 newWorkspaceHub(sources...),
 	}
-}
-
-// ReapPreviewServices deletes expired preview services. Exposed so the
-// deployment can run it on a ticker.
-func (s *Service) ReapPreviewServices(ctx context.Context) ([]string, error) {
-	if s.services == nil {
-		return nil, nil
-	}
-	return s.services.ReapExpired(ctx, time.Now().UnixMilli())
 }
 
 // renderRuntime maps the caller's (kvm, gpuCount) to pod-level settings using
@@ -743,11 +729,6 @@ func (s *Service) deleteSessionCascade(ctx context.Context, hdr map[string][]str
 				}
 			}
 		}
-	}
-	// Reclaim the session's PREVIEW services (a release service outlives its
-	// session). Best-effort.
-	if s.services != nil && session != "" {
-		_, _ = s.services.DeleteBySession(ctx, session, true)
 	}
 	r := connect.NewRequest(&agentv1.DeleteSessionRequest{Id: session})
 	copyHeaders(r, hdr)
@@ -1645,39 +1626,6 @@ func (s *Service) tenantOf(ctx context.Context, hdr map[string][]string) string 
 
 // mrError maps a Forgejo error to a connect error, surfacing conflicts as
 // FailedPrecondition instead of an opaque Internal.
-// BranchStatus reports a branch's staging state (placeholder present / carries
-// staged changes / the sha an MR should merge).
-func (s *Service) BranchStatus(ctx context.Context, req *connect.Request[wsv1.BranchStatusRequest]) (*connect.Response[wsv1.BranchStatusResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
-		return nil, err
-	}
-	opts, err := s.commitOpts(ctx, m.GetOrg(), m.GetRepo(), m.GetBranch())
-	if err != nil {
-		return nil, err
-	}
-	st, err := s.commits.Status(ctx, opts)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	return connect.NewResponse(&wsv1.BranchStatusResponse{
-		Placeholder: st.Placeholder, Staged: st.Staged, Tip: st.Tip, MergeTip: st.MergeTip,
-	}), nil
-}
-
-// commitOpts builds the gitcommit options for one branch of a visible repo.
-func (s *Service) commitOpts(ctx context.Context, org, repo, branch string) (gitcommit.Options, error) {
-	if branch == "" || !roles.ValidComponent(branch) {
-		return gitcommit.Options{}, connect.NewError(connect.CodeInvalidArgument, errors.New("branch must be a simple name"))
-	}
-	return gitcommit.Options{
-		RepoURL: s.git.GitURL(org, repo),
-		Branch:  branch,
-		User:    "root",
-		Token:   s.git.Token(),
-	}, nil
-}
-
 func mrError(err error) error {
 	var conflict *forgejo.ErrConflict
 	if errors.As(err, &conflict) {
@@ -2006,7 +1954,8 @@ func (s *Service) ResolveSandbox(ctx context.Context, req *connect.Request[wsv1.
 }
 
 // SandboxLogs reads a sandbox pod's container log (current or previous
-// instance), plus its live phase + failure reason.
+// instance), plus its live phase + failure reason. Read-only observability for
+// the webui; NOT exposed as an agent tool.
 func (s *Service) SandboxLogs(ctx context.Context, req *connect.Request[wsv1.SandboxLogsRequest]) (*connect.Response[wsv1.SandboxLogsResponse], error) {
 	if _, _, err := s.ownedSandbox(ctx, req.Header(), req.Msg.GetName()); err != nil {
 		return nil, err
@@ -3018,105 +2967,6 @@ func (s *Service) pauseResume(ctx context.Context, hdr map[string][]string, name
 	return s.toServiceInfo(out, hdr), nil
 }
 
-// PreviewService deploys a session-bound, cluster-only PREVIEW service for
-// developer verification. The name is prefixed with the session slug, no public
-// URL is produced, and the service carries a TTL for reclamation.
-func (s *Service) PreviewService(ctx context.Context, req *connect.Request[wsv1.PreviewServiceRequest]) (*connect.Response[wsv1.PreviewServiceResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
-	if err != nil {
-		return nil, err
-	}
-	if s.services == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
-	}
-	m := req.Msg
-	if m.GetImage() == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("image is required"))
-	}
-	session := sessionFromHeaders(req.Header())
-	base := m.GetName()
-	if base == "" {
-		base = "app"
-	}
-	if !roles.ValidServiceName(base) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name must be a DNS-1123 label"))
-	}
-	// Prefix with the session slug so a preview never collides with a release
-	// service, and stays under 63 chars (DNS-1123 label).
-	name := previewName(session, base)
-	// Ports: previews are CLUSTER-ONLY. Even a tcp80 entry maps to a Service
-	// with no public URL (the gateway never publishes it).
-	ports, err := servicePorts(m.GetServices(), m.GetContainerPort())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	ttl := time.Duration(m.GetTtlSeconds()) * time.Second
-	if ttl <= 0 {
-		ttl = s.previewTTL
-	}
-	expires := int64(0)
-	if ttl > 0 {
-		expires = time.Now().Add(ttl).UnixMilli()
-	}
-	vols, err := s.resolveVolumes(ctx, tenant, m.GetVolumes())
-	if err != nil {
-		return nil, err
-	}
-	svc, err := s.services.Deploy(ctx, servicesmgr.Spec{
-		Name: name, Image: m.GetImage(), Command: m.GetCommand(),
-		Env: m.GetEnv(), CPU: m.GetCpu(), Memory: m.GetMemory(),
-		Replicas: 1, ContainerPort: m.GetContainerPort(),
-		Creator: tenant, Session: session, Ports: ports,
-		Stage:     servicesmgr.StagePreview,
-		ExpiresAt: expires,
-		Runtime:   s.renderRuntime(m.GetKvm(), m.GetGpuCount()),
-		Volumes:   vols,
-		Resources:      toResources(m.GetResources()),
-		ReadinessProbe: toProbeSpec(m.GetReadinessProbe()),
-		LivenessProbe:  toProbeSpec(m.GetLivenessProbe()),
-		StartupProbe:   toProbeSpec(m.GetStartupProbe()),
-		Rollout:        toRollout(m.GetRollout()),
-		EnvRefs:        toEnvRefs(m.GetEnvRefs()),
-		EnvFrom:        toEnvFrom(m.GetEnvFrom()),
-		ConfigMounts:   toConfigMounts(m.GetConfigMounts()),
-		Sidecars:       toSidecars(m.GetSidecars()),
-		NodeSelector:   m.GetNodeSelector(),
-		Tolerations:    toTolerations(m.GetTolerations()),
-	})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	// Bounded readiness wait (same policy as DeployService).
-	if err := s.awaitServiceReady(ctx, name, ""); err != nil {
-		return nil, err
-	}
-	if cur, gerr := s.services.Get(ctx, name); gerr == nil {
-		svc = cur
-	}
-	// No public URLs: a preview is reachable only in-cluster.
-	return connect.NewResponse(&wsv1.PreviewServiceResponse{Service: s.toServiceInfo(svc, nil)}), nil
-}
-
-// previewName prefixes a base name with the session slug, keeping it a legal
-// DNS-1123 label. A free session (no branch) still gets a stable slug.
-func previewName(session, base string) string {
-	slug := servicesmgr.ServiceName(session)
-	// Leave room for "-" + base, capped at 63 chars total.
-	maxSlug := 63 - 1 - len(base)
-	if maxSlug < 1 {
-		maxSlug = 1
-	}
-	if len(slug) > maxSlug {
-		slug = slug[:maxSlug]
-	}
-	slug = strings.Trim(slug, "-")
-	name := slug + "-" + base
-	if len(name) > 63 {
-		name = name[:63]
-	}
-	return strings.Trim(name, "-")
-}
-
 // ServiceLogs reads a bounded window of a service's container log.
 func (s *Service) ServiceLogs(ctx context.Context, req *connect.Request[wsv1.ServiceLogsRequest]) (*connect.Response[wsv1.ServiceLogsResponse], error) {
 	if _, err := s.ownedService(ctx, req.Header(), req.Msg.GetName()); err != nil {
@@ -3267,74 +3117,6 @@ func (s *Service) ownedService(ctx context.Context, hdr map[string][]string, nam
 	return svc, nil
 }
 
-// BuildPreviewImage builds a preview image: the image NAME is forced to the
-// repo, and the TAG is forced to `preview-<branch>-<sha>` (+ optional suffix),
-// so a preview build can never overwrite a release tag. Admin/developer/
-// developer may build; the destination is always under the source repo's org.
-func (s *Service) BuildPreviewImage(ctx context.Context, req *connect.Request[wsv1.BuildPreviewImageRequest]) (*connect.Response[wsv1.BuildPreviewImageResponse], error) {
-	if _, err := s.sandboxAuth(ctx, req.Header()); err != nil {
-		return nil, err
-	}
-	m := req.Msg
-	org, repo, ref := m.GetOrg(), m.GetRepo(), m.GetRef()
-	if !roles.ValidComponent(org) || !roles.ValidComponent(repo) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org/repo must be simple names"))
-	}
-	if ref == "" {
-		ref = roles.MainBranch
-	}
-	if !roles.ValidComponent(ref) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("ref must be a simple name"))
-	}
-	if s.builder == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("image builder not configured"))
-	}
-	// The image NAME is the repo (not caller-chosen): a preview never writes to
-	// another image path.
-	if !imageNameRe.MatchString(repo) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("repo must be a single simple name to derive the image"))
-	}
-	// The tag is FORCED to a preview prefix; a short ref sha keeps builds
-	// distinct. The caller may append a suffix.
-	sha, err := s.git.BranchTip(ctx, org, repo, ref)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	short := sha
-	if len(short) > 12 {
-		short = short[:12]
-	}
-	tag := "preview-" + sanitizeTag(ref) + "-" + short
-	if sfx := m.GetTagSuffix(); sfx != "" {
-		if !roles.ValidComponent(sfx) {
-			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("tag_suffix must be simple"))
-		}
-		tag += "-" + sanitizeTag(sfx)
-	}
-
-	archive, err := s.git.ArchiveTarGz(ctx, org, repo, ref)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("fetch repo archive: %w", err))
-	}
-	dir, cleanup, err := imagebuild.Extract(archive, 0)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	defer cleanup()
-	res, err := s.builder.Build(ctx, imagebuild.Request{
-		ContextDir: dir,
-		Dockerfile: m.GetDockerfile(),
-		Context:    m.GetContext(),
-		Repo:       org + "/" + repo,
-		Tag:        tag,
-		BuildArgs:  m.GetBuildArgs(),
-	})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	return connect.NewResponse(&wsv1.BuildPreviewImageResponse{ImageRef: res.ImageRef, Log: res.Log, Tag: tag}), nil
-}
-
 // sanitizeTag lowercases and replaces tag-illegal chars with '-'.
 func sanitizeTag(s string) string {
 	s = strings.ToLower(s)
@@ -3471,8 +3253,8 @@ func toServiceInfoImpl(svc servicesmgr.Service, publicURLs, slotURLs map[string]
 		Replicas: svc.Replicas, ReadyReplicas: svc.ReadyReplicas,
 		Url: svc.URL, Creator: svc.Creator, Session: svc.Session,
 		PublicUrl: primary, Ports: ports,
-		Stage: svc.Stage, PodPhase: svc.PodPhase, Restarts: svc.Restarts,
-		Message: svc.Message, ExpiresAt: svc.ExpiresAt, Paused: svc.Paused,
+		PodPhase: svc.PodPhase, Restarts: svc.Restarts,
+		Message: svc.Message, Paused: svc.Paused,
 		CreatedAt: svc.CreatedAt,
 		Cpu:       svc.CPU, Memory: svc.Memory, Command: svc.Command, Env: svc.Env,
 		Volumes: vols,

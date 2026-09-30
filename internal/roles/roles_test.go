@@ -92,10 +92,10 @@ func TestAdminCreatesRepoAndHasSandbox(t *testing.T) {
 	}
 }
 
-func TestPreviewAndLogsAvailability(t *testing.T) {
-	// developer: may build a preview image + run a preview service + read logs.
+func TestLogsAndServicesAvailability(t *testing.T) {
+	// developer: may build an image, deploy a service, and read logs.
 	d := ToolsFor(Developer)
-	for _, want := range []string{"repo-build-preview", "service-preview", "service-logs", "service-deploy"} {
+	for _, want := range []string{"repo-build-image", "service-logs", "service-deploy"} {
 		if !has(d, want) {
 			t.Fatalf("developer must have %q", want)
 		}
@@ -105,7 +105,7 @@ func TestPreviewAndLogsAvailability(t *testing.T) {
 	if !has(e, "service-list") || !has(e, "service-logs") {
 		t.Fatal("explorer must list services and read logs")
 	}
-	if has(e, "service-preview") || has(e, "service-deploy") || has(e, "repo-build-preview") {
+	if has(e, "service-deploy") || has(e, "repo-build-image") {
 		t.Fatal("explorer must not deploy or build")
 	}
 }

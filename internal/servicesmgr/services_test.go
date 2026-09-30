@@ -115,57 +115,6 @@ func TestDeployMultiPortAndSibling(t *testing.T) {
 	}
 }
 
-func TestStageAndPreviewReap(t *testing.T) {
-	c := newTestClient()
-	ctx := context.Background()
-	// A preview service with a past TTL, and a release service.
-	if _, err := c.Deploy(ctx, Spec{Name: "prev", Image: "i:1", Creator: "t", Session: "t:x:y", Stage: StagePreview, ExpiresAt: 1000}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c.Deploy(ctx, Spec{Name: "rel", Image: "i:1", Creator: "t", Session: "t:x:y"}); err != nil {
-		t.Fatal(err)
-	}
-	got, _ := c.Get(ctx, "prev")
-	if got.Stage != StagePreview || got.ExpiresAt != 1000 {
-		t.Fatalf("stage/ttl not stamped: %+v", got)
-	}
-	rel, _ := c.Get(ctx, "rel")
-	if rel.Stage != StageRelease {
-		t.Fatalf("legacy stage = %q, want release", rel.Stage)
-	}
-	// now=2000 reaps only the expired preview.
-	names, err := c.ReapExpired(ctx, 2000)
-	if err != nil || len(names) != 1 || names[0] != "prev" {
-		t.Fatalf("reap = %v, %v", names, err)
-	}
-	if _, err := c.Get(ctx, "rel"); err != nil {
-		t.Fatal("release service must survive the preview reaper")
-	}
-}
-
-func TestDeleteBySessionOnlyPreview(t *testing.T) {
-	c := newTestClient()
-	ctx := context.Background()
-	if _, err := c.Deploy(ctx, Spec{Name: "p", Image: "i", Creator: "t", Session: "s1", Stage: StagePreview}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c.Deploy(ctx, Spec{Name: "r", Image: "i", Creator: "t", Session: "s1", Stage: StageRelease}); err != nil {
-		t.Fatal(err)
-	}
-	names, err := c.DeleteBySession(ctx, "s1", true)
-	if err != nil || len(names) != 1 || names[0] != "p" {
-		t.Fatalf("onlyPreview delete = %v, %v", names, err)
-	}
-	if _, err := c.Get(ctx, "r"); err != nil {
-		t.Fatal("release must survive a preview-only cleanup")
-	}
-	// Only-preview=false removes the release too.
-	names, _ = c.DeleteBySession(ctx, "s1", false)
-	if len(names) != 1 || names[0] != "r" {
-		t.Fatalf("full delete = %v", names)
-	}
-}
-
 func TestPauseResume(t *testing.T) {
 	c := newTestClient()
 	ctx := context.Background()

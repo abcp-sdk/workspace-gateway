@@ -57,7 +57,7 @@ var sandboxBase = []string{
 	"sandbox-info", "sandbox-exec",
 	"sandbox-job-start", "sandbox-job-output", "sandbox-job-wait",
 	"sandbox-job-kill", "sandbox-job-stdin", "sandbox-job-list",
-	"sandbox-file-read", "sandbox-file-write", "sandbox-file-edit", "sandbox-file-ls", "sandbox-file-rm",
+	"sandbox-file-read", "sandbox-file-patch", "sandbox-file-ls",
 	"sandbox-file-download", "sandbox-file-upload", "sandbox-checkout",
 }
 
@@ -79,9 +79,9 @@ var repoDevTools = []string{
 	// peer messaging between branch sessions
 	"repo-mail-send",
 	// releases / images / services
-	"repo-tag-create", "repo-build-image", "repo-build-preview",
+	"repo-tag-create", "repo-build-image",
 	"service-deploy", "service-list", "service-delete", "service-logs",
-	"service-promote", "service-rollback", "service-preview",
+	"service-promote", "service-rollback",
 	"helm-deploy", "helm-list", "helm-history", "helm-rollback", "helm-uninstall",
 	"helm-promote", "helm-rollback-release",
 }
@@ -92,10 +92,9 @@ var repoDevTools = []string{
 var adminTools = []string{
 	"repo-create-org", "repo-create-repo", "repo-import", "repo-remove",
 	"repo-set-push-mirror", "repo-list-push-mirrors", "repo-delete-push-mirror",
-	"list-oci-images", "oci-import",
+	"oci-import",
 	"service-deploy", "service-list", "service-delete", "service-logs",
 	"service-promote", "service-rollback",
-	"repo-build-preview", "service-preview",
 	"pvc-create", "pvc-list", "pvc-delete",
 	"helm-deploy", "helm-list", "helm-history", "helm-rollback", "helm-uninstall",
 	"helm-promote", "helm-rollback-release",
