@@ -153,6 +153,68 @@ func TestExtractKeepsRootWhenNoWrapper(t *testing.T) {
 	}
 }
 
+// entries lists the archive's regular-file entries (name -> body).
+func entries(t *testing.T, tarball []byte) map[string]string {
+	t.Helper()
+	gz, err := gzip.NewReader(bytes.NewReader(tarball))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	out := map[string]string{}
+	for {
+		hdr, err := tr.Next()
+		if err != nil {
+			break
+		}
+		if hdr.Typeflag != tar.TypeReg {
+			continue
+		}
+		var b bytes.Buffer
+		if _, err := b.ReadFrom(tr); err != nil {
+			t.Fatal(err)
+		}
+		out[hdr.Name] = b.String()
+	}
+	return out
+}
+
+func TestStripTopRemovesWrapper(t *testing.T) {
+	out, err := StripTop(tarGz(t, "easyvcs", map[string]string{
+		"README.md":   "# hi\n",
+		"src/main.go": "package main\n",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := entries(t, out)
+	if got["README.md"] != "# hi\n" || got["src/main.go"] != "package main\n" {
+		t.Fatalf("stripped entries = %v", got)
+	}
+	if _, ok := got["easyvcs/README.md"]; ok {
+		t.Fatal("wrapper not stripped")
+	}
+}
+
+func TestStripTopKeepsNoWrapper(t *testing.T) {
+	// A tar with only root-level files has no uniform nested wrapper: unchanged.
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	_ = tw.WriteHeader(&tar.Header{Name: "README.md", Mode: 0o644, Size: 5, Typeflag: tar.TypeReg})
+	_, _ = tw.Write([]byte("# hi\n"))
+	_ = tw.Close()
+	_ = gz.Close()
+	out, err := StripTop(buf.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := entries(t, out); got["README.md"] != "# hi\n" {
+		t.Fatalf("root file lost: %v", got)
+	}
+}
+
 func TestExtractRejectsOversize(t *testing.T) {
 	_, cleanup, err := Extract(tarGz(t, "r", map[string]string{"big": "0123456789"}), 5)
 	if err == nil {

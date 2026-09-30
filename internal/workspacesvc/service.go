@@ -1221,6 +1221,13 @@ func (s *Service) Archive(ctx context.Context, req *connect.Request[wsv1.Archive
 	if err != nil {
 		return nil, mrError(err)
 	}
+	// Forgejo wraps the archive in one `<repo>/` directory; strip it so the
+	// caller can unpack the repo tree directly into the directory it names
+	// (`dest` = the exact landing directory, supporting rename/nesting).
+	data, err = imagebuild.StripTop(data)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
 	return connect.NewResponse(&wsv1.ArchiveResponse{Data: data}), nil
 }
 

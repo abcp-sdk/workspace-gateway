@@ -369,6 +369,67 @@ func archiveTop(tarball []byte) (string, error) {
 	return "", nil
 }
 
+// StripTop rewrites a tar.gz repository archive so its single uniform leading
+// `<repo>/` segment is removed, returning a tar.gz whose entries are the repo
+// tree RELATIVE to the repo root (e.g. `README.md`, `src/a.go`). Forgejo always
+// wraps an archive in one top-level directory, so a plain unpack would nest the
+// tree one level deeper than the caller asked. When there is no uniform wrapper
+// (or nothing is nested) the archive is returned unchanged, so a root-level
+// file is never dropped. Returns the archive as-is on any read error.
+func StripTop(tarball []byte) ([]byte, error) {
+	top, err := archiveTop(tarball)
+	if err != nil {
+		return nil, err
+	}
+	if top == "" {
+		return tarball, nil
+	}
+	gz, err := gzip.NewReader(bytes.NewReader(tarball))
+	if err != nil {
+		return nil, fmt.Errorf("gzip: %w", err)
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(zw)
+	for {
+		hdr, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("tar: %w", err)
+		}
+		if isTarMeta(hdr) {
+			continue // drop PAX metadata; the writer emits its own
+		}
+		name := strings.TrimPrefix(filepath.ToSlash(hdr.Name), "/")
+		rel := strings.TrimPrefix(strings.TrimPrefix(name, top), "/")
+		if rel == "" {
+			continue // the wrapper directory entry itself
+		}
+		hdr.Name = rel
+		hdr.Linkname = strings.TrimPrefix(strings.TrimPrefix(filepath.ToSlash(hdr.Linkname), top), "/")
+		if err := tw.WriteHeader(hdr); err != nil {
+			return nil, fmt.Errorf("tar write: %w", err)
+		}
+		if hdr.Typeflag == tar.TypeReg && hdr.Size > 0 {
+			if _, err := io.CopyN(tw, tr, hdr.Size); err != nil {
+				return nil, fmt.Errorf("tar copy: %w", err)
+			}
+		}
+	}
+	if err := tw.Close(); err != nil {
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 // Extract unpacks a tar.gz repository archive into a fresh temp directory,
 // stripping the archive's single top-level directory (Forgejo wraps the tree).
 // The returned cleanup removes the directory.
