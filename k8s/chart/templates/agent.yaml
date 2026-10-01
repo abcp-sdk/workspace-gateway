@@ -34,6 +34,10 @@ spec:
               value: sqlite:///data/agent.db
             - name: PORT
               value: {{ .Values.agent.port | quote }}
+            # Plain HTTP/1.1 liveness/readiness port (kubelet probes cannot
+            # speak the h2c RPC port). Readiness fails when the bus is dead.
+            - name: AGENT_HEALTH_PORT
+              value: {{ .Values.agent.healthPort | quote }}
             - name: HTTP_PROTOCOL
               value: h2c
             - name: AGENT_CORS_ORIGIN
@@ -73,6 +77,21 @@ spec:
             {{- include "workspace.egressProxyEnv" . | nindent 12 }}
           ports:
             - { containerPort: {{ .Values.agent.port }}, protocol: TCP }
+            {{- if gt (int .Values.agent.healthPort) 0 }}
+            - { containerPort: {{ .Values.agent.healthPort }}, protocol: TCP, name: health }
+            {{- end }}
+          {{- if gt (int .Values.agent.healthPort) 0 }}
+          livenessProbe:
+            httpGet: { path: /health, port: health }
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /ready, port: health }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          {{- end }}
           resources:
             {{- toYaml .Values.agent.resources | nindent 12 }}
           volumeMounts:
