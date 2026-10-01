@@ -24,13 +24,13 @@ import (
 	wsv1connect "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1/wsv1connect"
 	"github.com/abcp-sdk/workspace-gateway/internal/agentclient"
 	"github.com/abcp-sdk/workspace-gateway/internal/forgejo"
+	"github.com/abcp-sdk/workspace-gateway/internal/helmmgr"
 	"github.com/abcp-sdk/workspace-gateway/internal/imagebuild"
 	"github.com/abcp-sdk/workspace-gateway/internal/members"
 	"github.com/abcp-sdk/workspace-gateway/internal/provision"
 	"github.com/abcp-sdk/workspace-gateway/internal/runtimeprofiles"
 	"github.com/abcp-sdk/workspace-gateway/internal/sandboxmgr"
 	"github.com/abcp-sdk/workspace-gateway/internal/sandboxreaper"
-	"github.com/abcp-sdk/workspace-gateway/internal/helmmgr"
 	"github.com/abcp-sdk/workspace-gateway/internal/servicesmgr"
 	"github.com/abcp-sdk/workspace-gateway/internal/workspacesvc"
 )
@@ -118,7 +118,12 @@ func main() {
 	}
 	// Helm chart releases (templating + apply). Non-fatal: a discovery failure
 	// (e.g. no cluster access) just disables the helm-* RPCs.
-	helm, herr := helmmgr.New(helmmgr.Config{Namespace: sandboxNS})
+	// HELM_HISTORY_MAX caps the revisions kept per release; 0 = the package
+	// default, negative = unbounded.
+	helm, herr := helmmgr.New(helmmgr.Config{
+		Namespace:  sandboxNS,
+		HistoryMax: envOrInt("HELM_HISTORY_MAX", 0),
+	})
 	if herr != nil {
 		log.Printf("warn: helm backend disabled: %v", herr)
 	}

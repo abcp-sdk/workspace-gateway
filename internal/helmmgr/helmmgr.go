@@ -1,7 +1,13 @@
 // Package helmmgr renders a Helm chart from a repository (using the Helm SDK
 // templating packages only) and applies the result to the managed namespace via
-// a dynamic client, with a strict safety filter. Release state (revision
-// history + rendered manifests) is kept in a ConfigMap per release.
+// a dynamic client, with a strict safety filter.
+//
+// Release state is split like upstream Helm's storage driver: a SMALL head
+// ConfigMap per release (metadata + the list of stored revision numbers) and ONE
+// ConfigMap PER revision (that revision's manifest + applied objects). Keeping
+// every revision in a single object eventually exceeds the 1 MiB ConfigMap limit
+// and then makes EVERY upgrade of that release fail, so revisions beyond
+// `historyMax` are pruned after each write.
 //
 // It deliberately does NOT use Helm's action/installer stack: that pulls in
 // kubectl/oras/kustomize and grants far more power than a tenant-scoped deploy
@@ -31,31 +37,31 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/apimachinery/pkg/watch"
-	sigsyaml "sigs.k8s.io/yaml"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
+	sigsyaml "sigs.k8s.io/yaml"
 )
 
 // Allowed kinds a rendered manifest may contain. Anything else is refused, as
 // are cluster-scoped resources, RBAC, CRDs and privileged pod features.
 var allowedKinds = map[string]bool{
-	"ConfigMap":             true,
-	"Secret":                true,
-	"Service":               true,
-	"ServiceAccount":        true,
-	"PersistentVolumeClaim": true,
-	"Deployment":            true,
-	"StatefulSet":           true,
-	"DaemonSet":             true,
-	"Job":                   true,
-	"CronJob":               true,
-	"Ingress":               true,
-	"NetworkPolicy":         true,
+	"ConfigMap":               true,
+	"Secret":                  true,
+	"Service":                 true,
+	"ServiceAccount":          true,
+	"PersistentVolumeClaim":   true,
+	"Deployment":              true,
+	"StatefulSet":             true,
+	"DaemonSet":               true,
+	"Job":                     true,
+	"CronJob":                 true,
+	"Ingress":                 true,
+	"NetworkPolicy":           true,
 	"HorizontalPodAutoscaler": true,
-	"PodDisruptionBudget":   true,
+	"PodDisruptionBudget":     true,
 }
 
 // Client renders + applies Helm charts in one namespace.
@@ -64,10 +70,18 @@ type Client struct {
 	cs        kubernetes.Interface
 	mapper    meta.RESTMapper
 	namespace string
+	// historyMax caps the revisions kept per release; <=0 means unlimited.
+	historyMax int
 }
 
 // Config configures a Client.
-type Config struct{ Namespace string }
+type Config struct {
+	Namespace string
+	// HistoryMax caps the number of revisions kept per release (older ones are
+	// pruned after each write). 0 = the package default (defaultHistoryMax);
+	// negative = keep every revision (unbounded).
+	HistoryMax int
+}
 
 // New builds a client from in-cluster config.
 func New(cfg Config) (*Client, error) {
@@ -100,7 +114,11 @@ func NewForConfig(rc *rest.Config, cfg Config) (*Client, error) {
 	if ns == "" {
 		ns = "worker"
 	}
-	return &Client{dyn: dyn, cs: cs, mapper: restmapper.NewDiscoveryRESTMapper(gr), namespace: ns}, nil
+	hm := cfg.HistoryMax
+	if hm == 0 {
+		hm = defaultHistoryMax
+	}
+	return &Client{dyn: dyn, cs: cs, mapper: restmapper.NewDiscoveryRESTMapper(gr), namespace: ns, historyMax: hm}, nil
 }
 
 // Object is one rendered + applied resource.
@@ -112,13 +130,13 @@ type Object struct {
 
 // Revision is one stored release revision.
 type Revision struct {
-	Revision  int       `json:"revision"`
-	Ref       string    `json:"ref"`
-	ChartPath string    `json:"chartPath"`
-	Values    string    `json:"values"`
-	CreatedAt int64     `json:"createdAt"`
-	Objects   []Object  `json:"objects"`
-	Manifest  string    `json:"manifest"`
+	Revision  int      `json:"revision"`
+	Ref       string   `json:"ref"`
+	ChartPath string   `json:"chartPath"`
+	Values    string   `json:"values"`
+	CreatedAt int64    `json:"createdAt"`
+	Objects   []Object `json:"objects"`
+	Manifest  string   `json:"manifest"`
 }
 
 // Release is a Helm release managed by the gateway.
@@ -132,7 +150,7 @@ type Release struct {
 	Revision  int        `json:"revision"`
 	Status    string     `json:"status"`
 	UpdatedAt int64      `json:"updatedAt"`
-	History   []Revision `json:"history"`
+	History   []Revision `json:"history,omitempty"`
 	// Slot is "blue"/"green" for a slot release ("" = plain).
 	Slot string `json:"slot,omitempty"`
 	// Router is the logical release name a slot release belongs to (empty for a
@@ -145,9 +163,23 @@ type Release struct {
 }
 
 const (
-	releaseLabel   = "workspace/helm-release"
-	releaseCMName  = "helm-release-"
+	releaseLabel  = "workspace/helm-release"
+	releaseCMName = "helm-release-"
+	// revisionCMName prefixes a per-revision body ConfigMap
+	// (`helm-release-rev-<release>-v<N>`).
+	revisionCMName  = "helm-release-rev-"
 	annoReleaseName = "workspace/helm-release-name"
+	// recordKindLabel distinguishes a release HEAD record from a REVISION body
+	// (both carry releaseLabel, so ONE watch covers the whole release).
+	recordKindLabel = "workspace/helm-record"
+	recordHead      = "head"
+	recordRevision  = "revision"
+	// revisionLabel carries the revision NUMBER on a revision body.
+	revisionLabel = "workspace/helm-revision"
+	// defaultHistoryMax is the default per-release revision cap (Config.HistoryMax
+	// 0 selects it). Bounded so release state can never approach the 1 MiB
+	// ConfigMap limit that a single all-revisions object eventually hits.
+	defaultHistoryMax = 10
 	// slotLabel is injected into every workload pod template of a slot release,
 	// so the router Service can select the ACTIVE slot's pods.
 	slotLabel = "workspace/helm-slot"
@@ -346,13 +378,31 @@ func isClusterScoped(mapper meta.RESTMapper, gvk schema.GroupVersionKind) bool {
 	return mapping.Scope.Name() == meta.RESTScopeNameRoot
 }
 
-// ---- release state (ConfigMap-backed) ----
+// ---- release state (ConfigMap-backed, one object per revision) ----
+//
+// A release's state lives in TWO kinds of ConfigMap:
+//   - the HEAD record `helm-release-<release>`: release metadata + the revision
+//     numbers currently stored (the history itself is materialized on read);
+//   - one BODY per revision `helm-release-rev-<release>-v<N>`: that revision's
+//     ref/chart/values/objects/manifest.
+//
+// Both carry releaseLabel so a single watch still covers the whole release;
+// recordKindLabel tells them apart. At most `historyMax` revisions are kept.
+// This mirrors upstream Helm's storage driver: a single all-revisions object
+// eventually exceeds the 1 MiB ConfigMap limit and then makes EVERY upgrade of
+// that release fail.
 
 func (c *Client) cmName(release string) string { return releaseCMName + release }
 
-// Get returns a release, or ok=false when absent.
+// revCMName is the ConfigMap name holding one revision's body.
+func (c *Client) revCMName(release string, revision int) string {
+	return revisionCMName + release + "-v" + strconv.Itoa(revision)
+}
+
+// Get returns a release (its history materialized from the revision bodies), or
+// ok=false when absent.
 func (c *Client) Get(ctx context.Context, release string) (Release, bool, error) {
-	cm, err := c.cs.CoreV1().ConfigMaps(c.namespace).Get(ctx, c.cmName(release), metav1.GetOptions{})
+	head, err := c.cs.CoreV1().ConfigMaps(c.namespace).Get(ctx, c.cmName(release), metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return Release{}, false, nil
 	}
@@ -360,23 +410,85 @@ func (c *Client) Get(ctx context.Context, release string) (Release, bool, error)
 		return Release{}, false, err
 	}
 	var r Release
-	if err := json.Unmarshal([]byte(cm.Data["release"]), &r); err != nil {
+	if err := json.Unmarshal([]byte(head.Data["release"]), &r); err != nil {
 		return Release{}, false, err
 	}
+	if len(r.History) > 0 {
+		// LEGACY layout: every revision lived inside the head's "release" blob.
+		// Migrate it (best-effort — the read still succeeds even if the rewrite
+		// fails, and a later write migrates it for real).
+		_ = c.migrateLegacy(ctx, r)
+	}
+	revs, err := c.loadRevisions(ctx, release)
+	if err != nil {
+		return Release{}, false, err
+	}
+	r.History = revs
 	return r, true, nil
 }
 
+// migrateLegacy rewrites a pre-split release (whose every revision lived inside
+// the head blob) as one revision body per revision + a metadata-only head.
+func (c *Client) migrateLegacy(ctx context.Context, r Release) error {
+	for _, rv := range r.History {
+		if err := c.putRevision(ctx, r.Name, rv); err != nil {
+			return err
+		}
+	}
+	return c.put(ctx, r)
+}
+
+// loadRevisions reads the release's revision bodies, oldest first.
+func (c *Client) loadRevisions(ctx context.Context, release string) ([]Revision, error) {
+	list, err := c.cs.CoreV1().ConfigMaps(c.namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: releaseLabel + "=" + release + "," + recordKindLabel + "=" + recordRevision,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Revision, 0, len(list.Items))
+	for i := range list.Items {
+		var rv Revision
+		if err := json.Unmarshal([]byte(list.Items[i].Data["revision"]), &rv); err != nil {
+			continue
+		}
+		out = append(out, rv)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Revision < out[j].Revision })
+	return out, nil
+}
+
+// put writes the head record and prunes revisions beyond historyMax.
 func (c *Client) put(ctx context.Context, r Release) error {
-	b, err := json.Marshal(r)
+	if err := c.putHead(ctx, r); err != nil {
+		return err
+	}
+	return c.pruneHistory(ctx, r)
+}
+
+// putHead upserts the release's head record (metadata + stored revision numbers).
+// The head carries NO manifests, so it stays tiny no matter how many revisions a
+// release accumulates.
+func (c *Client) putHead(ctx context.Context, r Release) error {
+	nums := make([]int, 0, len(r.History))
+	for _, rv := range r.History {
+		nums = append(nums, rv.Revision)
+	}
+	head := r
+	head.History = nil
+	b, err := json.Marshal(head)
 	if err != nil {
 		return err
 	}
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: c.cmName(r.Name), Namespace: c.namespace,
-			Labels: map[string]string{releaseLabel: r.Name, "app.kubernetes.io/managed-by": "workspace-gateway"},
+			Labels: map[string]string{
+				releaseLabel: r.Name, recordKindLabel: recordHead,
+				"app.kubernetes.io/managed-by": "workspace-gateway",
+			},
 		},
-		Data: map[string]string{"release": string(b)},
+		Data: map[string]string{"release": string(b), "revisions": joinInts(nums)},
 	}
 	if _, err := c.cs.CoreV1().ConfigMaps(c.namespace).Create(ctx, cm, metav1.CreateOptions{}); err == nil {
 		return nil
@@ -392,18 +504,139 @@ func (c *Client) put(ctx context.Context, r Release) error {
 	return err
 }
 
-// List returns every release in the namespace (newest first).
+// putRevision stores one revision's body in its own ConfigMap.
+func (c *Client) putRevision(ctx context.Context, release string, rv Revision) error {
+	b, err := json.Marshal(rv)
+	if err != nil {
+		return err
+	}
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: c.revCMName(release, rv.Revision), Namespace: c.namespace,
+			Labels: map[string]string{
+				releaseLabel: release, recordKindLabel: recordRevision,
+				revisionLabel:                  strconv.Itoa(rv.Revision),
+				"app.kubernetes.io/managed-by": "workspace-gateway",
+			},
+		},
+		Data: map[string]string{"revision": string(b)},
+	}
+	if _, err := c.cs.CoreV1().ConfigMaps(c.namespace).Create(ctx, cm, metav1.CreateOptions{}); err == nil {
+		return nil
+	} else if !apierrors.IsAlreadyExists(err) {
+		return err
+	}
+	cur, err := c.cs.CoreV1().ConfigMaps(c.namespace).Get(ctx, cm.Name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	cm.ResourceVersion = cur.ResourceVersion
+	_, err = c.cs.CoreV1().ConfigMaps(c.namespace).Update(ctx, cm, metav1.UpdateOptions{})
+	return err
+}
+
+// pruneHistory deletes the revision bodies beyond the newest historyMax, so a
+// release's stored state is bounded. A no-op when historyMax <= 0.
+func (c *Client) pruneHistory(ctx context.Context, r Release) error {
+	if c.historyMax <= 0 {
+		return nil
+	}
+	nums := make([]int, 0, len(r.History))
+	for _, rv := range r.History {
+		nums = append(nums, rv.Revision)
+	}
+	sort.Ints(nums)
+	keep := map[int]bool{}
+	for i, n := range nums {
+		if i < len(nums)-c.historyMax {
+			continue
+		}
+		keep[n] = true
+	}
+	stored, err := c.cs.CoreV1().ConfigMaps(c.namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: releaseLabel + "=" + r.Name + "," + recordKindLabel + "=" + recordRevision,
+	})
+	if err != nil {
+		return err
+	}
+	for i := range stored.Items {
+		n, err := strconv.Atoi(stored.Items[i].Labels[revisionLabel])
+		if err != nil || keep[n] {
+			continue
+		}
+		if err := c.cs.CoreV1().ConfigMaps(c.namespace).Delete(ctx, stored.Items[i].Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+// deleteReleaseState removes a release's head record and every revision body.
+func (c *Client) deleteReleaseState(ctx context.Context, release string) error {
+	stored, err := c.cs.CoreV1().ConfigMaps(c.namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: releaseLabel + "=" + release,
+	})
+	if err != nil {
+		return err
+	}
+	for i := range stored.Items {
+		if err := c.cs.CoreV1().ConfigMaps(c.namespace).Delete(ctx, stored.Items[i].Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+	}
+	if err := c.cs.CoreV1().ConfigMaps(c.namespace).Delete(ctx, c.cmName(release), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
+// joinInts renders revision numbers as a comma-separated list (head metadata for
+// operators; the authoritative list is the revision bodies themselves).
+func joinInts(ns []int) string {
+	parts := make([]string, 0, len(ns))
+	for _, n := range ns {
+		parts = append(parts, strconv.Itoa(n))
+	}
+	return strings.Join(parts, ",")
+}
+
+// recordRevision persists a release's NEWEST revision body and then its head
+// record (which prunes revisions beyond historyMax). It is the write path shared
+// by Apply/ApplySlot/Rollback.
+func (c *Client) recordRevision(ctx context.Context, r Release) (Release, error) {
+	if len(r.History) == 0 {
+		return Release{}, fmt.Errorf("release %q has no revision to record", r.Name)
+	}
+	if err := c.putRevision(ctx, r.Name, r.History[len(r.History)-1]); err != nil {
+		return Release{}, err
+	}
+	if err := c.put(ctx, r); err != nil {
+		return Release{}, err
+	}
+	return r, nil
+}
+
+// List returns every release in the namespace (newest first). Revision bodies
+// are skipped (they carry recordRevision): the head carries the metadata, and
+// history is loaded on demand. A legacy head (written before the split, without
+// recordKindLabel) is still listed and migrated by the next Get/Apply.
 func (c *Client) List(ctx context.Context) ([]Release, error) {
-	cms, err := c.cs.CoreV1().ConfigMaps(c.namespace).List(ctx, metav1.ListOptions{LabelSelector: releaseLabel})
+	cms, err := c.cs.CoreV1().ConfigMaps(c.namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: releaseLabel,
+	})
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Release, 0, len(cms.Items))
 	for i := range cms.Items {
+		if cms.Items[i].Labels[recordKindLabel] == recordRevision {
+			continue
+		}
 		var r Release
 		if err := json.Unmarshal([]byte(cms.Items[i].Data["release"]), &r); err != nil {
 			continue
 		}
+		r.History = nil
 		out = append(out, r)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].UpdatedAt > out[j].UpdatedAt })
@@ -449,7 +682,7 @@ func (c *Client) Apply(ctx context.Context, chartDir string, o RenderOptions, cr
 		Revision: cur.Revision, Ref: o.Ref, ChartPath: o.ChartPath, Values: o.ValuesYAML,
 		CreatedAt: cur.UpdatedAt, Objects: objects, Manifest: manifest,
 	})
-	if err := c.put(ctx, cur); err != nil {
+	if _, err := c.recordRevision(ctx, cur); err != nil {
 		return Release{}, err
 	}
 	return cur, nil
@@ -510,7 +743,7 @@ func (c *Client) ApplySlot(ctx context.Context, chartDir string, o RenderOptions
 		Revision: cur.Revision, Ref: o.Ref, ChartPath: o.ChartPath, Values: o.ValuesYAML,
 		CreatedAt: cur.UpdatedAt, Objects: objects, Manifest: manifest,
 	})
-	if err := c.put(ctx, cur); err != nil {
+	if _, err := c.recordRevision(ctx, cur); err != nil {
 		return Release{}, err
 	}
 	return cur, nil
@@ -617,7 +850,7 @@ func (c *Client) UninstallRouter(ctx context.Context, router string) (bool, erro
 		return false, err
 	}
 	if _, ok, _ := c.Get(ctx, router); ok {
-		_ = c.cs.CoreV1().ConfigMaps(c.namespace).Delete(ctx, c.cmName(router), metav1.DeleteOptions{})
+		_ = c.deleteReleaseState(ctx, router)
 		any = true
 	}
 	return any, nil
@@ -928,7 +1161,7 @@ func (c *Client) Rollback(ctx context.Context, release string, revision int) (Re
 		Revision: cur.Revision, Ref: target.Ref, ChartPath: target.ChartPath, Values: target.Values,
 		CreatedAt: cur.UpdatedAt, Objects: target.Objects, Manifest: target.Manifest,
 	})
-	if err := c.put(ctx, cur); err != nil {
+	if _, err := c.recordRevision(ctx, cur); err != nil {
 		return Release{}, err
 	}
 	return cur, nil
@@ -951,7 +1184,7 @@ func (c *Client) Uninstall(ctx context.Context, release string) (bool, error) {
 			_ = c.deleteObject(ctx, last.Objects[i])
 		}
 	}
-	if err := c.cs.CoreV1().ConfigMaps(c.namespace).Delete(ctx, c.cmName(release), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+	if err := c.deleteReleaseState(ctx, release); err != nil {
 		return false, err
 	}
 	return true, nil
