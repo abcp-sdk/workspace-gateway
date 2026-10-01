@@ -63,6 +63,12 @@ speaks `agent.v1` directly. The `agent.v1` handler is deliberately NOT mounted.
 - **Services**: `DeployService`, `ListServices`, `DeleteService` — run a user
   image as a long-lived Deployment + Service (no worker injection, no sidecar).
 
+  Helm releases are stored one object per revision (a small head ConfigMap per
+  release + a body ConfigMap per revision, as upstream Helm does), so a release
+  never approaches the 1 MiB ConfigMap limit however many upgrades it accumulates.
+  Old revisions are pruned to `HELM_HISTORY_MAX` (default 10; `0` = default,
+  negative = unbounded), so `HelmRollback` can only reach the retained window.
+
 Both sandboxes and services take two runtime knobs: `kvm` (request `/dev/kvm`
 via the device plugin, non-privileged) and `gpu_count` (NVIDIA GPUs; needs the
 GPU device plugin). These are rendered from the deployment's `WORKSPACE_RUNTIME`
@@ -103,6 +109,7 @@ folded in under `internal/sandboxmgr`).
 | `WORKSPACE_RUNTIME` | optional JSON overriding KVM/GPU device names + KVM security context |
 | `SANDBOX_IDLE_TTL` | reclaim sandboxes idle this long (default `24h`; `0` disables) |
 | `SANDBOX_REAP_INTERVAL` | reaper sweep period (default `10m`) |
+| `HELM_HISTORY_MAX` | revisions kept per Helm release (default `10`; negative = unbounded) |
 | `NO_PROXY` / `no_proxy` | MUST include `.svc.cluster.local` (and the node edge IP) |
 
 ## Build & test
