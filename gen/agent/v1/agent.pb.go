@@ -76,7 +76,19 @@ type Session struct {
 	// so a list view can show which sessions are working WITHOUT polling State
 	// per row. WatchSessions re-emits a row when this flips (it watches the lease
 	// bucket). A session that is mid-retry (429/5xx backoff) is `busy`.
-	Status        string `protobuf:"bytes,25,opt,name=status,proto3" json:"status,omitempty"`
+	Status string `protobuf:"bytes,25,opt,name=status,proto3" json:"status,omitempty"`
+	// Why the session's LAST turn ended, read from the durable message fact:
+	//
+	//	"stop"        — the model finished on its own.
+	//	"interrupted" — the USER stopped it (explicit abort/delete).
+	//	"locklost"    — an ENVIRONMENTAL stop (the run lost its lease, e.g. a
+	//	                transient NATS/JetStream fault). Distinguishing this from
+	//	                "interrupted" is what lets a supervisor auto-resume a
+	//	                turn killed by infrastructure without re-running one the
+	//	                user stopped. Empty when no turn has finished yet.
+	LastTurnReason string `protobuf:"bytes,26,opt,name=last_turn_reason,json=lastTurnReason,proto3" json:"last_turn_reason,omitempty"`
+	// RFC3339 timestamp of that turn's end; empty when none has finished.
+	LastTurnAt    string `protobuf:"bytes,27,opt,name=last_turn_at,json=lastTurnAt,proto3" json:"last_turn_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -282,6 +294,20 @@ func (x *Session) GetGroup() string {
 func (x *Session) GetStatus() string {
 	if x != nil {
 		return x.Status
+	}
+	return ""
+}
+
+func (x *Session) GetLastTurnReason() string {
+	if x != nil {
+		return x.LastTurnReason
+	}
+	return ""
+}
+
+func (x *Session) GetLastTurnAt() string {
+	if x != nil {
+		return x.LastTurnAt
 	}
 	return ""
 }
@@ -6536,7 +6562,7 @@ var File_agent_v1_agent_proto protoreflect.FileDescriptor
 
 const file_agent_v1_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x14agent/v1/agent.proto\x12\bagent.v1\x1a\x1cgoogle/protobuf/struct.proto\"\x85\x06\n" +
+	"\x14agent/v1/agent.proto\x12\bagent.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xd1\x06\n" +
 	"\aSession\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x16\n" +
@@ -6567,7 +6593,10 @@ const file_agent_v1_agent_proto_rawDesc = "" +
 	"\vmessage_seq\x18\x17 \x01(\x05R\n" +
 	"messageSeq\x12\x14\n" +
 	"\x05group\x18\x18 \x01(\tR\x05group\x12\x16\n" +
-	"\x06status\x18\x19 \x01(\tR\x06status\"\xa3\x01\n" +
+	"\x06status\x18\x19 \x01(\tR\x06status\x12(\n" +
+	"\x10last_turn_reason\x18\x1a \x01(\tR\x0elastTurnReason\x12 \n" +
+	"\flast_turn_at\x18\x1b \x01(\tR\n" +
+	"lastTurnAt\"\xa3\x01\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04role\x18\x02 \x01(\tR\x04role\x12\x17\n" +

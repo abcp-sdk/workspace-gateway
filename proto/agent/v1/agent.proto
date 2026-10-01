@@ -59,6 +59,17 @@ message Session {
   // per row. WatchSessions re-emits a row when this flips (it watches the lease
   // bucket). A session that is mid-retry (429/5xx backoff) is `busy`.
   string status = 25;
+  // Why the session's LAST turn ended, read from the durable message fact:
+  //   "stop"        — the model finished on its own.
+  //   "interrupted" — the USER stopped it (explicit abort/delete).
+  //   "locklost"    — an ENVIRONMENTAL stop (the run lost its lease, e.g. a
+  //                   transient NATS/JetStream fault). Distinguishing this from
+  //                   "interrupted" is what lets a supervisor auto-resume a
+  //                   turn killed by infrastructure without re-running one the
+  //                   user stopped. Empty when no turn has finished yet.
+  string last_turn_reason = 26;
+  // RFC3339 timestamp of that turn's end; empty when none has finished.
+  string last_turn_at = 27;
 }
 
 // Message row (bare).
