@@ -25,9 +25,9 @@ import (
 type Role string
 
 const (
-	Admin      Role = "admin"
-	Developer  Role = "developer"
-	Explorer   Role = "explorer"
+	Admin     Role = "admin"
+	Developer Role = "developer"
+	Explorer  Role = "explorer"
 )
 
 // MainBranch is the mandatory default branch name.
@@ -61,6 +61,29 @@ var sandboxBase = []string{
 	"sandbox-file-download", "sandbox-file-upload", "sandbox-checkout",
 }
 
+// Browser-automation tools (the playwright extension, deployed for every
+// workspace tenant and pointed at the shared Selenium service via the seeded
+// `selenium-url` config). These are the full `browser-*` family: a session
+// creates a context, drives it, and observes network/console. They are a
+// general capability like the sandbox tools, so every role that owns a
+// sandbox gets them; without this whitelist the extension's tools are
+// discovered but filtered out, leaving the model with no browser access.
+var browserTools = []string{
+	"browser-create-context", "browser-close-context",
+	"browser-navigate", "browser-navigate-back",
+	"browser-snapshot", "browser-find", "browser-wait-for", "browser-resize",
+	"browser-tabs",
+	"browser-click", "browser-type", "browser-hover",
+	"browser-select-option", "browser-press-key", "browser-drag",
+	"browser-fill-form", "browser-handle-dialog", "browser-evaluate",
+	"browser-run-code-unsafe",
+	"browser-console-messages", "browser-network-requests",
+	"browser-network-request",
+	"browser-take-screenshot", "browser-pdf-save",
+	"browser-file-upload", "browser-drop",
+	"browser-storage-state", "browser-set-storage-state",
+}
+
 // Repo read-only browse tools.
 var repoReadTools = []string{
 	"repo-explore", "repo-file-read", "repo-file-list", "repo-log", "repo-show",
@@ -68,9 +91,10 @@ var repoReadTools = []string{
 }
 
 // Repo propose + review tools. Every branch session has the SAME set:
-//  - edit ONLY in a sandbox, then submit an MR (`sandbox-submit-mr`);
-//  - open/comment on MRs, and merge/close an MR whose base is its OWN branch;
-//  - tag releases, build images, deploy/manage services + helm.
+//   - edit ONLY in a sandbox, then submit an MR (`sandbox-submit-mr`);
+//   - open/comment on MRs, and merge/close an MR whose base is its OWN branch;
+//   - tag releases, build images, deploy/manage services + helm.
+//
 // There is NO tool that writes branch content directly (no repo-file-write/edit/
 // commit, no sandbox-port) and NO tool that creates a branch.
 var repoDevTools = []string{
@@ -108,17 +132,17 @@ func ToolsFor(r Role) []string {
 		// Create org/repo + read + manage tenant resources + run a sandbox for
 		// ad-hoc work. Still NO repo writes and NO sandbox-port (admin sessions
 		// are not bound to a branch, so porting would write main).
-		return concat(generalTools, repoReadTools, adminTools, sandboxBase)
+		return concat(generalTools, repoReadTools, adminTools, sandboxBase, browserTools)
 	case Developer:
 		// The single repo-bound role: sandbox-only edits, submit/merge/close
 		// MRs (merge/close only when base == its own branch), releases, images,
 		// services. NOT sandbox-port and NOT any direct branch write.
-		return concat(generalTools, repoReadTools, repoDevTools, sandboxBase, []string{"pvc-list"})
+		return concat(generalTools, repoReadTools, repoDevTools, sandboxBase, browserTools, []string{"pvc-list"})
 	case Explorer:
 		// Read every visible repo; may run a sandbox for analysis, but has NO
 		// tool that writes back to a repo (no sandbox-port, no submit-mr). May
 		// read services + their logs (observability only).
-		return concat(generalTools, repoReadTools, sandboxBase, []string{"service-list", "service-logs", "pvc-list"})
+		return concat(generalTools, repoReadTools, sandboxBase, browserTools, []string{"service-list", "service-logs", "pvc-list"})
 	}
 	return concat(generalTools, repoReadTools)
 }

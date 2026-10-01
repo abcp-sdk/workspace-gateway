@@ -155,7 +155,8 @@ func TestEveryRoleListsPVCsButOnlyAdminMutates(t *testing.T) {
 	}
 }
 
-func TestParseSession(t *testing.T) {	org, repo, branch, ok := ParseSession("acme:web:main")
+func TestParseSession(t *testing.T) {
+	org, repo, branch, ok := ParseSession("acme:web:main")
 	if !ok || org != "acme" || repo != "web" || branch != "main" {
 		t.Fatalf("bad parse: %q %q %q %v", org, repo, branch, ok)
 	}
@@ -163,6 +164,31 @@ func TestParseSession(t *testing.T) {	org, repo, branch, ok := ParseSession("acm
 		if _, _, _, ok := ParseSession(bad); ok {
 			t.Fatalf("%q should not parse", bad)
 		}
+	}
+}
+
+func TestEverySandboxRoleHasBrowserTools(t *testing.T) {
+	// The playwright extension is deployed for every workspace tenant, so every
+	// role that owns a sandbox must whitelist the full browser-* family —
+	// otherwise the tools are discovered but filtered out and the model has no
+	// browser access at all (the bug this guards).
+	want := []string{
+		"browser-create-context", "browser-close-context", "browser-navigate",
+		"browser-snapshot", "browser-click", "browser-type", "browser-fill-form",
+		"browser-take-screenshot", "browser-console-messages",
+		"browser-network-requests",
+	}
+	for _, r := range []Role{Admin, Developer, Explorer} {
+		tools := ToolsFor(r)
+		for _, name := range want {
+			if !has(tools, name) {
+				t.Fatalf("%s must have %q", r, name)
+			}
+		}
+	}
+	// The browser block is the size of the shipped playwright manifest.
+	if len(browserTools) != 28 {
+		t.Fatalf("browserTools has %d entries; expected 28 (playwright manifest)", len(browserTools))
 	}
 }
 

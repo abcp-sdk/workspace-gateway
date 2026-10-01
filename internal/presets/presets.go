@@ -68,6 +68,16 @@ Commands run in a sandbox. ` + "`sandbox-exec`" + ` runs a short command and wai
 const execBlockZH = `# 运行命令
 命令在沙箱中运行。` + "`sandbox-exec`" + ` 运行短命令并最多等待 ` + "`timeout`" + ` 秒后返回输出；` + "`sandbox-job-start`" + ` 启动长时间运行的命令并立即返回 job id。重要：远端 worker 总是把你的命令作为受跟踪的后台任务运行，并记录其完整 stdout/stderr。因此请勿自行把命令放到后台（不要 ` + "`&`" + `、` + "`nohup`" + `、` + "`setsid`" + `、` + "`disown`" + `），请勿截断或重定向输出（` + "`| head`" + `、` + "`| tail`" + `、` + "`> file`" + `、` + "`2>&1`" + `、` + "`>> file`" + `），也请勿在前台运行守护进程/服务并指望调用立即返回。原样运行命令，再从 job 读取结果。用 ` + "`sandbox-job-wait`" + `（等待完成）、` + "`sandbox-job-output`" + `（分页读取输出）、` + "`sandbox-job-stdin`" + `、` + "`sandbox-job-kill`" + `、` + "`sandbox-job-list`" + ` 控制长任务。`
 
+// browserBlock documents the browser-automation tools, added to every role that
+// runs a sandbox. It is a short pointer (the tool descriptions carry the detail)
+// so the model knows the capability exists and how to start.
+const browserBlock = `# Browser automation
+You can drive a real browser through the ` + "`browser-*`" + ` tools (Selenium-backed, one browser per session). Start with ` + "`browser-create-context`" + `; every other browser tool needs its ` + "`context_id`" + `. Then ` + "`browser-navigate`" + `, read the page with ` + "`browser-snapshot`" + ` (the accessibility tree — prefer it over ` + "`browser-take-screenshot`" + ` for deciding where to act), and interact with ` + "`browser-click`" + ` / ` + "`browser-type`" + ` / ` + "`browser-fill-form`" + ` and the other ` + "`browser-*`" + ` tools. Inspect failures with ` + "`browser-console-messages`" + ` and ` + "`browser-network-requests`" + `. Close it with ` + "`browser-close-context`" + `.`
+
+// browserBlockZH is browserBlock in Chinese.
+const browserBlockZH = `# 浏览器自动化
+你可以通过 ` + "`browser-*`" + ` 工具驱动一个真实浏览器（基于 Selenium，每个会话一个浏览器）。先用 ` + "`browser-create-context`" + `，其它所有浏览器工具都要它的 ` + "`context_id`" + `。然后 ` + "`browser-navigate`" + ` 打开页面，用 ` + "`browser-snapshot`" + ` 读取无障碍树（决定在哪操作时优先用它而非 ` + "`browser-take-screenshot`" + `），再用 ` + "`browser-click`" + ` / ` + "`browser-type`" + ` / ` + "`browser-fill-form`" + ` 及其它 ` + "`browser-*`" + ` 工具交互。用 ` + "`browser-console-messages`" + ` 和 ` + "`browser-network-requests`" + ` 排查失败。最后用 ` + "`browser-close-context`" + ` 关闭。`
+
 // ---- role blocks ----
 
 const adminRole = `# Your role: administrator
@@ -129,8 +139,10 @@ func i18n(en, zh string) string {
 
 // All returns the role presets.
 func All() []Entry {
-	const execEN = base + "\n\n" + execBlock
-	const execZH = baseZH + "\n\n" + execBlockZH
+	// Every role that runs a sandbox also gets the browser tools, so the
+	// browser block ships alongside the exec block.
+	const execEN = base + "\n\n" + execBlock + "\n\n" + browserBlock
+	const execZH = baseZH + "\n\n" + execBlockZH + "\n\n" + browserBlockZH
 	return []Entry{
 		{
 			ID:               "admin",
