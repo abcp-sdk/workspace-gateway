@@ -62,7 +62,7 @@ agent:
   enabled: true
   image:
     repository: git.agent.svc.cluster.local/abcp/agent
-    tag: "20261001095724"
+    tag: "20261001194505"
     pullPolicy: IfNotPresent
   port: 8080
   # Plain HTTP/1.1 liveness/readiness port (separate from the h2c RPC port).
@@ -80,13 +80,20 @@ agent:
   idlewatch:
     enabled: true
     interval: "2m"
+    # At boot, resume sessions whose turn was killed mid-flight (the chain
+    # advanced past the last turn's recorded end) instead of waiting for the
+    # first periodic sweep.
+    resumeDanglingOnBoot: true
   auth:
     adminToken: "dev-admin-token"
     bootstrapTenant: "workspace"
     bootstrapToken: "devworkspacetoken"
   resources:
     requests: { cpu: 100m, memory: 128Mi }
-    limits: { cpu: "1", memory: 1Gi }
+    # 4 CPUs: the agent is one Node process serving many concurrent turns with a
+    # synchronous sqlite driver; 1 CPU throttled the event loop (starving the
+    # health probe and slowing every session).
+    limits: { cpu: "4", memory: 1Gi }
   persistence:
     enabled: true
     # hostPath root for /data (single-node dev cluster, node-side path).

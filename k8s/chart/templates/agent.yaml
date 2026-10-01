@@ -63,6 +63,10 @@ spec:
               value: {{ .Values.agent.idlewatch.enabled | quote }}
             - name: IDLEWATCH_INTERVAL
               value: {{ .Values.agent.idlewatch.interval | quote }}
+            # Recover turns killed mid-flight (SIGTERM/OOM/restart) at boot
+            # instead of waiting for the first idlewatch sweep.
+            - name: RESUME_DANGLING_ON_BOOT
+              value: {{ .Values.agent.idlewatch.resumeDanglingOnBoot | quote }}
             # Seed extension config into the cfg KV (create-if-absent; a UI-set
             # value always wins). `tenant: "*"` fans out to every known tenant.
             # The gateway/forgejo endpoints come from this chart; sandboxes are
@@ -81,16 +85,22 @@ spec:
             - { containerPort: {{ .Values.agent.healthPort }}, protocol: TCP, name: health }
             {{- end }}
           {{- if gt (int .Values.agent.healthPort) 0 }}
+          # The agent is a SINGLE Node process running many concurrent turns
+          # against a synchronous sqlite driver; under load the event loop can
+          # briefly starve the health listener. A 1s probe timeout caused false
+          # kills (and cancelled in-flight turns), so allow a generous timeout.
           livenessProbe:
             httpGet: { path: /health, port: health }
             initialDelaySeconds: 15
             periodSeconds: 15
             failureThreshold: 3
+            timeoutSeconds: 5
           readinessProbe:
             httpGet: { path: /ready, port: health }
             initialDelaySeconds: 5
             periodSeconds: 10
             failureThreshold: 3
+            timeoutSeconds: 3
           {{- end }}
           resources:
             {{- toYaml .Values.agent.resources | nindent 12 }}
