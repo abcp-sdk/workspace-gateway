@@ -1178,13 +1178,20 @@ func (x *PromptResponse) GetEid() string {
 
 // WatchSession streams live session events (the Connect replacement for the
 // SSE /stream endpoint): turn deltas, tool calls, errors and completions.
-// `since` is a message id ANCHOR for incremental replay: when set, a replay
-// starts AFTER that message (so a client that was offline still catches the
-// turns that completed meanwhile). Empty = live-from-now (or the active run).
+//
+// Resume is by STREAM SEQUENCE, not by message id or wall-clock: every
+// response carries the JetStream `seq` of the event it wraps, and a client
+// that reconnects passes back the newest `seq` it saw as `since_seq`. The
+// server then resumes the ordered consumer with an O(1) `by_start_sequence`
+// seek — no scan, no time-based re-replay. `since_seq` unset (0) = live from
+// now (or from the active run's start).
 type WatchSessionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Since         string                 `protobuf:"bytes,2,opt,name=since,proto3" json:"since,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Resume anchor: the newest WatchSessionResponse.seq the client has seen.
+	// 0 = live-from-now (or the active run). Replaces the former message-id
+	// anchor, which forced an O(n) time-scan + full replay on every reconnect.
+	SinceSeq      int64 `protobuf:"varint,3,opt,name=since_seq,json=sinceSeq,proto3" json:"since_seq,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1226,18 +1233,21 @@ func (x *WatchSessionRequest) GetId() string {
 	return ""
 }
 
-func (x *WatchSessionRequest) GetSince() string {
+func (x *WatchSessionRequest) GetSinceSeq() int64 {
 	if x != nil {
-		return x.Since
+		return x.SinceSeq
 	}
-	return ""
+	return 0
 }
 
 type WatchSessionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Event         string                 `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
-	Params        *structpb.Struct       `protobuf:"bytes,2,opt,name=params,proto3" json:"params,omitempty"`
-	Eid           string                 `protobuf:"bytes,3,opt,name=eid,proto3" json:"eid,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Event  string                 `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
+	Params *structpb.Struct       `protobuf:"bytes,2,opt,name=params,proto3" json:"params,omitempty"`
+	Eid    string                 `protobuf:"bytes,3,opt,name=eid,proto3" json:"eid,omitempty"`
+	// JetStream stream sequence of this event (transport metadata). Echo the
+	// newest one back as WatchSessionRequest.since_seq to resume after it.
+	Seq           int64 `protobuf:"varint,4,opt,name=seq,proto3" json:"seq,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1291,6 +1301,13 @@ func (x *WatchSessionResponse) GetEid() string {
 		return x.Eid
 	}
 	return ""
+}
+
+func (x *WatchSessionResponse) GetSeq() int64 {
+	if x != nil {
+		return x.Seq
+	}
+	return 0
 }
 
 // WatchSessions streams the session list in real time: an initial full
@@ -6689,14 +6706,15 @@ const file_agent_v1_agent_proto_rawDesc = "" +
 	"\x03eid\x18\x03 \x01(\tR\x03eid\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\";\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"H\n" +
 	"\x13WatchSessionRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
-	"\x05since\x18\x02 \x01(\tR\x05since\"o\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\tsince_seq\x18\x03 \x01(\x03R\bsinceSeqJ\x04\b\x02\x10\x03\"\x81\x01\n" +
 	"\x14WatchSessionResponse\x12\x14\n" +
 	"\x05event\x18\x01 \x01(\tR\x05event\x12/\n" +
 	"\x06params\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06params\x12\x10\n" +
-	"\x03eid\x18\x03 \x01(\tR\x03eid\"\x16\n" +
+	"\x03eid\x18\x03 \x01(\tR\x03eid\x12\x10\n" +
+	"\x03seq\x18\x04 \x01(\x03R\x03seq\"\x16\n" +
 	"\x14WatchSessionsRequest\"z\n" +
 	"\x15WatchSessionsResponse\x12+\n" +
 	"\aupserts\x18\x01 \x03(\v2\x11.agent.v1.SessionR\aupserts\x12\x18\n" +

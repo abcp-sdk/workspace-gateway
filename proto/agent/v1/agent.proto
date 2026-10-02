@@ -208,17 +208,28 @@ message PromptResponse {
 
 // WatchSession streams live session events (the Connect replacement for the
 // SSE /stream endpoint): turn deltas, tool calls, errors and completions.
-// `since` is a message id ANCHOR for incremental replay: when set, a replay
-// starts AFTER that message (so a client that was offline still catches the
-// turns that completed meanwhile). Empty = live-from-now (or the active run).
+//
+// Resume is by STREAM SEQUENCE, not by message id or wall-clock: every
+// response carries the JetStream `seq` of the event it wraps, and a client
+// that reconnects passes back the newest `seq` it saw as `since_seq`. The
+// server then resumes the ordered consumer with an O(1) `by_start_sequence`
+// seek — no scan, no time-based re-replay. `since_seq` unset (0) = live from
+// now (or from the active run's start).
 message WatchSessionRequest {
   string id = 1;
-  string since = 2;
+  // Resume anchor: the newest WatchSessionResponse.seq the client has seen.
+  // 0 = live-from-now (or the active run). Replaces the former message-id
+  // anchor, which forced an O(n) time-scan + full replay on every reconnect.
+  int64 since_seq = 3;
+  reserved 2; // former `string since` (message-id anchor)
 }
 message WatchSessionResponse {
   string event = 1;
   google.protobuf.Struct params = 2;
   string eid = 3;
+  // JetStream stream sequence of this event (transport metadata). Echo the
+  // newest one back as WatchSessionRequest.since_seq to resume after it.
+  int64 seq = 4;
 }
 
 // WatchSessions streams the session list in real time: an initial full
