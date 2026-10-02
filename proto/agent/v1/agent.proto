@@ -215,12 +215,22 @@ message PromptResponse {
 // server then resumes the ordered consumer with an O(1) `by_start_sequence`
 // seek — no scan, no time-based re-replay. `since_seq` unset (0) = live from
 // now (or from the active run's start).
+//
+// A PAGE REFRESH loses the in-memory `seq` (it starts at 0 again), so it may
+// pass a persistent message-id fallback anchor (`since_msg`) instead: the
+// server then replays from that message's timestamp (the pre-`since_seq`
+// behaviour). `since_seq` WINS when both are set — the message anchor is a
+// low-frequency fallback for the refresh case only.
 message WatchSessionRequest {
   string id = 1;
   // Resume anchor: the newest WatchSessionResponse.seq the client has seen.
   // 0 = live-from-now (or the active run). Replaces the former message-id
   // anchor, which forced an O(n) time-scan + full replay on every reconnect.
   int64 since_seq = 3;
+  // Fallback anchor for a client that has no `seq` (e.g. a page refresh with an
+  // empty in-memory `lastSeq`): a message id the client already has. The server
+  // replays from that message's `created_at`. Ignored when `since_seq > 0`.
+  string since_msg = 4;
   reserved 2; // former `string since` (message-id anchor)
 }
 message WatchSessionResponse {
