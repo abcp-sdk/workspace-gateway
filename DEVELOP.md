@@ -12,6 +12,13 @@ go run ./cmd/gen-presets > presets/system-presets.json   # regenerate system pre
 The generated protos are vendored under `gen/`; regenerate them with the
 `proto/buf.gen.*.yaml` templates (`buf generate`) rather than editing `gen/`.
 
+## Packages via artifact (not GitHub/public registries)
+
+- Consume: `GOPROXY=http://artifact.worker.svc.cluster.local/artifacts/go GOSUMDB=off`
+- Publish: `curl -X PUT --data-binary @<zip> "http://artifact.worker.svc.cluster.local/artifacts/go/upload?name=<module>&version=vX.Y.Z"`
+
+See `easy-vcs/deploy:PUBLISHING.md`.
+
 ## Sandbox notes
 
 The dev sandbox image has **no Go toolchain preinstalled**. A matching one can be
@@ -22,11 +29,11 @@ curl -fsSL -o /tmp/go.tgz https://go.dev/dl/go1.27.1.linux-amd64.tar.gz
 rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tgz
 ```
 
-`proxy.golang.org` is **not reachable** from the sandbox, so point the module
-proxy at a mirror and skip the checksum DB:
+`proxy.golang.org` is **not reachable** from the sandbox; fetch modules from the
+platform's private **artifact** proxy (see above) and skip the checksum DB:
 
 ```bash
-go env -w GOPROXY=https://goproxy.cn,direct GOSUMDB=off GOTOOLCHAIN=local
+go env -w GOPROXY=http://artifact.worker.svc.cluster.local/artifacts/go GOSUMDB=off GOTOOLCHAIN=local
 go mod download all
 ```
 
