@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -29,6 +30,7 @@ import (
 	"github.com/abcp-sdk/workspace-gateway/internal/members"
 	"github.com/abcp-sdk/workspace-gateway/internal/provision"
 	"github.com/abcp-sdk/workspace-gateway/internal/runtimeprofiles"
+	"github.com/abcp-sdk/workspace-gateway/internal/sandboxbootstrap"
 	"github.com/abcp-sdk/workspace-gateway/internal/sandboxmgr"
 	"github.com/abcp-sdk/workspace-gateway/internal/sandboxreaper"
 	"github.com/abcp-sdk/workspace-gateway/internal/servicesmgr"
@@ -131,6 +133,22 @@ func main() {
 	if err != nil {
 		log.Fatalf("load runtime settings: %v", err)
 	}
+	// Package-source injection: when SANDBOX_PACKAGE_UPSTREAM is set, every
+	// sandbox is pointed at that registry — env vars (runtimeprofiles.Render,
+	// for pip/npm/go/cargo/pub/hex) plus a bootstrap init-container that writes
+	// the file-configured managers' config (apt/maven/gradle/nuget/SPM/…). All
+	// derived at pod-create time, so changing the registry URL is an env change
+	// on the gateway — NO image rebuild.
+	if up := os.Getenv("SANDBOX_PACKAGE_UPSTREAM"); up != "" {
+		runtime.PackageUpstream = strings.TrimRight(up, "/")
+	}
+	sandboxBootstrap := sandboxbootstrap.Build(
+		runtime.PackageUpstream,
+		// Must be an image the NODES can pull (Docker Hub is often unreachable);
+		// override with a cluster-internal ref, e.g.
+		// git.agent.svc.cluster.local/root/alpine:3.24.
+		envOr("SANDBOX_BOOTSTRAP_IMAGE", "git.agent.svc.cluster.local/root/alpine:3.24"),
+		envOr("SANDBOX_HOME", "/root"))
 
 	git := forgejo.New(gitURL, gitToken)
 	// Ensure the toolchain org exists (idempotent). Non-fatal: a Forgejo blip
@@ -168,6 +186,7 @@ func main() {
 			RegistryPass:   os.Getenv("FORGEJO_PASSWORD"),
 		},
 		Runtime:             runtime,
+		SandboxBootstrap:    sandboxBootstrap,
 		SandboxOrg:          sandboxOrg,
 		DefaultSandboxImage: defaultSandboxImage,
 		ToolchainOrg:        toolchainOrg,

@@ -8,6 +8,7 @@ package runtimeprofiles
 import (
 	"encoding/json"
 	"os"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -30,6 +31,14 @@ type Settings struct {
 	// KVMRuntimeClass is an optional RuntimeClass for KVM pods (the device
 	// plugin usually suffices, so this is empty by default).
 	KVMRuntimeClass string `json:"kvmRuntimeClass"`
+	// PackageUpstream is the base URL of the in-cluster package registry
+	// (artifact), e.g. "http://artifact.worker.svc.cluster.local". When set,
+	// every sandbox gets the environment variables that point pip / npm / Go /
+	// cargo / pub / hex at it, so builds inside a sandbox fetch packages from
+	// artifact instead of the public internet. Empty = no package env (the
+	// historical behaviour). This is a RUNTIME env (read by the deployment),
+	// so changing the registry URL needs no image rebuild.
+	PackageUpstream string `json:"packageUpstream"`
 }
 
 // DefaultSettings are the built-in knobs (matching the cluster's device plugin
@@ -101,6 +110,9 @@ func Load(path string) (Settings, error) {
 	if o.KVMRuntimeClass != "" {
 		s.KVMRuntimeClass = o.KVMRuntimeClass
 	}
+	if o.PackageUpstream != "" {
+		s.PackageUpstream = strings.TrimRight(o.PackageUpstream, "/")
+	}
 	return s, nil
 }
 
@@ -122,6 +134,10 @@ type Rendered struct {
 // GPUs. The returned SecurityContext always has Privileged=false.
 func (s Settings) Render(kvm bool, gpuCount int) Rendered {
 	r := Rendered{}
+	// NOTE: package-source env is NOT added here. Render is shared by SANDBOXES
+	// and user SERVICES (DeployService); injecting pip/npm/go env into a user's
+	// service image would be wrong. The sandbox path merges PackageEnv
+	// explicitly (see workspacesvc.CreateSandbox).
 	if gpuCount > 0 {
 		r.DeviceLimits = map[string]string{s.GPUDevice: itoa(gpuCount)}
 		// Without the NVIDIA runtime class the device is allocated but the
@@ -145,6 +161,47 @@ func (s Settings) Render(kvm bool, gpuCount int) Rendered {
 		}
 	}
 	return r
+}
+
+// PackageEnv returns the env vars that route env-configurable package managers
+// at `base` (the artifact registry root). Keys are the ones each tool reads:
+// pip, npm, Go, cargo, pub (Dart), hex (Elixir). Trusted-host/strict-ssl are
+// needed because artifact serves plain HTTP in-cluster.
+// It is also used as the default build-args for sandbox image builds, so a
+// Dockerfile that honors these ARGs fetches from artifact at BUILD time too.
+func PackageEnv(base string) map[string]string {
+	base = strings.TrimRight(strings.TrimSpace(base), "/")
+	if base == "" {
+		return nil
+	}
+	host := base
+	if i := strings.Index(host, "://"); i >= 0 {
+		host = host[i+3:]
+	}
+	if i := strings.IndexAny(host, "/:"); i >= 0 {
+		host = host[:i]
+	}
+	return map[string]string{
+		// pip
+		"PIP_INDEX_URL":                 base + "/artifacts/pypi/simple/",
+		"PIP_TRUSTED_HOST":              host,
+		"PIP_DISABLE_PIP_VERSION_CHECK": "1",
+		// npm (also read by yarn/pnpm)
+		"NPM_CONFIG_REGISTRY":   base + "/artifacts/npm/",
+		"NPM_CONFIG_STRICT_SSL": "false",
+		// Go
+		// NOTE: GOFLAGS is deliberately NOT set — forcing `-mod=mod` would change
+		// Go's default build behaviour (it may rewrite go.mod in place).
+		"GOPROXY":   base + "/artifacts/go",
+		"GOSUMDB":   "off",
+		"GONOSUMDB": "*",
+		// cargo
+		"CARGO_REGISTRIES_ARTIFACT_INDEX": base + "/artifacts/cargo/index/",
+		// pub (Dart)
+		"PUB_HOSTED_URL": base + "/artifacts/pub",
+		// hex (Elixir)
+		"HEX_MIRROR": base + "/artifacts/hex/",
+	}
 }
 
 func int64Ptr(i int64) *int64 { return &i }
