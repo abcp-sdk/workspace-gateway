@@ -2363,12 +2363,24 @@ func (s *Service) resolveVolumes(ctx context.Context, tenant string, mounts []*w
 // ---- Helm ----
 
 func toHelmReleaseInfo(r helmmgr.Release) *wsv1.HelmReleaseInfo {
-	return &wsv1.HelmReleaseInfo{
+	info := &wsv1.HelmReleaseInfo{
 		Name: r.Name, Namespace: r.Namespace, Creator: r.Creator, Session: r.Session,
 		Ref: r.Ref, ChartPath: r.ChartPath, Revision: int32(r.Revision),
 		Status: r.Status, UpdatedAt: r.UpdatedAt,
+		ChartVersion: r.ChartVersion, AppVersion: r.AppVersion,
 		Slot: r.Slot, Router: r.Router, ActiveSlot: r.ActiveSlot,
 	}
+	// The current revision's objects ("Kind/name"). The head denormalizes them
+	// for the list view; fall back to the materialized history (e.g. a legacy
+	// head written before Objects was denormalized, as in HelmHistory/Get).
+	objs := r.Objects
+	if len(objs) == 0 && len(r.History) > 0 {
+		objs = r.History[len(r.History)-1].Objects
+	}
+	for _, o := range objs {
+		info.Objects = append(info.Objects, o.Kind+"/"+o.Name)
+	}
+	return info
 }
 
 // helmReleaseInfoWithSlots attaches the live slot list (for a blue-green
@@ -2450,7 +2462,7 @@ func (s *Service) HelmDeploy(ctx context.Context, req *connect.Request[wsv1.Helm
 		ValuesYAML: m.GetValues(), Ref: ref, Slot: m.GetSlot(),
 	}
 	if m.GetDryRun() {
-		manifest, objects, terr := s.helm.Template(chartDir, opts)
+		manifest, objects, _, terr := s.helm.Template(chartDir, opts)
 		if terr != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, terr)
 		}

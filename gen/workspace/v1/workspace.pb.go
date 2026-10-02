@@ -11076,7 +11076,14 @@ type HelmReleaseInfo struct {
 	// ActiveSlot is set on a blue-green release's router entry.
 	ActiveSlot string `protobuf:"bytes,12,opt,name=active_slot,json=activeSlot,proto3" json:"active_slot,omitempty"`
 	// Slots lists the live slots of a blue-green release (empty for plain).
-	Slots         []*HelmSlotInfo `protobuf:"bytes,13,rep,name=slots,proto3" json:"slots,omitempty"`
+	Slots []*HelmSlotInfo `protobuf:"bytes,13,rep,name=slots,proto3" json:"slots,omitempty"`
+	// Chart.yaml `version` of the chart at the CURRENT revision.
+	ChartVersion string `protobuf:"bytes,14,opt,name=chart_version,json=chartVersion,proto3" json:"chart_version,omitempty"`
+	// Chart.yaml `appVersion` of the chart at the CURRENT revision (may be empty).
+	AppVersion string `protobuf:"bytes,15,opt,name=app_version,json=appVersion,proto3" json:"app_version,omitempty"`
+	// Objects the CURRENT revision deployed, as "Kind/name". Lets a list view
+	// show "N objects" without a second HelmHistory round-trip.
+	Objects       []string `protobuf:"bytes,16,rep,name=objects,proto3" json:"objects,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -11198,6 +11205,27 @@ func (x *HelmReleaseInfo) GetActiveSlot() string {
 func (x *HelmReleaseInfo) GetSlots() []*HelmSlotInfo {
 	if x != nil {
 		return x.Slots
+	}
+	return nil
+}
+
+func (x *HelmReleaseInfo) GetChartVersion() string {
+	if x != nil {
+		return x.ChartVersion
+	}
+	return ""
+}
+
+func (x *HelmReleaseInfo) GetAppVersion() string {
+	if x != nil {
+		return x.AppVersion
+	}
+	return ""
+}
+
+func (x *HelmReleaseInfo) GetObjects() []string {
+	if x != nil {
+		return x.Objects
 	}
 	return nil
 }
@@ -13590,7 +13618,7 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\adry_run\x18\x03 \x01(\bR\x06dryRun\"g\n" +
 	"\x1cApplyServiceManifestResponse\x123\n" +
 	"\aservice\x18\x01 \x01(\v2\x19.workspace.v1.ServiceInfoR\aservice\x12\x12\n" +
-	"\x04yaml\x18\x02 \x01(\tR\x04yaml\"\xfa\x02\n" +
+	"\x04yaml\x18\x02 \x01(\tR\x04yaml\"\xda\x03\n" +
 	"\x0fHelmReleaseInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x18\n" +
@@ -13608,7 +13636,11 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\x06router\x18\v \x01(\tR\x06router\x12\x1f\n" +
 	"\vactive_slot\x18\f \x01(\tR\n" +
 	"activeSlot\x120\n" +
-	"\x05slots\x18\r \x03(\v2\x1a.workspace.v1.HelmSlotInfoR\x05slots\"\xa0\x01\n" +
+	"\x05slots\x18\r \x03(\v2\x1a.workspace.v1.HelmSlotInfoR\x05slots\x12#\n" +
+	"\rchart_version\x18\x0e \x01(\tR\fchartVersion\x12\x1f\n" +
+	"\vapp_version\x18\x0f \x01(\tR\n" +
+	"appVersion\x12\x18\n" +
+	"\aobjects\x18\x10 \x03(\tR\aobjects\"\xa0\x01\n" +
 	"\fHelmSlotInfo\x12\x12\n" +
 	"\x04slot\x18\x01 \x01(\tR\x04slot\x12\x18\n" +
 	"\arelease\x18\x02 \x01(\tR\arelease\x12\x14\n" +

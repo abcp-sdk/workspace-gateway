@@ -130,27 +130,38 @@ type Object struct {
 
 // Revision is one stored release revision.
 type Revision struct {
-	Revision  int      `json:"revision"`
-	Ref       string   `json:"ref"`
-	ChartPath string   `json:"chartPath"`
-	Values    string   `json:"values"`
-	CreatedAt int64    `json:"createdAt"`
-	Objects   []Object `json:"objects"`
-	Manifest  string   `json:"manifest"`
+	Revision  int    `json:"revision"`
+	Ref       string `json:"ref"`
+	ChartPath string `json:"chartPath"`
+	// ChartVersion/AppVersion come from the chart's Chart.yaml at this revision.
+	ChartVersion string   `json:"chartVersion,omitempty"`
+	AppVersion   string   `json:"appVersion,omitempty"`
+	Values       string   `json:"values"`
+	CreatedAt    int64    `json:"createdAt"`
+	Objects      []Object `json:"objects"`
+	Manifest     string   `json:"manifest"`
 }
 
 // Release is a Helm release managed by the gateway.
 type Release struct {
-	Name      string     `json:"name"`
-	Namespace string     `json:"namespace"`
-	Creator   string     `json:"creator"`
-	Session   string     `json:"session"`
-	Ref       string     `json:"ref"`
-	ChartPath string     `json:"chartPath"`
-	Revision  int        `json:"revision"`
-	Status    string     `json:"status"`
-	UpdatedAt int64      `json:"updatedAt"`
-	History   []Revision `json:"history,omitempty"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Creator   string `json:"creator"`
+	Session   string `json:"session"`
+	Ref       string `json:"ref"`
+	ChartPath string `json:"chartPath"`
+	// ChartVersion/AppVersion are the CURRENT revision's chart metadata
+	// (Chart.yaml version / appVersion). Denormalized onto the head so a list
+	// view can show them without reading the revision bodies.
+	ChartVersion string     `json:"chartVersion,omitempty"`
+	AppVersion   string     `json:"appVersion,omitempty"`
+	Revision     int        `json:"revision"`
+	Status       string     `json:"status"`
+	UpdatedAt    int64      `json:"updatedAt"`
+	History      []Revision `json:"history,omitempty"`
+	// Objects are the CURRENT revision's applied objects ("Kind/name" lives in
+	// the proto). Small (tens of entries), so it stays in the head record.
+	Objects []Object `json:"objects,omitempty"`
 	// Slot is "blue"/"green" for a slot release ("" = plain).
 	Slot string `json:"slot,omitempty"`
 	// Router is the logical release name a slot release belongs to (empty for a
@@ -215,28 +226,34 @@ type RenderOptions struct {
 }
 
 // Template renders the chart at chartDir (an extracted repo root + ChartPath)
-// into a filtered, namespace-pinned manifest. It returns the rendered docs and
-// the applied objects (dry-run = no apply).
-func (c *Client) Template(chartDir string, o RenderOptions) (string, []Object, error) {
+// into a filtered, namespace-pinned manifest. It returns the rendered docs, the
+// applied objects (dry-run = no apply), and the chart's metadata (Chart.yaml
+// version / appVersion).
+func (c *Client) Template(chartDir string, o RenderOptions) (string, []Object, ChartMeta, error) {
 	ch, err := loader.LoadDir(chartDir)
 	if err != nil {
-		return "", nil, fmt.Errorf("load chart: %w", err)
+		return "", nil, ChartMeta{}, fmt.Errorf("load chart: %w", err)
+	}
+	meta := ChartMeta{}
+	if ch.Metadata != nil {
+		meta.Version = ch.Metadata.Version
+		meta.AppVersion = ch.Metadata.AppVersion
 	}
 	vals := map[string]any{}
 	if strings.TrimSpace(o.ValuesYAML) != "" {
 		if err := yaml.Unmarshal([]byte(o.ValuesYAML), &vals); err != nil {
-			return "", nil, fmt.Errorf("parse values: %w", err)
+			return "", nil, ChartMeta{}, fmt.Errorf("parse values: %w", err)
 		}
 	}
 	relOpts := chartutil.ReleaseOptions{Name: o.Release, Namespace: c.namespace, Revision: 1, IsInstall: true}
 	caps := chartutil.DefaultCapabilities
 	renderVals, err := chartutil.ToRenderValues(ch, vals, relOpts, caps)
 	if err != nil {
-		return "", nil, fmt.Errorf("render values: %w", err)
+		return "", nil, ChartMeta{}, fmt.Errorf("render values: %w", err)
 	}
 	rendered, err := engine.Render(ch, renderVals)
 	if err != nil {
-		return "", nil, fmt.Errorf("render: %w", err)
+		return "", nil, ChartMeta{}, fmt.Errorf("render: %w", err)
 	}
 	// Collect the rendered templates in a deterministic order.
 	names := make([]string, 0, len(rendered))
@@ -263,9 +280,15 @@ func (c *Client) Template(chartDir string, o RenderOptions) (string, []Object, e
 	manifest := b.String()
 	objects, err := c.validate(manifest)
 	if err != nil {
-		return "", nil, err
+		return "", nil, ChartMeta{}, err
 	}
-	return manifest, objects, nil
+	return manifest, objects, meta, nil
+}
+
+// ChartMeta is the chart identity read from Chart.yaml.
+type ChartMeta struct {
+	Version    string
+	AppVersion string
 }
 
 // workloadPodSpecs are the unstructured paths to a workload's pod template
@@ -659,7 +682,7 @@ func (c *Client) Apply(ctx context.Context, chartDir string, o RenderOptions, cr
 	if !validReleaseName(o.Release) {
 		return Release{}, fmt.Errorf("release name must be a DNS-1123 label")
 	}
-	manifest, objects, err := c.Template(chartDir, o)
+	manifest, objects, meta, err := c.Template(chartDir, o)
 	if err != nil {
 		return Release{}, err
 	}
@@ -675,11 +698,15 @@ func (c *Client) Apply(ctx context.Context, chartDir string, o RenderOptions, cr
 	}
 	cur.Ref = o.Ref
 	cur.ChartPath = o.ChartPath
+	cur.ChartVersion = meta.Version
+	cur.AppVersion = meta.AppVersion
+	cur.Objects = objects
 	cur.Revision++
 	cur.Status = "deployed"
 	cur.UpdatedAt = time.Now().UnixMilli()
 	cur.History = append(cur.History, Revision{
 		Revision: cur.Revision, Ref: o.Ref, ChartPath: o.ChartPath, Values: o.ValuesYAML,
+		ChartVersion: meta.Version, AppVersion: meta.AppVersion,
 		CreatedAt: cur.UpdatedAt, Objects: objects, Manifest: manifest,
 	})
 	if _, err := c.recordRevision(ctx, cur); err != nil {
@@ -707,7 +734,7 @@ func (c *Client) ApplySlot(ctx context.Context, chartDir string, o RenderOptions
 	// and the two slots' objects never collide.
 	renderOpts := o
 	renderOpts.Release = stored
-	manifest, objects, err := c.Template(chartDir, renderOpts)
+	manifest, objects, meta, err := c.Template(chartDir, renderOpts)
 	if err != nil {
 		return Release{}, err
 	}
@@ -734,6 +761,9 @@ func (c *Client) ApplySlot(ctx context.Context, chartDir string, o RenderOptions
 	}
 	cur.Ref = o.Ref
 	cur.ChartPath = o.ChartPath
+	cur.ChartVersion = meta.Version
+	cur.AppVersion = meta.AppVersion
+	cur.Objects = objects
 	cur.Slot = o.Slot
 	cur.Router = router
 	cur.Revision++
@@ -741,6 +771,7 @@ func (c *Client) ApplySlot(ctx context.Context, chartDir string, o RenderOptions
 	cur.UpdatedAt = time.Now().UnixMilli()
 	cur.History = append(cur.History, Revision{
 		Revision: cur.Revision, Ref: o.Ref, ChartPath: o.ChartPath, Values: o.ValuesYAML,
+		ChartVersion: meta.Version, AppVersion: meta.AppVersion,
 		CreatedAt: cur.UpdatedAt, Objects: objects, Manifest: manifest,
 	})
 	if _, err := c.recordRevision(ctx, cur); err != nil {
@@ -1157,8 +1188,12 @@ func (c *Client) Rollback(ctx context.Context, release string, revision int) (Re
 	cur.UpdatedAt = time.Now().UnixMilli()
 	cur.Ref = target.Ref
 	cur.ChartPath = target.ChartPath
+	cur.ChartVersion = target.ChartVersion
+	cur.AppVersion = target.AppVersion
+	cur.Objects = target.Objects
 	cur.History = append(cur.History, Revision{
 		Revision: cur.Revision, Ref: target.Ref, ChartPath: target.ChartPath, Values: target.Values,
+		ChartVersion: target.ChartVersion, AppVersion: target.AppVersion,
 		CreatedAt: cur.UpdatedAt, Objects: target.Objects, Manifest: target.Manifest,
 	})
 	if _, err := c.recordRevision(ctx, cur); err != nil {

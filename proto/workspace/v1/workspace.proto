@@ -1223,6 +1223,13 @@ message HelmReleaseInfo {
   string active_slot = 12;
   // Slots lists the live slots of a blue-green release (empty for plain).
   repeated HelmSlotInfo slots = 13;
+  // Chart.yaml `version` of the chart at the CURRENT revision.
+  string chart_version = 14;
+  // Chart.yaml `appVersion` of the chart at the CURRENT revision (may be empty).
+  string app_version = 15;
+  // Objects the CURRENT revision deployed, as "Kind/name". Lets a list view
+  // show "N objects" without a second HelmHistory round-trip.
+  repeated string objects = 16;
 }
 
 // HelmSlotInfo is one slot of a blue-green Helm release.
