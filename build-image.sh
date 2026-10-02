@@ -14,6 +14,9 @@ BUILDKIT="${BUILDKIT_ADDR:-tcp://buildkitd.temp.svc.cluster.local:1234}"
 FORGEJO_USER="${FORGEJO_USER:-root}"
 FORGEJO_PASS="${FORGEJO_PASS:-devpassword}"
 PROXY="${PROXY:-http://mihomo.develop.svc.cluster.local:7890}"
+# Modules are fetched from the in-cluster artifact registry (proxy.golang.org is
+# unreachable from the cluster). Override GOPROXY to build against another source.
+GOPROXY="${GOPROXY:-http://artifact.worker.svc.cluster.local/artifacts/go}"
 DOCKERFILE="Dockerfile"
 
 WORK="$(mktemp -d)"
@@ -29,6 +32,8 @@ buildctl --addr "${BUILDKIT}" build \
   --opt "build-arg:HTTP_PROXY=${PROXY}" \
   --opt "build-arg:HTTPS_PROXY=${PROXY}" \
   --opt "build-arg:NO_PROXY=localhost,127.0.0.1,.svc.cluster.local,.svc,10.199.64.20" \
+  --opt "build-arg:GOPROXY=${GOPROXY}" \
+  --opt "build-arg:GOSUMDB=off" \
   --output "type=docker,name=${NAMESPACE}/${NAME}:${TAG},dest=${WORK}/image.tar" \
   --progress plain
 
