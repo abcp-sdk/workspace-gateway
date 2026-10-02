@@ -6,10 +6,19 @@ ARG BUILDKIT_IMAGE=docker.io/moby/buildkit:v0.32.2-rootless
 FROM ${REGISTRY}/golang:1.26-alpine AS build
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
+# Modules come from the in-cluster artifact registry: proxy.golang.org is NOT
+# reachable from the cluster, so the historical default made the build
+# unreproducible once this layer's cache was invalidated. Override GOPROXY to
+# build against another source.
+ARG GOPROXY=http://artifact.worker.svc.cluster.local/artifacts/go
+ARG GOSUMDB=off
 ENV HTTP_PROXY=${HTTP_PROXY} \
     HTTPS_PROXY=${HTTPS_PROXY} \
     NO_PROXY=localhost,127.0.0.1,.svc.cluster.local,.svc,10.199.64.20 \
-    GOWORK=off
+    GOWORK=off \
+    GOPROXY=${GOPROXY} \
+    GOSUMDB=${GOSUMDB} \
+    GOTOOLCHAIN=local
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
