@@ -46,7 +46,8 @@ import (
 const serviceReadyTimeout = 60 * time.Second
 
 // Service implements wsv1connect.BranchSessionServiceHandler.
-type Service struct {	agent    agentv1connect.AgentServiceClient
+type Service struct {
+	agent    agentv1connect.AgentServiceClient
 	members  *members.Store
 	git      *forgejo.Client
 	sbx      *sandboxmgr.Client
@@ -75,6 +76,10 @@ type Service struct {	agent    agentv1connect.AgentServiceClient
 	pvcStorageClass string
 	// pvcDefaultSize is used when CreatePVC omits a size.
 	pvcDefaultSize string
+	// bootstrap is the rendered package-source bootstrap applied to every
+	// sandbox (nil = none). It is derived from SANDBOX_PACKAGE_UPSTREAM, so a
+	// registry URL change needs no image rebuild.
+	bootstrap *sandboxmgr.Bootstrap
 	// hub fans out a single k8s-change signal to WatchWorkspace subscribers.
 	hub *workspaceHub
 }
@@ -99,6 +104,9 @@ type Deps struct {
 	SandboxOrg string
 	// DefaultSandboxImage is used when CreateSandbox omits an image.
 	DefaultSandboxImage string
+	// SandboxBootstrap, when set, is applied to every sandbox (package-source
+	// init container + config volumes). Built from SANDBOX_PACKAGE_UPSTREAM.
+	SandboxBootstrap *sandboxmgr.Bootstrap
 	// ToolchainOrg is the default owner ListOCIImages browses.
 	ToolchainOrg string
 	// ServiceToken + ServiceTenant enable the sandbox-only service-to-service
@@ -143,6 +151,7 @@ func New(d Deps) *Service {
 		helm:     d.Helm,
 		builder:  d.Builder, runtime: d.Runtime,
 		sandboxOrg: d.SandboxOrg, defaultSandboxImage: d.DefaultSandboxImage,
+		bootstrap:    d.SandboxBootstrap,
 		toolchainOrg: d.ToolchainOrg,
 		svcToken:     d.ServiceToken, svcTenant: d.ServiceTenant,
 		commits:             commits,
@@ -159,6 +168,43 @@ func New(d Deps) *Service {
 // the deployment's runtime knobs.
 func (s *Service) renderRuntime(kvm bool, gpuCount int32) runtimeprofiles.Rendered {
 	return s.runtime.Render(kvm, int(gpuCount))
+}
+
+// buildArgs merges the caller's build-args with the deployment's package-source
+// defaults (from SANDBOX_PACKAGE_UPSTREAM). A Dockerfile that honors these ARGs
+// (GOPROXY / NPM_CONFIG_REGISTRY / PIP_INDEX_URL / …) then fetches packages
+// from artifact at BUILD time, same source as at runtime. Caller values win.
+func (s *Service) buildArgs(caller map[string]string) map[string]string {
+	merged := map[string]string{}
+	for k, v := range runtimeprofiles.PackageEnv(s.runtime.PackageUpstream) {
+		merged[k] = v
+	}
+	for k, v := range caller {
+		merged[k] = v
+	}
+	if len(merged) == 0 {
+		return nil
+	}
+	return merged
+}
+
+// sandboxEnv merges the caller's env with the deployment's package-source env
+// (from SANDBOX_PACKAGE_UPSTREAM). This is applied ONLY to sandboxes — never to
+// user services (which use renderRuntime directly). Caller values win.
+func (s *Service) sandboxEnv(caller map[string]string) map[string]string {
+	if s.runtime.PackageUpstream == "" {
+		return caller
+	}
+	merged := map[string]string{}
+	for k, v := range runtimeprofiles.PackageEnv(s.runtime.PackageUpstream) {
+		merged[k] = v
+	}
+	// The registry root, also read by the bootstrap init container.
+	merged["SANDBOX_PACKAGE_UPSTREAM"] = s.runtime.PackageUpstream
+	for k, v := range caller {
+		merged[k] = v
+	}
+	return merged
 }
 
 // sandboxAuth resolves the caller's tenant for a sandbox RPC. A request bearing
@@ -1728,8 +1774,9 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 	}
 	sb, _, err := s.sbx.Create(ctx, sandboxmgr.Spec{
 		Name: name, Image: image, CPU: req.Msg.GetCpu(), Memory: req.Msg.GetMemory(),
-		Env: req.Msg.GetEnv(), Creator: tenant, Session: bindSession,
-		Runtime: s.renderRuntime(req.Msg.GetKvm(), req.Msg.GetGpuCount()),
+		Env: s.sandboxEnv(req.Msg.GetEnv()), Creator: tenant, Session: bindSession,
+		Runtime:   s.renderRuntime(req.Msg.GetKvm(), req.Msg.GetGpuCount()),
+		Bootstrap: s.bootstrap,
 	})
 	if err != nil {
 		if errors.Is(err, sandboxmgr.ErrExists) {
@@ -2147,10 +2194,10 @@ func (s *Service) DeployService(ctx context.Context, req *connect.Request[wsv1.D
 		Env: m.GetEnv(), CPU: m.GetCpu(), Memory: m.GetMemory(),
 		Replicas: m.GetReplicas(), ContainerPort: m.GetContainerPort(),
 		ServicePort: m.GetServicePort(), Creator: tenant,
-		Session: sessionFromHeaders(req.Header()),
-		Ports:   ports,
-		Runtime: s.renderRuntime(m.GetKvm(), m.GetGpuCount()),
-		Volumes: vols,
+		Session:        sessionFromHeaders(req.Header()),
+		Ports:          ports,
+		Runtime:        s.renderRuntime(m.GetKvm(), m.GetGpuCount()),
+		Volumes:        vols,
 		Resources:      toResources(m.GetResources()),
 		ReadinessProbe: toProbeSpec(m.GetReadinessProbe()),
 		LivenessProbe:  toProbeSpec(m.GetLivenessProbe()),
@@ -3257,7 +3304,7 @@ func toServiceInfoImpl(svc servicesmgr.Service, publicURLs, slotURLs map[string]
 		Message: svc.Message, Paused: svc.Paused,
 		CreatedAt: svc.CreatedAt,
 		Cpu:       svc.CPU, Memory: svc.Memory, Command: svc.Command, Env: svc.Env,
-		Volumes: vols,
+		Volumes:        vols,
 		ConfigMounts:   cms,
 		Resources:      fromResources(svc.Resources),
 		ReadinessProbe: fromProbeSpec(svc.ReadinessProbe),
@@ -3490,7 +3537,7 @@ func (s *Service) BuildSandboxImage(ctx context.Context, req *connect.Request[ws
 		Context:    m.GetContext(),
 		Repo:       org + "/" + m.GetImage(),
 		Tag:        m.GetTag(),
-		BuildArgs:  m.GetBuildArgs(),
+		BuildArgs:  s.buildArgs(m.GetBuildArgs()),
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)

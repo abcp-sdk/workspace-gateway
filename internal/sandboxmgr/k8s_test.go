@@ -40,6 +40,63 @@ func TestCreateSetsRuntimeClass(t *testing.T) {
 	}
 }
 
+func TestCreateAppliesBootstrap(t *testing.T) {
+	c := newTestClient()
+	ctx := context.Background()
+	_, _, err := c.Create(ctx, Spec{
+		Name: "boot", Image: "img:1", Creator: "alice",
+		Env: map[string]string{"SANDBOX_PACKAGE_UPSTREAM": "http://artifact"},
+		Bootstrap: &Bootstrap{
+			Image:  "alpine:3.24",
+			Script: "echo hi",
+			Mounts: []BootstrapMount{
+				{Name: "cfg-apt", Path: "/etc/apt/sources.list.d"},
+				{Name: "cfg-m2", Path: "/root/.m2", Writable: true},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	pod, err := c.cs.CoreV1().Pods("worker").Get(ctx, resourceName("boot"), metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pod.Spec.InitContainers) != 1 {
+		t.Fatalf("init containers = %d, want 1", len(pod.Spec.InitContainers))
+	}
+	ic := pod.Spec.InitContainers[0]
+	if ic.Image != "alpine:3.24" || len(ic.VolumeMounts) != 2 {
+		t.Fatalf("init container = %+v", ic)
+	}
+	// The init container must NOT receive the worker's bearer token.
+	for _, e := range ic.Env {
+		if e.Name == "WORKER_TOKEN" || e.Name == "WORKER_PORT" {
+			t.Fatalf("init container leaked worker env %q", e.Name)
+		}
+	}
+	// Volumes exist and the worker mounts them; the Writable mount is NOT RO.
+	vols := map[string]bool{}
+	for _, v := range pod.Spec.Volumes {
+		vols[v.Name] = v.EmptyDir != nil
+	}
+	if !vols["cfg-apt"] || !vols["cfg-m2"] {
+		t.Fatalf("missing emptyDir volumes: %v", vols)
+	}
+	ro := map[string]bool{}
+	for _, m := range pod.Spec.Containers[0].VolumeMounts {
+		if m.Name == "cfg-apt" || m.Name == "cfg-m2" {
+			ro[m.Name] = m.ReadOnly
+		}
+	}
+	if !ro["cfg-apt"] {
+		t.Error("cfg-apt should be read-only")
+	}
+	if ro["cfg-m2"] {
+		t.Error("cfg-m2 must be read-WRITE (Maven repo root)")
+	}
+}
+
 func TestCreateListResolveDelete(t *testing.T) {
 	c := newTestClient()
 	ctx := context.Background()

@@ -77,6 +77,40 @@ type Spec struct {
 	// Runtime is the rendered runtime capabilities (device limits, security
 	// context, tun mount, ...). Zero value = a plain sandbox.
 	Runtime runtimeprofiles.Rendered
+	// Bootstrap, when set, runs a pre-main init-container that writes
+	// package-manager CONFIG FILES into a shared emptyDir, which is then mounted
+	// over the matching config dirs of the worker container. This is how
+	// file-configured package managers (apt/maven/gradle/pip/cargo/SPM/nuget)
+	// are pointed at the in-cluster registry WITHOUT changing the sandbox image.
+	// Nil = no bootstrap (the historical behaviour).
+	Bootstrap *Bootstrap
+}
+
+// Bootstrap describes the package-source bootstrap applied to a sandbox Pod.
+type Bootstrap struct {
+	// Image is the init-container image (a tiny shell image). Its only job is
+	// to run Script; it never runs the workload.
+	Image string
+	// Script writes the config files into the mounted config dirs. It may read
+	// SANDBOX_PACKAGE_UPSTREAM from its environment.
+	Script string
+	// Mounts are the emptyDir-backed config dirs shared with the worker
+	// container. Each is written by Script (in the init container) and mounted
+	// read-only at the same Path in the worker container.
+	Mounts []BootstrapMount
+}
+
+// BootstrapMount is one shared config directory.
+type BootstrapMount struct {
+	// Name is the volume name (DNS-1123).
+	Name string
+	// Path is the mount path in BOTH the init and worker containers.
+	Path string
+	// Writable mounts the dir read-WRITE in the worker container. Set it for
+	// dirs that are BOTH config and cache/repo roots (Maven local repo,
+	// GRADLE_USER_HOME, CARGO_HOME) — a read-only overlay would make those
+	// tools fail with EROFS. Pure config dirs stay read-only.
+	Writable bool
 }
 
 // Client wraps the typed clientset plus the target namespace.
@@ -283,6 +317,43 @@ func (c *Client) Create(ctx context.Context, s Spec) (Sandbox, string, error) {
 	podSpec := corev1.PodSpec{
 		RestartPolicy: c.restart,
 		Containers:    []corev1.Container{container},
+	}
+	// Package-source bootstrap: an init container writes the file-configured
+	// package managers' config into emptyDirs that are then mounted over the
+	// worker container's matching dirs. All inputs come from Spec/env, so the
+	// sandbox image is untouched and the registry URL can change without a
+	// rebuild. Runs BEFORE the worker so the config is present at first use.
+	if s.Bootstrap != nil && len(s.Bootstrap.Mounts) > 0 && s.Bootstrap.Image != "" {
+		initMounts := make([]corev1.VolumeMount, 0, len(s.Bootstrap.Mounts))
+		workerMounts := make([]corev1.VolumeMount, 0, len(s.Bootstrap.Mounts))
+		for _, m := range s.Bootstrap.Mounts {
+			podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+				Name:         m.Name,
+				VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+			})
+			initMounts = append(initMounts, corev1.VolumeMount{Name: m.Name, MountPath: m.Path})
+			workerMounts = append(workerMounts, corev1.VolumeMount{Name: m.Name, MountPath: m.Path, ReadOnly: !m.Writable})
+		}
+		// The init container needs ONLY the registry URL — never the worker's
+		// bearer token (WORKER_TOKEN) or other workload env.
+		initEnv := []corev1.EnvVar{}
+		for _, e := range env {
+			if e.Name == "SANDBOX_PACKAGE_UPSTREAM" {
+				initEnv = append(initEnv, e)
+			}
+		}
+		podSpec.InitContainers = append(podSpec.InitContainers, corev1.Container{
+			Name:         "package-bootstrap",
+			Image:        s.Bootstrap.Image,
+			Command:      []string{"/bin/sh", "-c", s.Bootstrap.Script},
+			Env:          initEnv,
+			VolumeMounts: initMounts,
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10m"), corev1.ResourceMemory: resource.MustParse("16Mi")},
+				Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("200m"), corev1.ResourceMemory: resource.MustParse("128Mi")},
+			},
+		})
+		podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, workerMounts...)
 	}
 	if s.Runtime.RuntimeClass != "" {
 		rc := s.Runtime.RuntimeClass
