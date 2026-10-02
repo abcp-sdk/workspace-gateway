@@ -60,12 +60,15 @@ spec:
         - name: app
           image: {{ .Values.image }}
 `)
-	manifest, objs, err := c.Template(dir, RenderOptions{Release: "demo", ChartPath: ".", ValuesYAML: "v: hi\nimage: nginx:1"})
+	manifest, objs, meta, err := c.Template(dir, RenderOptions{Release: "demo", ChartPath: ".", ValuesYAML: "v: hi\nimage: nginx:1"})
 	if err != nil {
 		t.Fatalf("template: %v", err)
 	}
 	if len(objs) != 2 {
 		t.Fatalf("objects = %+v", objs)
+	}
+	if meta.Version != "0.1.0" {
+		t.Fatalf("chart version = %q, want 0.1.0", meta.Version)
 	}
 	if !contains(manifest, "hi") || !contains(manifest, "nginx:1") {
 		t.Fatalf("values not rendered:\n%s", manifest)
@@ -269,8 +272,12 @@ func recordFakeRevision(t *testing.T, c *Client, release string, n int) {
 	cur.Revision = n
 	cur.Status = "deployed"
 	cur.UpdatedAt = int64(n)
+	cur.ChartVersion = "1.2.3"
+	cur.AppVersion = "4.5.6"
+	cur.Objects = []Object{{Kind: "ConfigMap", Name: fmt.Sprintf("cm-%d", n)}}
 	cur.History = append(cur.History, Revision{
 		Revision: n, Ref: "main", ChartPath: ".",
+		ChartVersion: "1.2.3", AppVersion: "4.5.6",
 		CreatedAt: int64(n), Objects: []Object{{Kind: "ConfigMap", Name: fmt.Sprintf("cm-%d", n)}},
 		Manifest: fmt.Sprintf("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm-%d\n", n),
 	})
@@ -291,7 +298,7 @@ func TestStateOneObjectPerRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(head.Data["release"], "apiVersion") {
+	if strings.Contains(head.Data["release"], `"manifest"`) {
 		t.Fatalf("head must not carry a manifest:\n%s", head.Data["release"])
 	}
 	if head.Labels[recordKindLabel] != recordHead {
@@ -307,6 +314,21 @@ func TestStateOneObjectPerRevision(t *testing.T) {
 	}
 	if rel.History[1].Manifest == "" || len(rel.History[1].Objects) != 1 {
 		t.Fatalf("revision body not materialized: %+v", rel.History[1])
+	}
+	// The chart metadata + current-revision objects are denormalized on the head
+	// so the list view can show them without reading revision bodies.
+	if rel.ChartVersion != "1.2.3" || rel.AppVersion != "4.5.6" {
+		t.Fatalf("chart meta = %q/%q", rel.ChartVersion, rel.AppVersion)
+	}
+	if len(rel.Objects) != 1 || rel.Objects[0].Kind != "ConfigMap" {
+		t.Fatalf("head objects = %+v", rel.Objects)
+	}
+	head2, err := c.cs.CoreV1().ConfigMaps("worker").Get(context.Background(), c.cmName("web"), metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(head2.Data["release"], `"chartVersion":"1.2.3"`) {
+		t.Fatalf("head must denormalize chartVersion:\n%s", head2.Data["release"])
 	}
 
 	bodies, err := c.cs.CoreV1().ConfigMaps("worker").List(context.Background(), metav1.ListOptions{
