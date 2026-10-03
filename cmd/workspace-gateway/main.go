@@ -86,8 +86,18 @@ func main() {
 	// Sandboxes run a PRE-BUILT, worker-bundled image from a dedicated org
 	// (see sandbox-images/). The gateway no longer injects the worker.
 	sandboxOrg := envOr("SANDBOX_ORG", "sandbox")
+	// Sandbox images may come from a DIFFERENT registry than the build/push +
+	// catalog host (artifact serves the pre-built sandbox-* images; Forgejo
+	// remains the build/push + catalog registry). When set, it is the ONLY
+	// registry a sandbox image may come from, and the default sandbox image is
+	// derived from it.
+	sandboxImageRegistryHost := strings.TrimRight(os.Getenv("SANDBOX_IMAGE_REGISTRY_HOST"), "/")
+	sandboxImageHost := sandboxImageRegistryHost
+	if sandboxImageHost == "" {
+		sandboxImageHost = registryHost
+	}
 	defaultSandboxImage := envOr("DEFAULT_SANDBOX_IMAGE",
-		registryHost+"/"+sandboxOrg+"/sandbox-base:debian-trixie")
+		sandboxImageHost+"/"+sandboxOrg+"/sandbox-base:debian-trixie")
 
 	store, err := members.Open(db)
 	if err != nil {
@@ -185,19 +195,20 @@ func main() {
 			RegistryUser:   os.Getenv("FORGEJO_USER"),
 			RegistryPass:   os.Getenv("FORGEJO_PASSWORD"),
 		},
-		Runtime:             runtime,
-		SandboxBootstrap:    sandboxBootstrap,
-		SandboxOrg:          sandboxOrg,
-		DefaultSandboxImage: defaultSandboxImage,
-		ToolchainOrg:        toolchainOrg,
-		ServiceToken:        os.Getenv("GATEWAY_SERVICE_TOKEN"),
-		ServiceTenant:       envOr("GATEWAY_SERVICE_TENANT", "workspace-extension"),
-		GitCloneDir:         envOr("GIT_CLONE_DIR", "/data/git-clones"),
-		SandboxNamespace:    sandboxNS,
-		PublicServiceDomain: os.Getenv("PUBLIC_SERVICE_DOMAIN"),
-		ServiceLogTail:      int64(envOrInt("SERVICE_LOG_TAIL", 500)),
-		PVCStorageClass:     envOr("PVC_STORAGE_CLASS", "workspace-local"),
-		PVCDefaultSize:      envOr("PVC_DEFAULT_SIZE", "1Gi"),
+		Runtime:                  runtime,
+		SandboxBootstrap:         sandboxBootstrap,
+		SandboxOrg:               sandboxOrg,
+		SandboxImageRegistryHost: sandboxImageRegistryHost,
+		DefaultSandboxImage:      defaultSandboxImage,
+		ToolchainOrg:             toolchainOrg,
+		ServiceToken:             os.Getenv("GATEWAY_SERVICE_TOKEN"),
+		ServiceTenant:            envOr("GATEWAY_SERVICE_TENANT", "workspace-extension"),
+		GitCloneDir:              envOr("GIT_CLONE_DIR", "/data/git-clones"),
+		SandboxNamespace:         sandboxNS,
+		PublicServiceDomain:      os.Getenv("PUBLIC_SERVICE_DOMAIN"),
+		ServiceLogTail:           int64(envOrInt("SERVICE_LOG_TAIL", 500)),
+		PVCStorageClass:          envOr("PVC_STORAGE_CLASS", "workspace-local"),
+		PVCDefaultSize:           envOr("PVC_DEFAULT_SIZE", "1Gi"),
 	})
 
 	// Reclaim idle sandboxes: no worker jobs for SANDBOX_IDLE_TTL (default 24h).

@@ -57,6 +57,10 @@ speaks `agent.v1` directly. The `agent.v1` handler is deliberately NOT mounted.
   no worker. Build/refresh those images with `abcp-sdk/worker`'s
   `sandbox-images/build.sh` (compiles agent-worker from that repo into the
   `agent-toolchain/toolchain-<lang>` bases).
+  When `SANDBOX_IMAGE_REGISTRY_HOST` is set, a sandbox image must ALSO come from
+  that registry (e.g. `artifact.worker.svc.cluster.local`, where the pre-built
+  `sandbox-*` images live); it is distinct from `IMAGE_REGISTRY_HOST`, which
+  stays the build/push + catalog registry.
 - **OCI images**: `ListOCIImages` (browse a namespace; pass `name` to list one
   image's tags), `BuildSandboxImage` (repo Dockerfile -> `<org>/<image>:<tag>`
   via buildkitd).
@@ -104,6 +108,7 @@ folded in under `internal/sandboxmgr`).
 | `IMAGE_REGISTRY_SCHEME` | registry scheme (default `http`; the in-cluster registry is plaintext) |
 | `TOOLCHAIN_ORG` | default owner `ListOCIImages` browses (default `agent-toolchain`) |
 | `SANDBOX_ORG` | the ONLY registry org a sandbox image may come from (default `sandbox`) |
+| `SANDBOX_IMAGE_REGISTRY_HOST` | when set, the ONLY registry a sandbox image may come from (e.g. `artifact.worker.svc.cluster.local`); the default sandbox image is derived from it. Distinct from `IMAGE_REGISTRY_HOST` (build/push + catalog). Empty = no registry-host guard |
 | `DEFAULT_SANDBOX_IMAGE` | image used when `CreateSandbox` omits one |
 | `BUILDKIT_ADDR` | buildkitd address for `BuildSandboxImage` |
 | `WORKSPACE_RUNTIME` | optional JSON overriding KVM/GPU device names + KVM security context |
