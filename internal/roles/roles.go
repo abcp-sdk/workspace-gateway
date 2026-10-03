@@ -84,6 +84,21 @@ var browserTools = []string{
 	"browser-storage-state", "browser-set-storage-state",
 }
 
+// Computer-use (GUI) tools (the workspace extension's `sandbox-computer-*`
+// family, gated at call time on the sandbox's accessibility tooling). They
+// drive a native GUI through the platform accessibility tree — observe
+// (`apps`/`snapshot`/`find`), interact (action/click/type/key/scroll/drag) and
+// capture (screenshot). Every role that owns a sandbox gets them; without this
+// whitelist the extension's tools are discovered but filtered out, leaving the
+// model with no GUI access.
+var computerTools = []string{
+	"sandbox-computer-apps", "sandbox-computer-snapshot",
+	"sandbox-computer-find", "sandbox-computer-action",
+	"sandbox-computer-click", "sandbox-computer-type",
+	"sandbox-computer-key", "sandbox-computer-scroll",
+	"sandbox-computer-drag", "sandbox-computer-screenshot",
+}
+
 // Repo read-only browse tools.
 var repoReadTools = []string{
 	"repo-explore", "repo-file-read", "repo-file-list", "repo-log", "repo-show",
@@ -132,17 +147,17 @@ func ToolsFor(r Role) []string {
 		// Create org/repo + read + manage tenant resources + run a sandbox for
 		// ad-hoc work. Still NO repo writes and NO sandbox-port (admin sessions
 		// are not bound to a branch, so porting would write main).
-		return concat(generalTools, repoReadTools, adminTools, sandboxBase, browserTools)
+		return concat(generalTools, repoReadTools, adminTools, sandboxBase, browserTools, computerTools)
 	case Developer:
 		// The single repo-bound role: sandbox-only edits, submit/merge/close
 		// MRs (merge/close only when base == its own branch), releases, images,
 		// services. NOT sandbox-port and NOT any direct branch write.
-		return concat(generalTools, repoReadTools, repoDevTools, sandboxBase, browserTools, []string{"pvc-list"})
+		return concat(generalTools, repoReadTools, repoDevTools, sandboxBase, browserTools, computerTools, []string{"pvc-list"})
 	case Explorer:
 		// Read every visible repo; may run a sandbox for analysis, but has NO
 		// tool that writes back to a repo (no sandbox-port, no submit-mr). May
 		// read services + their logs (observability only).
-		return concat(generalTools, repoReadTools, sandboxBase, browserTools, []string{"service-list", "service-logs", "pvc-list"})
+		return concat(generalTools, repoReadTools, sandboxBase, browserTools, computerTools, []string{"service-list", "service-logs", "pvc-list"})
 	}
 	return concat(generalTools, repoReadTools)
 }

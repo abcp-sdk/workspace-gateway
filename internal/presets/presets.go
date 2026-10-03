@@ -78,6 +78,16 @@ You can drive a real browser through the ` + "`browser-*`" + ` tools (Selenium-b
 const browserBlockZH = `# 浏览器自动化
 你可以通过 ` + "`browser-*`" + ` 工具驱动一个真实浏览器（基于 Selenium，每个会话一个浏览器）。先用 ` + "`browser-create-context`" + `，其它所有浏览器工具都要它的 ` + "`context_id`" + `。然后 ` + "`browser-navigate`" + ` 打开页面，用 ` + "`browser-snapshot`" + ` 读取无障碍树（决定在哪操作时优先用它而非 ` + "`browser-take-screenshot`" + `），再用 ` + "`browser-click`" + ` / ` + "`browser-type`" + ` / ` + "`browser-fill-form`" + ` 及其它 ` + "`browser-*`" + ` 工具交互。用 ` + "`browser-console-messages`" + ` 和 ` + "`browser-network-requests`" + ` 排查失败。最后用 ` + "`browser-close-context`" + ` 关闭。`
 
+// computerBlock documents the computer-use (GUI) tools, added to every role that
+// runs a sandbox. Gated at call time on the sandbox's accessibility tooling, so
+// a non-GUI sandbox simply refuses the call.
+const computerBlock = `# Computer use (native GUI)
+You can drive a sandbox's native GUI through its accessibility tree with the ` + "`sandbox-computer-*`" + ` tools (a ` + "`worker-name`" + ` selects the sandbox, like the other sandbox tools). Observe first: ` + "`sandbox-computer-apps`" + ` lists apps and ` + "`sandbox-computer-snapshot`" + ` dumps an app's tree (each element gets a stable ref). Interact with ` + "`sandbox-computer-action`" + ` (preferred — drives the app through its accessibility API), or ` + "`sandbox-computer-click`" + ` / ` + "`sandbox-computer-type`" + ` / ` + "`sandbox-computer-key`" + ` / ` + "`sandbox-computer-scroll`" + ` / ` + "`sandbox-computer-drag`" + `. Use ` + "`sandbox-computer-screenshot`" + ` to SEE rendering. These require a GUI sandbox (the desktop image); a plain language sandbox has no accessibility tree.`
+
+// computerBlockZH is computerBlock in Chinese.
+const computerBlockZH = `# 计算机操作（原生 GUI）
+你可以通过 ` + "`sandbox-computer-*`" + ` 工具、经由沙箱的无障碍树驱动其原生 GUI（用 ` + "`worker-name`" + ` 选择沙箱，与其它沙箱工具一致）。先观察：` + "`sandbox-computer-apps`" + ` 列出应用，` + "`sandbox-computer-snapshot`" + ` 导出某应用的树（每个元素带稳定 ref）。交互用 ` + "`sandbox-computer-action`" + `（首选——通过无障碍 API 驱动应用），或 ` + "`sandbox-computer-click`" + ` / ` + "`sandbox-computer-type`" + ` / ` + "`sandbox-computer-key`" + ` / ` + "`sandbox-computer-scroll`" + ` / ` + "`sandbox-computer-drag`" + `。用 ` + "`sandbox-computer-screenshot`" + ` **查看渲染效果**。这些需要 GUI 沙箱（桌面镜像）；普通语言沙箱没有无障碍树。`
+
 // ---- role blocks ----
 
 const adminRole = `# Your role: administrator
@@ -139,10 +149,10 @@ func i18n(en, zh string) string {
 
 // All returns the role presets.
 func All() []Entry {
-	// Every role that runs a sandbox also gets the browser tools, so the
-	// browser block ships alongside the exec block.
-	const execEN = base + "\n\n" + execBlock + "\n\n" + browserBlock
-	const execZH = baseZH + "\n\n" + execBlockZH + "\n\n" + browserBlockZH
+	// Every role that runs a sandbox also gets the browser + computer-use
+	// tools, so both blocks ship alongside the exec block.
+	const execEN = base + "\n\n" + execBlock + "\n\n" + browserBlock + "\n\n" + computerBlock
+	const execZH = baseZH + "\n\n" + execBlockZH + "\n\n" + browserBlockZH + "\n\n" + computerBlockZH
 	return []Entry{
 		{
 			ID:               "admin",

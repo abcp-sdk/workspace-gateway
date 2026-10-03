@@ -192,6 +192,30 @@ func TestEverySandboxRoleHasBrowserTools(t *testing.T) {
 	}
 }
 
+func TestEverySandboxRoleHasComputerTools(t *testing.T) {
+	// The workspace extension ships the sandbox-computer-* GUI tools for every
+	// workspace tenant. Every role that owns a sandbox must whitelist them, or
+	// the tools are discovered but filtered out (no GUI access for the model).
+	want := []string{
+		"sandbox-computer-apps", "sandbox-computer-snapshot",
+		"sandbox-computer-find", "sandbox-computer-action",
+		"sandbox-computer-click", "sandbox-computer-type",
+		"sandbox-computer-key", "sandbox-computer-scroll",
+		"sandbox-computer-drag", "sandbox-computer-screenshot",
+	}
+	for _, r := range []Role{Admin, Developer, Explorer} {
+		tools := ToolsFor(r)
+		for _, name := range want {
+			if !has(tools, name) {
+				t.Fatalf("%s must have %q", r, name)
+			}
+		}
+	}
+	if len(computerTools) != 10 {
+		t.Fatalf("computerTools has %d entries; expected 10 (workspace-extension manifest)", len(computerTools))
+	}
+}
+
 func TestNoToolsNeverEmpty(t *testing.T) {
 	for _, r := range []Role{Admin, Developer, Explorer} {
 		if len(ToolsFor(r)) == 0 {
