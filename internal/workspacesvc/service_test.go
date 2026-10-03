@@ -272,6 +272,36 @@ func TestValidateSandboxImage(t *testing.T) {
 	}
 }
 
+// TestValidateSandboxImageRegistryHost pins the sandbox-image SOURCE guard: when
+// SANDBOX_IMAGE_REGISTRY_HOST is set, a sandbox image must come from that
+// registry (artifact) — not the build/push registry (Forgejo) or a bare name.
+func TestValidateSandboxImageRegistryHost(t *testing.T) {
+	s := &Service{sandboxOrg: "sandbox", sandboxImageRegistryHost: "artifact.worker.svc.cluster.local"}
+	ok := []string{
+		"artifact.worker.svc.cluster.local/sandbox/sandbox-base:debian-trixie",
+		"artifact.worker.svc.cluster.local/sandbox/sandbox-node:debian-trixie",
+		"http://artifact.worker.svc.cluster.local/sandbox/sandbox-go",
+	}
+	for _, img := range ok {
+		if err := s.validateSandboxImage(img); err != nil {
+			t.Errorf("expected %q to be accepted, got %v", img, err)
+		}
+	}
+	bad := []string{
+		// The build/push registry (Forgejo) is NO LONGER a valid sandbox source.
+		"git.agent.svc.cluster.local/sandbox/sandbox-base:debian-trixie",
+		// A bare `<org>/<name>` (no host) could resolve to Docker Hub: refused.
+		"sandbox/sandbox-base",
+		"docker.io/library/debian:trixie",
+		"artifact.worker.svc.cluster.local/agent-toolchain/toolchain-base:debian-trixie",
+	}
+	for _, img := range bad {
+		if err := s.validateSandboxImage(img); err == nil {
+			t.Errorf("expected %q to be refused", img)
+		}
+	}
+}
+
 func TestSandboxAccessible(t *testing.T) {
 	sb := sandboxmgr.Sandbox{Name: "sb", Creator: "myuser", Session: "o:r:main"}
 	cases := []struct {

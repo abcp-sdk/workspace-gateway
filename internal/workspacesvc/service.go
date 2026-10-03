@@ -61,11 +61,17 @@ type Service struct {
 	sandboxOrg string
 	// defaultSandboxImage is used when CreateSandbox omits an image.
 	defaultSandboxImage string
-	toolchainOrg        string // default owner for ListOCIImages
-	svcToken            string // shared service token (sandbox-only service-to-service)
-	svcTenant           string // tenant the service token resolves to (sandbox ownership)
-	commits             *gitcommit.Manager
-	sandboxNS           string // namespace services/sandboxes live in (public-host inference)
+	// sandboxImageRegistryHost, when set, is the ONLY registry a sandbox image
+	// may come from (e.g. artifact.worker.svc.cluster.local). A sandbox request
+	// naming another registry is refused. Empty = no registry-host guard (only
+	// the org guard applies). Distinct from builder.RegistryHost, which is the
+	// BUILD/PUSH + catalog target (Forgejo) and must stay unchanged.
+	sandboxImageRegistryHost string
+	toolchainOrg             string // default owner for ListOCIImages
+	svcToken                 string // shared service token (sandbox-only service-to-service)
+	svcTenant                string // tenant the service token resolves to (sandbox ownership)
+	commits                  *gitcommit.Manager
+	sandboxNS                string // namespace services/sandboxes live in (public-host inference)
 	// serviceLogTail is the default number of log lines returned.
 	serviceLogTail int64
 	// publicServiceDomain, when set, forces the domain services are published
@@ -104,6 +110,10 @@ type Deps struct {
 	SandboxOrg string
 	// DefaultSandboxImage is used when CreateSandbox omits an image.
 	DefaultSandboxImage string
+	// SandboxImageRegistryHost, when set, is the ONLY registry a sandbox image
+	// may come from (artifact). Distinct from the builder's registry host (the
+	// build/push + catalog target). Empty = no registry-host guard.
+	SandboxImageRegistryHost string
 	// SandboxBootstrap, when set, is applied to every sandbox (package-source
 	// init container + config volumes). Built from SANDBOX_PACKAGE_UPSTREAM.
 	SandboxBootstrap *sandboxmgr.Bootstrap
@@ -151,9 +161,10 @@ func New(d Deps) *Service {
 		helm:     d.Helm,
 		builder:  d.Builder, runtime: d.Runtime,
 		sandboxOrg: d.SandboxOrg, defaultSandboxImage: d.DefaultSandboxImage,
-		bootstrap:    d.SandboxBootstrap,
-		toolchainOrg: d.ToolchainOrg,
-		svcToken:     d.ServiceToken, svcTenant: d.ServiceTenant,
+		sandboxImageRegistryHost: d.SandboxImageRegistryHost,
+		bootstrap:                d.SandboxBootstrap,
+		toolchainOrg:             d.ToolchainOrg,
+		svcToken:                 d.ServiceToken, svcTenant: d.ServiceTenant,
 		commits:             commits,
 		sandboxNS:           d.SandboxNamespace,
 		publicServiceDomain: d.PublicServiceDomain,
@@ -1889,14 +1900,16 @@ func (s *Service) sandboxFields(ctx context.Context, session string) (string, st
 }
 
 // validateSandboxImage enforces that a sandbox image comes from the
-// deployment's dedicated sandbox org. The image may be a full ref
-// (`<registry>/<org>/<name>:<tag>`) or a bare name; in both cases the FIRST
-// path segment after an optional registry host must equal the sandbox org. The
-// registry host is matched loosely (with or without scheme) because callers
-// may echo back either form.
+// deployment's dedicated sandbox org AND (when configured) the dedicated
+// sandbox image registry (artifact). The image may be a full ref
+// (`<registry>/<org>/<name>:<tag>`) or a bare name; the FIRST path segment after
+// an optional registry host must equal the sandbox org, and the registry host —
+// when one is given — must equal sandboxImageRegistryHost. The registry host is
+// matched loosely (with or without scheme) because callers may echo back either
+// form.
 func (s *Service) validateSandboxImage(image string) error {
-	if s.sandboxOrg == "" {
-		// Not configured: accept as-is (the deployment opted out of the guard).
+	if s.sandboxOrg == "" && s.sandboxImageRegistryHost == "" {
+		// Neither guard configured: accept as-is (the deployment opted out).
 		return nil
 	}
 	path := image
@@ -1907,7 +1920,9 @@ func (s *Service) validateSandboxImage(image string) error {
 	// localhost), then the tag/digest.
 	seg := strings.SplitN(path, "/", 2)
 	rest := path
+	gotHost := ""
 	if len(seg) == 2 && (strings.ContainsAny(seg[0], ".:") || seg[0] == "localhost") {
+		gotHost = seg[0]
 		rest = seg[1]
 	}
 	if i := strings.LastIndex(rest, "@"); i >= 0 {
@@ -1917,10 +1932,19 @@ func (s *Service) validateSandboxImage(image string) error {
 	if i := strings.LastIndex(rest, ":"); i >= 0 && !strings.Contains(rest[i:], "/") {
 		rest = rest[:i]
 	}
-	org := strings.SplitN(rest, "/", 2)[0]
-	if org != s.sandboxOrg {
+	// Registry-host guard: a sandbox image must come from the artifact registry
+	// when configured. A bare `<org>/<name>` (no host) is refused, so a sandbox
+	// can never silently pull from Docker Hub / a public mirror.
+	if s.sandboxImageRegistryHost != "" && gotHost != s.sandboxImageRegistryHost {
 		return connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("sandbox image must come from the %q org", s.sandboxOrg))
+			fmt.Errorf("sandbox image must come from the %q registry", s.sandboxImageRegistryHost))
+	}
+	if s.sandboxOrg != "" {
+		org := strings.SplitN(rest, "/", 2)[0]
+		if org != s.sandboxOrg {
+			return connect.NewError(connect.CodePermissionDenied,
+				fmt.Errorf("sandbox image must come from the %q org", s.sandboxOrg))
+		}
 	}
 	return nil
 }
