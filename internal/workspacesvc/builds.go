@@ -6,7 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -20,6 +23,8 @@ type buildState struct {
 	state    string // running | done | failed
 	imageRef string
 	log      string
+	image    string // "<org>/<image>:<tag>" (for the build list)
+	created  int64  // unix millis
 }
 
 // builds tracks background image builds by id. The map is process-local (a
@@ -51,13 +56,21 @@ func (s *Service) BuildSandboxImage(ctx context.Context, req *connect.Request[ws
 		return nil, err
 	}
 	id := newBuildID()
+	imgLabel := breq.Repo + ":" + breq.Tag
 	buildsMu.Lock()
-	builds[id] = &buildState{state: "running"}
+	builds[id] = &buildState{state: "running", image: imgLabel, created: time.Now().UnixMilli()}
 	buildsMu.Unlock()
 	// Detach from the request context so the build survives the RPC returning.
 	go func() {
 		defer cleanup()
-		res, err := s.builder.Build(context.WithoutCancel(ctx), breq)
+		res, err := s.builder.BuildStream(context.WithoutCancel(ctx), breq, func(chunk string) {
+			// Append live so GetBuildStatus can serve the log as it grows.
+			buildsMu.Lock()
+			if st := builds[id]; st != nil {
+				st.log += chunk
+			}
+			buildsMu.Unlock()
+		})
 		buildsMu.Lock()
 		defer buildsMu.Unlock()
 		st := builds[id]
@@ -65,10 +78,14 @@ func (s *Service) BuildSandboxImage(ctx context.Context, req *connect.Request[ws
 			return
 		}
 		if err != nil {
-			st.state, st.log = "failed", err.Error()
+			st.state = "failed"
+			if st.log != "" && !strings.HasSuffix(st.log, "\n") {
+				st.log += "\n"
+			}
+			st.log += err.Error()
 			return
 		}
-		st.state, st.imageRef, st.log = "done", res.ImageRef, res.Log
+		st.state, st.imageRef = "done", res
 	}()
 	return connect.NewResponse(&wsv1.BuildSandboxImageResponse{BuildId: id}), nil
 }
@@ -85,9 +102,34 @@ func (s *Service) GetBuildStatus(ctx context.Context, req *connect.Request[wsv1.
 	if st == nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("build %q not found", id))
 	}
+	// Serve only the output produced since since_offset (incremental polling).
+	since := int(req.Msg.GetSinceOffset())
+	if since < 0 || since > len(st.log) {
+		since = len(st.log)
+	}
 	return connect.NewResponse(&wsv1.GetBuildStatusResponse{
-		BuildId: id, State: st.state, ImageRef: st.imageRef, Log: st.log,
+		BuildId: id, State: st.state, ImageRef: st.imageRef,
+		Log: st.log[since:], LogOffset: int64(len(st.log)),
 	}), nil
+}
+
+// ListBuilds returns every in-memory build, newest first, for the UI's build
+// list. (Process-local, like GetBuildStatus.)
+func (s *Service) ListBuilds(ctx context.Context, req *connect.Request[wsv1.ListBuildsRequest]) (*connect.Response[wsv1.ListBuildsResponse], error) {
+	if _, err := s.sandboxAuth(ctx, req.Header()); err != nil {
+		return nil, err
+	}
+	buildsMu.Lock()
+	out := make([]*wsv1.BuildInfo, 0, len(builds))
+	for id, st := range builds {
+		out = append(out, &wsv1.BuildInfo{
+			BuildId: id, Image: st.image, State: st.state,
+			ImageRef: st.imageRef, CreatedAt: st.created,
+		})
+	}
+	buildsMu.Unlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt > out[j].CreatedAt })
+	return connect.NewResponse(&wsv1.ListBuildsResponse{Builds: out}), nil
 }
 
 // prepareBuild validates a build request and extracts the repo archive into a
