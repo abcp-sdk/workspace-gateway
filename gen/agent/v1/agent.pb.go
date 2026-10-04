@@ -38,9 +38,6 @@ type Session struct {
 	TipId            string `protobuf:"bytes,4,opt,name=tip_id,json=tipId,proto3" json:"tip_id,omitempty"`
 	MaxTurns         int32  `protobuf:"varint,5,opt,name=max_turns,json=maxTurns,proto3" json:"max_turns,omitempty"`
 	SystemPrompt     string `protobuf:"bytes,6,opt,name=system_prompt,json=systemPrompt,proto3" json:"system_prompt,omitempty"`
-	InputTokens      int32  `protobuf:"varint,7,opt,name=input_tokens,json=inputTokens,proto3" json:"input_tokens,omitempty"`
-	OutputTokens     int32  `protobuf:"varint,8,opt,name=output_tokens,json=outputTokens,proto3" json:"output_tokens,omitempty"`
-	TotalTokens      int32  `protobuf:"varint,9,opt,name=total_tokens,json=totalTokens,proto3" json:"total_tokens,omitempty"`
 	LastInputTokens  int32  `protobuf:"varint,10,opt,name=last_input_tokens,json=lastInputTokens,proto3" json:"last_input_tokens,omitempty"`
 	LastOutputTokens int32  `protobuf:"varint,11,opt,name=last_output_tokens,json=lastOutputTokens,proto3" json:"last_output_tokens,omitempty"`
 	CreatedAt        string `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
@@ -163,27 +160,6 @@ func (x *Session) GetSystemPrompt() string {
 		return x.SystemPrompt
 	}
 	return ""
-}
-
-func (x *Session) GetInputTokens() int32 {
-	if x != nil {
-		return x.InputTokens
-	}
-	return 0
-}
-
-func (x *Session) GetOutputTokens() int32 {
-	if x != nil {
-		return x.OutputTokens
-	}
-	return 0
-}
-
-func (x *Session) GetTotalTokens() int32 {
-	if x != nil {
-		return x.TotalTokens
-	}
-	return 0
 }
 
 func (x *Session) GetLastInputTokens() int32 {
@@ -6596,17 +6572,14 @@ var File_agent_v1_agent_proto protoreflect.FileDescriptor
 
 const file_agent_v1_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x14agent/v1/agent.proto\x12\bagent.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xd1\x06\n" +
+	"\x14agent/v1/agent.proto\x12\bagent.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xa3\x06\n" +
 	"\aSession\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x16\n" +
 	"\x06preset\x18\x03 \x01(\tR\x06preset\x12\x15\n" +
 	"\x06tip_id\x18\x04 \x01(\tR\x05tipId\x12\x1b\n" +
 	"\tmax_turns\x18\x05 \x01(\x05R\bmaxTurns\x12#\n" +
-	"\rsystem_prompt\x18\x06 \x01(\tR\fsystemPrompt\x12!\n" +
-	"\finput_tokens\x18\a \x01(\x05R\vinputTokens\x12#\n" +
-	"\routput_tokens\x18\b \x01(\x05R\foutputTokens\x12!\n" +
-	"\ftotal_tokens\x18\t \x01(\x05R\vtotalTokens\x12*\n" +
+	"\rsystem_prompt\x18\x06 \x01(\tR\fsystemPrompt\x12*\n" +
 	"\x11last_input_tokens\x18\n" +
 	" \x01(\x05R\x0flastInputTokens\x12,\n" +
 	"\x12last_output_tokens\x18\v \x01(\x05R\x10lastOutputTokens\x12\x1d\n" +
@@ -6630,7 +6603,8 @@ const file_agent_v1_agent_proto_rawDesc = "" +
 	"\x06status\x18\x19 \x01(\tR\x06status\x12(\n" +
 	"\x10last_turn_reason\x18\x1a \x01(\tR\x0elastTurnReason\x12 \n" +
 	"\flast_turn_at\x18\x1b \x01(\tR\n" +
-	"lastTurnAt\"\xa3\x01\n" +
+	"lastTurnAtJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"R\finput_tokensR\routput_tokensR\ftotal_tokens\"\xa3\x01\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04role\x18\x02 \x01(\tR\x04role\x12\x17\n" +
