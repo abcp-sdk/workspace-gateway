@@ -52,6 +52,7 @@ func TestCreateAppliesBootstrap(t *testing.T) {
 			Mounts: []BootstrapMount{
 				{Name: "cfg-apt", Path: "/etc/apt/sources.list.d"},
 				{Name: "cfg-m2", Path: "/root/.m2", Writable: true},
+				{Name: "f-gemrc", Path: "/root/.gemrc", File: true},
 			},
 		},
 	})
@@ -66,7 +67,7 @@ func TestCreateAppliesBootstrap(t *testing.T) {
 		t.Fatalf("init containers = %d, want 1", len(pod.Spec.InitContainers))
 	}
 	ic := pod.Spec.InitContainers[0]
-	if ic.Image != "alpine:3.24" || len(ic.VolumeMounts) != 2 {
+	if ic.Image != "alpine:3.24" || len(ic.VolumeMounts) != 3 {
 		t.Fatalf("init container = %+v", ic)
 	}
 	// The init container must NOT receive the worker's bearer token.
@@ -84,9 +85,11 @@ func TestCreateAppliesBootstrap(t *testing.T) {
 		t.Fatalf("missing emptyDir volumes: %v", vols)
 	}
 	ro := map[string]bool{}
+	sub := map[string]string{}
 	for _, m := range pod.Spec.Containers[0].VolumeMounts {
-		if m.Name == "cfg-apt" || m.Name == "cfg-m2" {
+		if m.Name == "cfg-apt" || m.Name == "cfg-m2" || m.Name == "f-gemrc" {
 			ro[m.Name] = m.ReadOnly
+			sub[m.Name] = m.SubPath
 		}
 	}
 	if !ro["cfg-apt"] {
@@ -94,6 +97,10 @@ func TestCreateAppliesBootstrap(t *testing.T) {
 	}
 	if ro["cfg-m2"] {
 		t.Error("cfg-m2 must be read-WRITE (Maven repo root)")
+	}
+	// A FILE mount uses subPath (its parent dir must NOT be overlaid).
+	if sub["f-gemrc"] != "cfg" || !ro["f-gemrc"] {
+		t.Errorf("f-gemrc must be a read-only subPath mount, got subPath=%q ro=%v", sub["f-gemrc"], ro["f-gemrc"])
 	}
 }
 
