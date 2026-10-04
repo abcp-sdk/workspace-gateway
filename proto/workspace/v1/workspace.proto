@@ -627,6 +627,23 @@ message BuildSandboxImageRequest {
 message BuildSandboxImageResponse {
   string image_ref = 1;
   string log = 2;
+  // build_id identifies this build for GetBuildStatus polling. When non-empty,
+  // the RPC returned IMMEDIATELY (the build runs in the background) and
+  // image_ref/log are empty — poll GetBuildStatus(build_id) for the result.
+  string build_id = 3;
+}
+
+// GetBuildStatus returns the state of a background image build started by
+// BuildSandboxImage.
+message GetBuildStatusRequest {
+  string build_id = 1;
+}
+message GetBuildStatusResponse {
+  string build_id = 1;
+  // state: running | done | failed.
+  string state = 2;
+  string image_ref = 3;
+  string log = 4;
 }
 
 // ImportImage mirrors an upstream image (public or, with credentials, private)
@@ -1481,6 +1498,9 @@ service BranchSessionService {
   // OCI images
   rpc ListOCIImages(ListOCIImagesRequest) returns (ListOCIImagesResponse);
   rpc BuildSandboxImage(BuildSandboxImageRequest) returns (BuildSandboxImageResponse);
+  // GetBuildStatus polls a background image build (BuildSandboxImage returns a
+  // build_id immediately; poll this for its state/image_ref/log).
+  rpc GetBuildStatus(GetBuildStatusRequest) returns (GetBuildStatusResponse);
   rpc ImportImage(ImportImageRequest) returns (ImportImageResponse);
   // sandboxes
   rpc ListSandboxes(ListSandboxesRequest) returns (ListSandboxesResponse);
