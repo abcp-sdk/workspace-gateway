@@ -37,49 +37,36 @@ const MainBranch = "main"
 func PresetFor(r Role) string { return string(r) }
 
 // ---- tool whitelists ----
-
-// ---- tool id qualification ----
 //
-// A preset whitelist / DISABLED_TOOLS entry addresses a tool by its STABLE
-// qualified id `<extId>-<name>` (both parts sanitized to [A-Za-z0-9_-]; see
-// abc-protocol/agent's `toolQualifiedName`). It is ALWAYS qualified — never the
-// bare name — so the key never changes when another extension adds a same-named
-// tool. The prefixes below are the extension ids deployed for a workspace
-// tenant: the workspace extension, the bundled extension and the playwright
-// browser extension.
-const (
-	extBundled    = "bundled-"
-	extWorkspace  = "workspace-"
-	extPlaywright = "playwright-"
-)
+// Entries are the tool's OWN name (self-namespaced by its first segment:
+// `repo-*`, `sandbox-*`, `browser-*`, ...), matching the agent's AI/LLM tool
+// key. The agent derives that key from the tool name via `toolQualifiedName`
+// (see abc-protocol/agent): the name is used as-is, with only out-of-charset
+// characters sanitized to `-` (the LLM gateway's `tools.N.function.name`
+// charset is `[A-Za-z0-9_-]`, so the bundled `model.image` becomes
+// `model-image`). An `extId-` prefix is deliberately NOT used.
 
-// General tools every role keeps (memory / web / history / vision). These are
-// the bundled extension's tools.
+// General tools every role keeps (memory / web / history / vision).
 var generalTools = []string{
-	extBundled + "todo-write",
-	extBundled + "time-wait",
-	extBundled + "history-search",
-	extBundled + "history-range",
-	extBundled + "web-fetch",
-	extBundled + "brave-search",
-	extBundled + "file-info",
-	extBundled + "image-read",
+	"todo-write",
+	"time-wait",
+	"history-search",
+	"history-range",
+	"web-fetch",
+	"brave-search",
+	"file-info",
+	"image-read",
 }
 
-// Sandbox lifecycle + execution tools (the workspace extension).
+// Sandbox lifecycle + execution tools.
 var sandboxBase = []string{
-	extWorkspace + "sandbox-create", extWorkspace + "sandbox-list",
-	extWorkspace + "sandbox-status", extWorkspace + "sandbox-delete",
-	extWorkspace + "list-oci-images",
-	extWorkspace + "sandbox-info", extWorkspace + "sandbox-exec",
-	extWorkspace + "sandbox-job-start", extWorkspace + "sandbox-job-output",
-	extWorkspace + "sandbox-job-wait",
-	extWorkspace + "sandbox-job-kill", extWorkspace + "sandbox-job-stdin",
-	extWorkspace + "sandbox-job-list",
-	extWorkspace + "sandbox-file-read", extWorkspace + "sandbox-file-patch",
-	extWorkspace + "sandbox-file-ls",
-	extWorkspace + "sandbox-file-download", extWorkspace + "sandbox-file-upload",
-	extWorkspace + "sandbox-checkout",
+	"sandbox-create", "sandbox-list", "sandbox-status", "sandbox-delete",
+	"list-oci-images",
+	"sandbox-info", "sandbox-exec",
+	"sandbox-job-start", "sandbox-job-output", "sandbox-job-wait",
+	"sandbox-job-kill", "sandbox-job-stdin", "sandbox-job-list",
+	"sandbox-file-read", "sandbox-file-patch", "sandbox-file-ls",
+	"sandbox-file-download", "sandbox-file-upload", "sandbox-checkout",
 }
 
 // Browser-automation tools (the playwright extension, deployed for every
@@ -90,23 +77,19 @@ var sandboxBase = []string{
 // sandbox gets them; without this whitelist the extension's tools are
 // discovered but filtered out, leaving the model with no browser access.
 var browserTools = []string{
-	extPlaywright + "browser-create-context", extPlaywright + "browser-close-context",
-	extPlaywright + "browser-navigate", extPlaywright + "browser-navigate-back",
-	extPlaywright + "browser-snapshot", extPlaywright + "browser-find",
-	extPlaywright + "browser-wait-for", extPlaywright + "browser-resize",
-	extPlaywright + "browser-tabs",
-	extPlaywright + "browser-click", extPlaywright + "browser-type",
-	extPlaywright + "browser-hover",
-	extPlaywright + "browser-select-option", extPlaywright + "browser-press-key",
-	extPlaywright + "browser-drag",
-	extPlaywright + "browser-fill-form", extPlaywright + "browser-handle-dialog",
-	extPlaywright + "browser-evaluate",
-	extPlaywright + "browser-run-code-unsafe",
-	extPlaywright + "browser-console-messages", extPlaywright + "browser-network-requests",
-	extPlaywright + "browser-network-request",
-	extPlaywright + "browser-take-screenshot", extPlaywright + "browser-pdf-save",
-	extPlaywright + "browser-file-upload", extPlaywright + "browser-drop",
-	extPlaywright + "browser-storage-state", extPlaywright + "browser-set-storage-state",
+	"browser-create-context", "browser-close-context",
+	"browser-navigate", "browser-navigate-back",
+	"browser-snapshot", "browser-find", "browser-wait-for", "browser-resize",
+	"browser-tabs",
+	"browser-click", "browser-type", "browser-hover",
+	"browser-select-option", "browser-press-key", "browser-drag",
+	"browser-fill-form", "browser-handle-dialog", "browser-evaluate",
+	"browser-run-code-unsafe",
+	"browser-console-messages", "browser-network-requests",
+	"browser-network-request",
+	"browser-take-screenshot", "browser-pdf-save",
+	"browser-file-upload", "browser-drop",
+	"browser-storage-state", "browser-set-storage-state",
 }
 
 // Computer-use (GUI) tools (the workspace extension's `sandbox-computer-*`
@@ -117,19 +100,17 @@ var browserTools = []string{
 // whitelist the extension's tools are discovered but filtered out, leaving the
 // model with no GUI access.
 var computerTools = []string{
-	extWorkspace + "sandbox-computer-apps", extWorkspace + "sandbox-computer-snapshot",
-	extWorkspace + "sandbox-computer-find", extWorkspace + "sandbox-computer-action",
-	extWorkspace + "sandbox-computer-click", extWorkspace + "sandbox-computer-type",
-	extWorkspace + "sandbox-computer-key", extWorkspace + "sandbox-computer-scroll",
-	extWorkspace + "sandbox-computer-drag", extWorkspace + "sandbox-computer-screenshot",
+	"sandbox-computer-apps", "sandbox-computer-snapshot",
+	"sandbox-computer-find", "sandbox-computer-action",
+	"sandbox-computer-click", "sandbox-computer-type",
+	"sandbox-computer-key", "sandbox-computer-scroll",
+	"sandbox-computer-drag", "sandbox-computer-screenshot",
 }
 
-// Repo read-only browse tools (the workspace extension).
+// Repo read-only browse tools.
 var repoReadTools = []string{
-	extWorkspace + "repo-explore", extWorkspace + "repo-file-read",
-	extWorkspace + "repo-file-list", extWorkspace + "repo-log",
-	extWorkspace + "repo-show",
-	extWorkspace + "repo-diff", extWorkspace + "repo-branches", extWorkspace + "repo-tags",
+	"repo-explore", "repo-file-read", "repo-file-list", "repo-log", "repo-show",
+	"repo-diff", "repo-branches", "repo-tags",
 }
 
 // Repo propose + review tools. Every branch session has the SAME set:
@@ -141,40 +122,29 @@ var repoReadTools = []string{
 // commit, no sandbox-port) and NO tool that creates a branch.
 var repoDevTools = []string{
 	// MR lifecycle (the only content path is sandbox-submit-mr)
-	extWorkspace + "sandbox-submit-mr", extWorkspace + "repo-mr-list",
-	extWorkspace + "repo-mr-comment", extWorkspace + "repo-mr-merge",
-	extWorkspace + "repo-mr-close",
+	"sandbox-submit-mr", "repo-mr-list", "repo-mr-comment", "repo-mr-merge", "repo-mr-close",
 	// peer messaging between branch sessions
-	extWorkspace + "repo-mail-send",
+	"repo-mail-send",
 	// releases / images / services
-	extWorkspace + "repo-tag-create", extWorkspace + "repo-build-image",
-	extWorkspace + "repo-build-status",
-	extWorkspace + "service-deploy", extWorkspace + "service-list",
-	extWorkspace + "service-delete", extWorkspace + "service-logs",
-	extWorkspace + "service-promote", extWorkspace + "service-rollback",
-	extWorkspace + "helm-deploy", extWorkspace + "helm-list",
-	extWorkspace + "helm-history", extWorkspace + "helm-rollback",
-	extWorkspace + "helm-uninstall",
-	extWorkspace + "helm-promote", extWorkspace + "helm-rollback-release",
+	"repo-tag-create", "repo-build-image", "repo-build-status",
+	"service-deploy", "service-list", "service-delete", "service-logs",
+	"service-promote", "service-rollback",
+	"helm-deploy", "helm-list", "helm-history", "helm-rollback", "helm-uninstall",
+	"helm-promote", "helm-rollback-release",
 }
 
 // Admin tools: create org/repo, import repos AND images, configure push
 // mirrors, deploy services, and browse the image catalog (an admin has no
 // sandbox but manages the tenant's shared resources).
 var adminTools = []string{
-	extWorkspace + "repo-create-org", extWorkspace + "repo-create-repo",
-	extWorkspace + "repo-import", extWorkspace + "repo-remove",
-	extWorkspace + "repo-set-push-mirror", extWorkspace + "repo-list-push-mirrors",
-	extWorkspace + "repo-delete-push-mirror",
-	extWorkspace + "oci-import",
-	extWorkspace + "service-deploy", extWorkspace + "service-list",
-	extWorkspace + "service-delete", extWorkspace + "service-logs",
-	extWorkspace + "service-promote", extWorkspace + "service-rollback",
-	extWorkspace + "pvc-create", extWorkspace + "pvc-list", extWorkspace + "pvc-delete",
-	extWorkspace + "helm-deploy", extWorkspace + "helm-list",
-	extWorkspace + "helm-history", extWorkspace + "helm-rollback",
-	extWorkspace + "helm-uninstall",
-	extWorkspace + "helm-promote", extWorkspace + "helm-rollback-release",
+	"repo-create-org", "repo-create-repo", "repo-import", "repo-remove",
+	"repo-set-push-mirror", "repo-list-push-mirrors", "repo-delete-push-mirror",
+	"oci-import",
+	"service-deploy", "service-list", "service-delete", "service-logs",
+	"service-promote", "service-rollback",
+	"pvc-create", "pvc-list", "pvc-delete",
+	"helm-deploy", "helm-list", "helm-history", "helm-rollback", "helm-uninstall",
+	"helm-promote", "helm-rollback-release",
 }
 
 // ToolsFor returns a role's preset whitelist. The agent treats an EMPTY
@@ -190,12 +160,12 @@ func ToolsFor(r Role) []string {
 		// The single repo-bound role: sandbox-only edits, submit/merge/close
 		// MRs (merge/close only when base == its own branch), releases, images,
 		// services. NOT sandbox-port and NOT any direct branch write.
-		return concat(generalTools, repoReadTools, repoDevTools, sandboxBase, browserTools, computerTools, []string{extWorkspace + "pvc-list"})
+		return concat(generalTools, repoReadTools, repoDevTools, sandboxBase, browserTools, computerTools, []string{"pvc-list"})
 	case Explorer:
 		// Read every visible repo; may run a sandbox for analysis, but has NO
 		// tool that writes back to a repo (no sandbox-port, no submit-mr). May
 		// read services + their logs (observability only).
-		return concat(generalTools, repoReadTools, sandboxBase, browserTools, computerTools, []string{extWorkspace + "service-list", extWorkspace + "service-logs", extWorkspace + "pvc-list"})
+		return concat(generalTools, repoReadTools, sandboxBase, browserTools, computerTools, []string{"service-list", "service-logs", "pvc-list"})
 	}
 	return concat(generalTools, repoReadTools)
 }
