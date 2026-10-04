@@ -22,6 +22,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/abcp-sdk/abc-protocol-go/v2/bus"
 	agentv1 "github.com/abcp-sdk/workspace-gateway/gen/agent/v1"
 	"github.com/abcp-sdk/workspace-gateway/gen/agent/v1/agentv1connect"
 	wsv1 "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1"
@@ -88,6 +89,9 @@ type Service struct {
 	bootstrap *sandboxmgr.Bootstrap
 	// hub fans out a single k8s-change signal to WatchWorkspace subscribers.
 	hub *workspaceHub
+	// bus publishes a mailbox `trigger` to wake a session's turn (the
+	// MR-submitted notification). Nil disables it (best-effort).
+	bus bus.Bus
 }
 
 // Deps configures the service.
@@ -139,6 +143,9 @@ type Deps struct {
 	PVCStorageClass string
 	// PVCDefaultSize is used when CreatePVC omits a size (e.g. "1Gi").
 	PVCDefaultSize string
+	// Bus publishes mailbox triggers (e.g. the MR-submitted notification). Nil
+	// disables the notification; it is best-effort and never fails the RPC.
+	Bus bus.Bus
 }
 
 // New builds the service.
@@ -172,6 +179,7 @@ func New(d Deps) *Service {
 		pvcStorageClass:     d.PVCStorageClass,
 		pvcDefaultSize:      d.PVCDefaultSize,
 		hub:                 newWorkspaceHub(sources...),
+		bus:                 d.Bus,
 	}
 }
 
@@ -1578,6 +1586,9 @@ func (s *Service) SubmitMR(ctx context.Context, req *connect.Request[wsv1.Submit
 	if err := s.members.AddMRSubmission(s.tenantOf(ctx, req.Header()), m.GetOrg(), m.GetRepo(), index, base, head, origin); err != nil {
 		log.Printf("warn: record MR submission %s/%s#%d: %v", m.GetOrg(), m.GetRepo(), index, err)
 	}
+	// Wake the TARGET branch's session so the reviewer learns about the MR
+	// (best-effort; mirrors the extension's repo-mr-create notification).
+	s.notifyMRSubmitted(ctx, req.Header(), s.tenantOf(ctx, req.Header()), m.GetOrg(), m.GetRepo(), base, index, title, url)
 	return connect.NewResponse(&wsv1.SubmitMRResponse{Index: index, Url: url, Head: head}), nil
 }
 
