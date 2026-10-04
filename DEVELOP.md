@@ -40,6 +40,25 @@ go mod download all
 `GOTOOLCHAIN=local` matters: `go.mod` targets go 1.26 and a toolchain switch would
 try (and fail) to fetch another toolchain.
 
+## Registry vs. git host (artifact vs. Forgejo)
+
+The workspace deployment sources **images, builds AND the OCI catalog from ONE
+registry — artifact** — while **Forgejo stays the git host** (`FORGEJO_URL`).
+Concretely, when `IMAGE_REGISTRY_HOST` points at artifact:
+
+* **Sandbox image source**: `SANDBOX_IMAGE_REGISTRY_HOST` (artifact).
+* **Build/push target** (`internal/imagebuild`, `buildctl ... push=true`):
+  `IMAGE_REGISTRY_HOST`.
+* **OCI catalog** (`ListOCIImages`): the standard **registry v2 API**
+  (`internal/registry`: `/v2/_catalog` + `/v2/<name>/tags/list`), NOT the Forgejo
+  `/packages` API (still used as a fallback when no registry client is set).
+
+So a registry migration is a **chart/env change** — no image rebuild:
+`infra.registry.host → artifact...` + the build push credentials. Forgejo is
+then used ONLY for git (clone/commit/MR/tags/releases/raw/tree), which is the
+intended split. `ListContainerPackages` (`internal/forgejo`) remains for the
+legacy fallback path.
+
 ## Helm release state
 
 `internal/helmmgr` stores release state as **one ConfigMap per revision** plus a

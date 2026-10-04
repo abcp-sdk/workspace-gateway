@@ -31,6 +31,7 @@ import (
 	"github.com/abcp-sdk/workspace-gateway/internal/imagebuild"
 	"github.com/abcp-sdk/workspace-gateway/internal/members"
 	"github.com/abcp-sdk/workspace-gateway/internal/provision"
+	"github.com/abcp-sdk/workspace-gateway/internal/registry"
 	"github.com/abcp-sdk/workspace-gateway/internal/runtimeprofiles"
 	"github.com/abcp-sdk/workspace-gateway/internal/sandboxbootstrap"
 	"github.com/abcp-sdk/workspace-gateway/internal/sandboxmgr"
@@ -169,6 +170,23 @@ func main() {
 		log.Printf("warn: ensure toolchain org %q: %v", toolchainOrg, err)
 	}
 
+	builder := &imagebuild.Builder{
+		Addr:           envOr("BUILDKIT_ADDR", "tcp://buildkitd.agent.svc.cluster.local:1234"),
+		RegistryHost:   registryHost,
+		RegistryScheme: registryScheme,
+		RegistryUser:   os.Getenv("FORGEJO_USER"),
+		RegistryPass:   os.Getenv("FORGEJO_PASSWORD"),
+	}
+	// The OCI catalog is served by the standard registry v2 API (artifact), NOT
+	// Forgejo. Creds fall back to the mounted Docker config for that host.
+	regUser, regPass := os.Getenv("REGISTRY_USER"), os.Getenv("REGISTRY_PASSWORD")
+	if regUser == "" && regPass == "" {
+		if u, p, ok := builder.AuthFor(registryHost); ok {
+			regUser, regPass = u, p
+		}
+	}
+	reg := &registry.Client{Host: registryHost, Scheme: registryScheme, User: regUser, Pass: regPass}
+
 	ac := agentclient.New(agentclient.Config{
 		URL:          agentURL,
 		ServiceToken: os.Getenv("GATEWAY_SERVICE_TOKEN"),
@@ -194,19 +212,14 @@ func main() {
 		}
 	}
 	svc := workspacesvc.New(workspacesvc.Deps{
-		Agent:    ac.Raw(),
-		Members:  store,
-		Forgejo:  git,
-		Sandbox:  sbx,
-		Services: services,
-		Helm:     helm,
-		Builder: &imagebuild.Builder{
-			Addr:           envOr("BUILDKIT_ADDR", "tcp://buildkitd.agent.svc.cluster.local:1234"),
-			RegistryHost:   registryHost,
-			RegistryScheme: registryScheme,
-			RegistryUser:   os.Getenv("FORGEJO_USER"),
-			RegistryPass:   os.Getenv("FORGEJO_PASSWORD"),
-		},
+		Agent:                    ac.Raw(),
+		Members:                  store,
+		Forgejo:                  git,
+		Sandbox:                  sbx,
+		Services:                 services,
+		Helm:                     helm,
+		Builder:                  builder,
+		Registry:                 reg,
 		Runtime:                  runtime,
 		SandboxBootstrap:         sandboxBootstrap,
 		SandboxOrg:               sandboxOrg,

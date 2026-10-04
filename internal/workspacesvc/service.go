@@ -34,6 +34,7 @@ import (
 	"github.com/abcp-sdk/workspace-gateway/internal/imagebuild"
 	"github.com/abcp-sdk/workspace-gateway/internal/k8swatch"
 	"github.com/abcp-sdk/workspace-gateway/internal/members"
+	"github.com/abcp-sdk/workspace-gateway/internal/registry"
 	"github.com/abcp-sdk/workspace-gateway/internal/roles"
 	"github.com/abcp-sdk/workspace-gateway/internal/runtimeprofiles"
 	"github.com/abcp-sdk/workspace-gateway/internal/sandboxmgr"
@@ -55,6 +56,9 @@ type Service struct {
 	services *servicesmgr.Client
 	helm     *helmmgr.Client
 	builder  *imagebuild.Builder
+	// registry is the OCI catalog client (standard registry v2 API). Nil falls
+	// back to the Forgejo packages API (legacy).
+	registry *registry.Client
 	runtime  runtimeprofiles.Settings
 	// sandboxOrg is the ONLY registry org a sandbox image may come from. The
 	// deployment pre-imports worker-bundled images there (see sandbox-images/),
@@ -107,6 +111,9 @@ type Deps struct {
 	Helm *helmmgr.Client
 	// Builder builds/derives images (repo Dockerfile / base image -> registry).
 	Builder *imagebuild.Builder
+	// Registry is the OCI catalog client (standard registry v2 API, e.g.
+	// artifact). When set, ListOCIImages browses it instead of Forgejo.
+	Registry *registry.Client
 	// Runtime holds the deployment's runtime knobs (KVM/GPU devices).
 	Runtime runtimeprofiles.Settings
 	// SandboxOrg is the registry org sandbox images MUST come from. A sandbox
@@ -167,6 +174,7 @@ func New(d Deps) *Service {
 		services: d.Services,
 		helm:     d.Helm,
 		builder:  d.Builder, runtime: d.Runtime,
+		registry:   d.Registry,
 		sandboxOrg: d.SandboxOrg, defaultSandboxImage: d.DefaultSandboxImage,
 		sandboxImageRegistryHost: d.SandboxImageRegistryHost,
 		bootstrap:                d.SandboxBootstrap,
@@ -3520,13 +3528,31 @@ func (s *Service) ListOCIImages(ctx context.Context, req *connect.Request[wsv1.L
 		}
 	}
 	name := req.Msg.GetName()
-	pkgs, err := s.git.ListContainerPackages(ctx, owner, name)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
 	host := ""
 	if s.builder != nil {
 		host = s.builder.RegistryHost
+	}
+	// Prefer the standard registry v2 API (artifact) so the whole deployment
+	// sources images, builds and the catalog from ONE registry; Forgejo stays
+	// the git host. Fall back to the Forgejo packages API only when no registry
+	// client is configured (legacy).
+	if s.registry != nil {
+		imgs, err := s.registry.ListImages(ctx, owner, name)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		out := make([]*wsv1.OCIImage, 0, len(imgs))
+		for _, im := range imgs {
+			out = append(out, &wsv1.OCIImage{
+				Owner: im.Owner, Name: im.Name, Tag: im.Tag,
+				Ref: host + "/" + im.Owner + "/" + im.Name + ":" + im.Tag,
+			})
+		}
+		return connect.NewResponse(&wsv1.ListOCIImagesResponse{Images: out}), nil
+	}
+	pkgs, err := s.git.ListContainerPackages(ctx, owner, name)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	out := make([]*wsv1.OCIImage, 0, len(pkgs))
 	for _, p := range pkgs {
