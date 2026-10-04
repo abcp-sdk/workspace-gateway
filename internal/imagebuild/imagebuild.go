@@ -249,6 +249,12 @@ func (b *Builder) Import(ctx context.Context, req ImportRequest) (Result, error)
 // Docker config (DOCKER_CONFIG/config.json), which the gateway mounts. It lets
 // ImageExists authenticate against the in-cluster registry without a separate
 // credential env.
+// AuthFor exposes the mounted Docker-config credentials for a registry host,
+// so other registry clients (the OCI catalog client) reuse the same secret.
+func (b *Builder) AuthFor(host string) (user, pass string, ok bool) {
+	return b.dockerConfigAuth(host)
+}
+
 func (b *Builder) dockerConfigAuth(host string) (user, pass string, ok bool) {
 	dir := os.Getenv("DOCKER_CONFIG")
 	if dir == "" {
