@@ -96,8 +96,11 @@ printf '<settings><mirrors><mirror><id>artifact</id><mirrorOf>*</mirrorOf><url>%
 # (artifact maven targets share one cache; Gradle fixes a JAR to the repo that
 # served its POM with no fallback). Covers google + gradle plugin portal +
 # clojars + jitpack + spring, both in allprojects and pluginManagement.
+# The named targets (maven.google, …) were REMOVED in artifact #40 — the
+# supported form is the generic maven/_upstream/<host>/ route (host-only;
+# artifact appends the base path). Central stays maven/ and goes LAST.
 mkdir -p "$H/.gradle"
-REPOS='maven{url "'"$A"'/artifacts/maven.google/"; allowInsecureProtocol = true};maven{url "'"$A"'/artifacts/maven.gradle/"; allowInsecureProtocol = true};maven{url "'"$A"'/artifacts/maven.clojars/"; allowInsecureProtocol = true};maven{url "'"$A"'/artifacts/maven.jitpack/"; allowInsecureProtocol = true};maven{url "'"$A"'/artifacts/maven.spring/"; allowInsecureProtocol = true};maven{url "'"$A"'/artifacts/maven/"; allowInsecureProtocol = true}'
+REPOS='maven{url "'"$A"'/artifacts/maven/_upstream/dl.google.com/"; allowInsecureProtocol = true};maven{url "'"$A"'/artifacts/maven/_upstream/plugins.gradle.org/"; allowInsecureProtocol = true};maven{url "'"$A"'/artifacts/maven/_upstream/repo.clojars.org/"; allowInsecureProtocol = true};maven{url "'"$A"'/artifacts/maven/_upstream/jitpack.io/"; allowInsecureProtocol = true};maven{url "'"$A"'/artifacts/maven/_upstream/repo.spring.io/"; allowInsecureProtocol = true};maven{url "'"$A"'/artifacts/maven/"; allowInsecureProtocol = true}'
 printf 'allprojects{repositories{clear();%%s}}\nsettingsEvaluated{s->s.pluginManagement{repositories{clear();%%s}}}' "$REPOS" "$REPOS" > "$H/.gradle/init.gradle"
 # --- pip
 mkdir -p "$H/.config/pip"
