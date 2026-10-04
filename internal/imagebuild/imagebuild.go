@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -78,15 +79,15 @@ func (b *Builder) scheme() string {
 	return "https"
 }
 
-// Build runs buildctl and pushes the image. It returns the destination ref and
-// the captured build log.
-func (b *Builder) Build(ctx context.Context, req Request) (Result, error) {
+// buildArgs builds the buildctl argv + the destination ref for a request,
+// validating the context/dockerfile. Shared by Build and BuildStream.
+func (b *Builder) buildArgs(req Request) (ref string, args []string, err error) {
 	if req.Repo == "" || req.Tag == "" {
-		return Result{}, errors.New("repo and tag required")
+		return "", nil, errors.New("repo and tag required")
 	}
 	ctxDir := filepath.Join(req.ContextDir, filepath.FromSlash(strings.Trim(req.Context, "/")))
 	if fi, err := os.Stat(ctxDir); err != nil || !fi.IsDir() {
-		return Result{}, fmt.Errorf("build context %q not found in repository", req.Context)
+		return "", nil, fmt.Errorf("build context %q not found in repository", req.Context)
 	}
 	dockerfile := req.Dockerfile
 	if dockerfile == "" {
@@ -97,11 +98,11 @@ func (b *Builder) Build(ctx context.Context, req Request) (Result, error) {
 	dockerfileDir := filepath.Dir(filepath.FromSlash(strings.Trim(dockerfile, "/")))
 	filename := filepath.Base(filepath.FromSlash(dockerfile))
 	if _, err := os.Stat(filepath.Join(req.ContextDir, filepath.FromSlash(dockerfile))); err != nil {
-		return Result{}, fmt.Errorf("dockerfile %q not found in repository", dockerfile)
+		return "", nil, fmt.Errorf("dockerfile %q not found in repository", dockerfile)
 	}
 
-	ref := b.FullRef(req.Repo, req.Tag)
-	args := []string{
+	ref = b.FullRef(req.Repo, req.Tag)
+	args = []string{
 		"--frontend", "dockerfile.v0",
 		"--local", "context=" + ctxDir,
 		"--local", "dockerfile=" + filepath.Join(req.ContextDir, dockerfileDir),
@@ -111,11 +112,73 @@ func (b *Builder) Build(ctx context.Context, req Request) (Result, error) {
 		args = append(args, "--opt", "build-arg:"+k+"="+v)
 	}
 	args = append(args, "--output", "type=image,name="+ref+",push=true")
+	return ref, args, nil
+}
+
+// Build runs buildctl and pushes the image. It returns the destination ref and
+// the captured build log.
+func (b *Builder) Build(ctx context.Context, req Request) (Result, error) {
+	ref, args, err := b.buildArgs(req)
+	if err != nil {
+		return Result{}, err
+	}
 	log, err := b.run(ctx, args)
 	if err != nil {
 		return Result{}, err
 	}
 	return Result{ImageRef: ref, Log: log}, nil
+}
+
+// BuildStream runs the build and streams newly-produced output to `emit` as it
+// is produced. It blocks until the build finishes; the returned error (if any)
+// is the build failure. `emit` receives the raw chunk (stdout+stderr merged).
+func (b *Builder) BuildStream(ctx context.Context, req Request, emit func(chunk string)) (string, error) {
+	ref, args, err := b.buildArgs(req)
+	if err != nil {
+		return "", err
+	}
+	buildctl := b.Buildctl
+	if buildctl == "" {
+		buildctl = "buildctl"
+	}
+	addr := b.Addr
+	if addr == "" {
+		addr = "tcp://buildkitd.agent.svc.cluster.local:1234"
+	}
+	full := append([]string{"--addr", addr, "build"}, args...)
+	timeout := b.Timeout
+	if timeout <= 0 {
+		timeout = 30 * time.Minute
+	}
+	bctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	pr, pw := io.Pipe()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		buf := make([]byte, 4096)
+		for {
+			n, rerr := pr.Read(buf)
+			if n > 0 {
+				emit(string(buf[:n]))
+			}
+			if rerr != nil {
+				return
+			}
+		}
+	}()
+	cmd := exec.CommandContext(bctx, buildctl, full...)
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+	rerr := cmd.Run()
+	_ = pw.Close()
+	wg.Wait()
+	if rerr != nil {
+		return ref, fmt.Errorf("buildctl failed: %w", rerr)
+	}
+	return ref, nil
 }
 
 // ImportRequest mirrors one upstream image into the deployment registry.

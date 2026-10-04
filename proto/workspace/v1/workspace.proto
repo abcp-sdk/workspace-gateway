@@ -637,13 +637,32 @@ message BuildSandboxImageResponse {
 // BuildSandboxImage.
 message GetBuildStatusRequest {
   string build_id = 1;
+  // Return only build output produced AFTER this byte offset (0 = from the
+  // start). Use the previous response's log_offset for incremental polling.
+  int64 since_offset = 2;
 }
 message GetBuildStatusResponse {
   string build_id = 1;
   // state: running | done | failed.
   string state = 2;
   string image_ref = 3;
+  // log is the output produced since the request's since_offset.
   string log = 4;
+  // log_offset is the total output length after this response; pass it as the
+  // next request's since_offset.
+  int64 log_offset = 5;
+}
+
+// ListBuilds returns every image build this gateway has started (in-memory,
+// newest first) so a UI can list build jobs and their status.
+message ListBuildsRequest {}
+message ListBuildsResponse { repeated BuildInfo builds = 1; }
+message BuildInfo {
+  string build_id = 1;
+  string image = 2;     // "<org>/<image>:<tag>"
+  string state = 3;     // running | done | failed
+  string image_ref = 4;
+  int64 created_at = 5; // unix millis
 }
 
 // ImportImage mirrors an upstream image (public or, with credentials, private)
@@ -1501,6 +1520,7 @@ service BranchSessionService {
   // GetBuildStatus polls a background image build (BuildSandboxImage returns a
   // build_id immediately; poll this for its state/image_ref/log).
   rpc GetBuildStatus(GetBuildStatusRequest) returns (GetBuildStatusResponse);
+  rpc ListBuilds(ListBuildsRequest) returns (ListBuildsResponse);
   rpc ImportImage(ImportImageRequest) returns (ImportImageResponse);
   // sandboxes
   rpc ListSandboxes(ListSandboxesRequest) returns (ListSandboxesResponse);
