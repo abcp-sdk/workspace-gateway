@@ -20,9 +20,12 @@ message Session {
   string tip_id = 4;
   int32 max_turns = 5;
   string system_prompt = 6;
-  int32 input_tokens = 7;
-  int32 output_tokens = 8;
-  int32 total_tokens = 9;
+  // Fields 7/8/9 were CUMULATIVE token counters (input/output/total). A
+  // long-lived session's cumulative input exceeds int32 and overflowed; they
+  // are no longer recorded. Use the SINGLE-STEP counters below instead (a
+  // client that wants a "total" adds last_input_tokens + last_output_tokens).
+  reserved 7, 8, 9;
+  reserved "input_tokens", "output_tokens", "total_tokens";
   int32 last_input_tokens = 10;
   int32 last_output_tokens = 11;
   string created_at = 12;
