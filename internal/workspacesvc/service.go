@@ -3530,57 +3530,6 @@ func (s *Service) ListOCIImages(ctx context.Context, req *connect.Request[wsv1.L
 // BuildSandboxImage builds an image from a repository Dockerfile (context = a
 // repo subdirectory) and pushes it under the deployment registry. The result
 // is NOT auto-registered in the catalog (the catalog is deployment-curated).
-func (s *Service) BuildSandboxImage(ctx context.Context, req *connect.Request[wsv1.BuildSandboxImageRequest]) (*connect.Response[wsv1.BuildSandboxImageResponse], error) {
-	if _, err := s.sandboxAuth(ctx, req.Header()); err != nil {
-		return nil, err
-	}
-	m := req.Msg
-	org, repo, ref := m.GetOrg(), m.GetRepo(), m.GetRef()
-	if !roles.ValidComponent(org) || !roles.ValidComponent(repo) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org/repo must be simple names"))
-	}
-	if ref == "" {
-		ref = roles.MainBranch
-	}
-	if !roles.ValidComponent(ref) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("ref must be a simple name"))
-	}
-	if !imageNameRe.MatchString(m.GetImage()) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("image must be a single simple name"))
-	}
-	if !roles.ValidComponent(m.GetTag()) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("tag must be a simple name"))
-	}
-	if s.builder == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("image builder not configured"))
-	}
-
-	archive, err := s.git.ArchiveTarGz(ctx, org, repo, ref)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("fetch repo archive: %w", err))
-	}
-	dir, cleanup, err := imagebuild.Extract(archive, 0)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	defer cleanup()
-
-	// The image is pushed under the SOURCE REPO's org namespace
-	// (<registry>/<org>/<image>:<tag>), matching Forgejo's OCI semantics.
-	res, err := s.builder.Build(ctx, imagebuild.Request{
-		ContextDir: dir,
-		Dockerfile: m.GetDockerfile(),
-		Context:    m.GetContext(),
-		Repo:       org + "/" + m.GetImage(),
-		Tag:        m.GetTag(),
-		BuildArgs:  s.buildArgs(m.GetBuildArgs()),
-	})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	return connect.NewResponse(&wsv1.BuildSandboxImageResponse{ImageRef: res.ImageRef, Log: res.Log}), nil
-}
-
 // imageNameRe: a single path segment (no '/', no ':').
 var imageNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
 

@@ -178,6 +178,9 @@ const (
 	// BranchSessionServiceBuildSandboxImageProcedure is the fully-qualified name of the
 	// BranchSessionService's BuildSandboxImage RPC.
 	BranchSessionServiceBuildSandboxImageProcedure = "/workspace.v1.BranchSessionService/BuildSandboxImage"
+	// BranchSessionServiceGetBuildStatusProcedure is the fully-qualified name of the
+	// BranchSessionService's GetBuildStatus RPC.
+	BranchSessionServiceGetBuildStatusProcedure = "/workspace.v1.BranchSessionService/GetBuildStatus"
 	// BranchSessionServiceImportImageProcedure is the fully-qualified name of the
 	// BranchSessionService's ImportImage RPC.
 	BranchSessionServiceImportImageProcedure = "/workspace.v1.BranchSessionService/ImportImage"
@@ -456,6 +459,9 @@ type BranchSessionServiceClient interface {
 	// OCI images
 	ListOCIImages(context.Context, *connect.Request[v1.ListOCIImagesRequest]) (*connect.Response[v1.ListOCIImagesResponse], error)
 	BuildSandboxImage(context.Context, *connect.Request[v1.BuildSandboxImageRequest]) (*connect.Response[v1.BuildSandboxImageResponse], error)
+	// GetBuildStatus polls a background image build (BuildSandboxImage returns a
+	// build_id immediately; poll this for its state/image_ref/log).
+	GetBuildStatus(context.Context, *connect.Request[v1.GetBuildStatusRequest]) (*connect.Response[v1.GetBuildStatusResponse], error)
 	ImportImage(context.Context, *connect.Request[v1.ImportImageRequest]) (*connect.Response[v1.ImportImageResponse], error)
 	// sandboxes
 	ListSandboxes(context.Context, *connect.Request[v1.ListSandboxesRequest]) (*connect.Response[v1.ListSandboxesResponse], error)
@@ -824,6 +830,12 @@ func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+BranchSessionServiceBuildSandboxImageProcedure,
 			connect.WithSchema(branchSessionServiceMethods.ByName("BuildSandboxImage")),
+			connect.WithClientOptions(opts...),
+		),
+		getBuildStatus: connect.NewClient[v1.GetBuildStatusRequest, v1.GetBuildStatusResponse](
+			httpClient,
+			baseURL+BranchSessionServiceGetBuildStatusProcedure,
+			connect.WithSchema(branchSessionServiceMethods.ByName("GetBuildStatus")),
 			connect.WithClientOptions(opts...),
 		),
 		importImage: connect.NewClient[v1.ImportImageRequest, v1.ImportImageResponse](
@@ -1289,6 +1301,7 @@ type branchSessionServiceClient struct {
 	closeMR              *connect.Client[v1.CloseMRRequest, v1.CloseMRResponse]
 	listOCIImages        *connect.Client[v1.ListOCIImagesRequest, v1.ListOCIImagesResponse]
 	buildSandboxImage    *connect.Client[v1.BuildSandboxImageRequest, v1.BuildSandboxImageResponse]
+	getBuildStatus       *connect.Client[v1.GetBuildStatusRequest, v1.GetBuildStatusResponse]
 	importImage          *connect.Client[v1.ImportImageRequest, v1.ImportImageResponse]
 	listSandboxes        *connect.Client[v1.ListSandboxesRequest, v1.ListSandboxesResponse]
 	createSandbox        *connect.Client[v1.CreateSandboxRequest, v1.CreateSandboxResponse]
@@ -1578,6 +1591,11 @@ func (c *branchSessionServiceClient) ListOCIImages(ctx context.Context, req *con
 // BuildSandboxImage calls workspace.v1.BranchSessionService.BuildSandboxImage.
 func (c *branchSessionServiceClient) BuildSandboxImage(ctx context.Context, req *connect.Request[v1.BuildSandboxImageRequest]) (*connect.Response[v1.BuildSandboxImageResponse], error) {
 	return c.buildSandboxImage.CallUnary(ctx, req)
+}
+
+// GetBuildStatus calls workspace.v1.BranchSessionService.GetBuildStatus.
+func (c *branchSessionServiceClient) GetBuildStatus(ctx context.Context, req *connect.Request[v1.GetBuildStatusRequest]) (*connect.Response[v1.GetBuildStatusResponse], error) {
+	return c.getBuildStatus.CallUnary(ctx, req)
 }
 
 // ImportImage calls workspace.v1.BranchSessionService.ImportImage.
@@ -1995,6 +2013,9 @@ type BranchSessionServiceHandler interface {
 	// OCI images
 	ListOCIImages(context.Context, *connect.Request[v1.ListOCIImagesRequest]) (*connect.Response[v1.ListOCIImagesResponse], error)
 	BuildSandboxImage(context.Context, *connect.Request[v1.BuildSandboxImageRequest]) (*connect.Response[v1.BuildSandboxImageResponse], error)
+	// GetBuildStatus polls a background image build (BuildSandboxImage returns a
+	// build_id immediately; poll this for its state/image_ref/log).
+	GetBuildStatus(context.Context, *connect.Request[v1.GetBuildStatusRequest]) (*connect.Response[v1.GetBuildStatusResponse], error)
 	ImportImage(context.Context, *connect.Request[v1.ImportImageRequest]) (*connect.Response[v1.ImportImageResponse], error)
 	// sandboxes
 	ListSandboxes(context.Context, *connect.Request[v1.ListSandboxesRequest]) (*connect.Response[v1.ListSandboxesResponse], error)
@@ -2359,6 +2380,12 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 		BranchSessionServiceBuildSandboxImageProcedure,
 		svc.BuildSandboxImage,
 		connect.WithSchema(branchSessionServiceMethods.ByName("BuildSandboxImage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	branchSessionServiceGetBuildStatusHandler := connect.NewUnaryHandler(
+		BranchSessionServiceGetBuildStatusProcedure,
+		svc.GetBuildStatus,
+		connect.WithSchema(branchSessionServiceMethods.ByName("GetBuildStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
 	branchSessionServiceImportImageHandler := connect.NewUnaryHandler(
@@ -2865,6 +2892,8 @@ func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...con
 			branchSessionServiceListOCIImagesHandler.ServeHTTP(w, r)
 		case BranchSessionServiceBuildSandboxImageProcedure:
 			branchSessionServiceBuildSandboxImageHandler.ServeHTTP(w, r)
+		case BranchSessionServiceGetBuildStatusProcedure:
+			branchSessionServiceGetBuildStatusHandler.ServeHTTP(w, r)
 		case BranchSessionServiceImportImageProcedure:
 			branchSessionServiceImportImageHandler.ServeHTTP(w, r)
 		case BranchSessionServiceListSandboxesProcedure:
@@ -3186,6 +3215,10 @@ func (UnimplementedBranchSessionServiceHandler) ListOCIImages(context.Context, *
 
 func (UnimplementedBranchSessionServiceHandler) BuildSandboxImage(context.Context, *connect.Request[v1.BuildSandboxImageRequest]) (*connect.Response[v1.BuildSandboxImageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.BuildSandboxImage is not implemented"))
+}
+
+func (UnimplementedBranchSessionServiceHandler) GetBuildStatus(context.Context, *connect.Request[v1.GetBuildStatusRequest]) (*connect.Response[v1.GetBuildStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetBuildStatus is not implemented"))
 }
 
 func (UnimplementedBranchSessionServiceHandler) ImportImage(context.Context, *connect.Request[v1.ImportImageRequest]) (*connect.Response[v1.ImportImageResponse], error) {
