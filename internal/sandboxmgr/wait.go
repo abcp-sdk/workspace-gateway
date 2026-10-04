@@ -18,7 +18,9 @@ func (c *Client) WaitReady(ctx context.Context, name string, timeout time.Durati
 	if timeout <= 0 {
 		timeout = 60 * time.Second
 	}
-	svcAddr := fmt.Sprintf("%s.%s.svc.cluster.local:%d", res, c.namespace, WorkerPort)
+	// The Service fronts the worker on ServicePort (80); the pod IP is dialed on
+	// the worker's own WorkerPort (the container listens on 48080).
+	svcAddr := fmt.Sprintf("%s.%s.svc.cluster.local:%d", res, c.namespace, ServicePort)
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		pod, err := c.cs.CoreV1().Pods(c.namespace).Get(ctx, res, metav1.GetOptions{})

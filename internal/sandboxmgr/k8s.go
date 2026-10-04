@@ -40,6 +40,11 @@ const (
 
 	// WorkerPort is the agent-worker listen port baked into preset images.
 	WorkerPort = 48080
+	// ServicePort is the port the sandbox Service EXPOSES. The worker listens on
+	// WorkerPort (48080); the Service fronts it on 80 so callers use the plain
+	// `http://<sandbox>.<ns>.svc.cluster.local` form (and the edge/desktop wiring
+	// that maps a sandbox's port 80 works).
+	ServicePort = 80
 )
 
 // ErrExists reports that a sandbox with the requested name already exists. A
@@ -247,7 +252,7 @@ func defaultResources(cpu, mem string, d resources) corev1.ResourceRequirements 
 
 // ServiceDNS returns the in-cluster Service URL for a sandbox.
 func (c *Client) ServiceDNS(resource string) string {
-	return fmt.Sprintf("http://%s.%s.svc.cluster.local:%d", resource, c.namespace, WorkerPort)
+	return fmt.Sprintf("http://%s.%s.svc.cluster.local:%d", resource, c.namespace, ServicePort)
 }
 
 // Create creates the Pod + Service + Secret for a sandbox and returns the
@@ -407,7 +412,7 @@ func (c *Client) Create(ctx context.Context, s Spec) (Sandbox, string, error) {
 		Spec: corev1.ServiceSpec{
 			Selector: labels,
 			Ports: []corev1.ServicePort{{
-				Name: "worker", Port: WorkerPort, TargetPort: intstr.FromInt32(WorkerPort),
+				Name: "worker", Port: ServicePort, TargetPort: intstr.FromInt32(WorkerPort),
 			}},
 		},
 	}
