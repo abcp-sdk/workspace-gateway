@@ -37,12 +37,25 @@ func TestBuildScriptAndMounts(t *testing.T) {
 		`"$H/.gradle/init.gradle"`,
 		"maven.google",
 		"maven.gradle",
+		"maven.clojars",
+		"maven.jitpack",
+		"maven.spring",
 		"allowInsecureProtocol = true",
 		`"$H/.config/pip/pip.conf"`,
 		`"$H/.cargo/config.toml"`,
 		`"$H/.swiftpm/configuration/mirrors.json"`,
 		`"$H/.nuget/NuGet/NuGet.Config"`,
 		"allowInsecureConnections",
+		"/mnt/f-gemrc/cfg",
+		"/mnt/f-condarc/cfg",
+		"/mnt/f-composer/cfg",
+		"/mnt/f-npmrc/cfg",
+		"/mnt/f-rprofile/cfg",
+		"/mnt/f-cpan/cfg",
+		"/mnt/f-luarocks/cfg",
+		"/mnt/f-nixconf/cfg",
+		`"$H/.conan2/remotes.json"`,
+		`"$H/.opam/repo"`,
 	} {
 		if !strings.Contains(b.Script, want) {
 			t.Errorf("script missing %q", want)
@@ -50,16 +63,23 @@ func TestBuildScriptAndMounts(t *testing.T) {
 	}
 	// Cache/repo roots must be writable in the worker container.
 	writable := map[string]bool{}
+	files := map[string]bool{}
 	for _, m := range b.Mounts {
 		writable[m.Path] = m.Writable
+		files[m.Path] = m.File
 	}
-	for _, p := range []string{"/root/.m2", "/root/.gradle", "/root/.cargo"} {
+	for _, p := range []string{"/root/.m2", "/root/.gradle", "/root/.cargo", "/root/.conan2", "/root/.opam"} {
 		if !writable[p] {
 			t.Errorf("%s must be Writable (cache/repo root)", p)
 		}
 	}
 	if writable["/etc/apt/sources.list.d"] {
 		t.Error("apt config dir should be read-only")
+	}
+	for _, p := range []string{"/root/.gemrc", "/root/.condarc", "/root/.composer/config.json", "/root/.npmrc", "/root/.Rprofile"} {
+		if !files[p] {
+			t.Errorf("%s must be a FILE mount (subPath)", p)
+		}
 	}
 }
 

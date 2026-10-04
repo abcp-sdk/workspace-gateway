@@ -111,6 +111,11 @@ type BootstrapMount struct {
 	// GRADLE_USER_HOME, CARGO_HOME) — a read-only overlay would make those
 	// tools fail with EROFS. Pure config dirs stay read-only.
 	Writable bool
+	// File marks Path as a single FILE (not a directory), e.g. `~/.gemrc`.
+	// A file mount cannot overlay its parent dir, so the volume is mounted at
+	// the file path with `subPath` (the init container stages the file in the
+	// volume root). Writable is ignored for files (the worker may rewrite them).
+	File bool
 }
 
 // Client wraps the typed clientset plus the target namespace.
@@ -331,8 +336,15 @@ func (c *Client) Create(ctx context.Context, s Spec) (Sandbox, string, error) {
 				Name:         m.Name,
 				VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 			})
-			initMounts = append(initMounts, corev1.VolumeMount{Name: m.Name, MountPath: m.Path})
-			workerMounts = append(workerMounts, corev1.VolumeMount{Name: m.Name, MountPath: m.Path, ReadOnly: !m.Writable})
+			if m.File {
+				// A single config FILE: the init container stages it at the
+				// volume root; the worker mounts it at Path via subPath.
+				initMounts = append(initMounts, corev1.VolumeMount{Name: m.Name, MountPath: "/mnt/" + m.Name})
+				workerMounts = append(workerMounts, corev1.VolumeMount{Name: m.Name, MountPath: m.Path, SubPath: "cfg", ReadOnly: true})
+			} else {
+				initMounts = append(initMounts, corev1.VolumeMount{Name: m.Name, MountPath: m.Path})
+				workerMounts = append(workerMounts, corev1.VolumeMount{Name: m.Name, MountPath: m.Path, ReadOnly: !m.Writable})
+			}
 		}
 		// The init container needs ONLY the registry URL — never the worker's
 		// bearer token (WORKER_TOKEN) or other workload env.
