@@ -22,6 +22,8 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/abcp-sdk/abc-protocol-go/v2/bus"
+	natstransport "github.com/abcp-sdk/abc-protocol-go/v2/transport/nats"
 	wsv1connect "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1/wsv1connect"
 	"github.com/abcp-sdk/workspace-gateway/internal/agentclient"
 	"github.com/abcp-sdk/workspace-gateway/internal/forgejo"
@@ -181,6 +183,16 @@ func main() {
 	if envOr("PROVISION_ON_BOOT", "true") == "true" && os.Getenv("AGENT_ADMIN_TOKEN") != "" {
 		go runProvision(agentURL)
 	}
+	// NATS bus: publishes mailbox triggers (the MR-submitted notification). It
+	// is best-effort — unset NATS_URL leaves it nil (notifications off).
+	var nbus bus.Bus
+	if natsURL := os.Getenv("NATS_URL"); natsURL != "" {
+		if b, err := natstransport.Connect(natsURL); err != nil {
+			log.Printf("warn: nats connect (mr-notify): %v", err)
+		} else {
+			nbus = b
+		}
+	}
 	svc := workspacesvc.New(workspacesvc.Deps{
 		Agent:    ac.Raw(),
 		Members:  store,
@@ -209,6 +221,7 @@ func main() {
 		ServiceLogTail:           int64(envOrInt("SERVICE_LOG_TAIL", 500)),
 		PVCStorageClass:          envOr("PVC_STORAGE_CLASS", "workspace-local"),
 		PVCDefaultSize:           envOr("PVC_DEFAULT_SIZE", "1Gi"),
+		Bus:                      nbus,
 	})
 
 	// Reclaim idle sandboxes: no worker jobs for SANDBOX_IDLE_TTL (default 24h).
