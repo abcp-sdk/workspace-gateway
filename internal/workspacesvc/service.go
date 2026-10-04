@@ -87,6 +87,10 @@ type Service struct {
 	pvcStorageClass string
 	// pvcDefaultSize is used when CreatePVC omits a size.
 	pvcDefaultSize string
+	// goldenDiskCachePVC / goldenDiskCacheSize configure the shared golden-disk
+	// cache PVC mounted by VM (Windows/macOS) sandboxes.
+	goldenDiskCachePVC  string
+	goldenDiskCacheSize string
 	// bootstrap is the rendered package-source bootstrap applied to every
 	// sandbox (nil = none). It is derived from SANDBOX_PACKAGE_UPSTREAM, so a
 	// registry URL change needs no image rebuild.
@@ -150,6 +154,10 @@ type Deps struct {
 	PVCStorageClass string
 	// PVCDefaultSize is used when CreatePVC omits a size (e.g. "1Gi").
 	PVCDefaultSize string
+	// GoldenDiskCachePVC / GoldenDiskCacheSize configure the shared golden-disk
+	// cache PVC mounted by VM (Windows/macOS) sandboxes.
+	GoldenDiskCachePVC  string
+	GoldenDiskCacheSize string
 	// Bus publishes mailbox triggers (e.g. the MR-submitted notification). Nil
 	// disables the notification; it is best-effort and never fails the RPC.
 	Bus bus.Bus
@@ -186,6 +194,8 @@ func New(d Deps) *Service {
 		serviceLogTail:      d.ServiceLogTail,
 		pvcStorageClass:     d.PVCStorageClass,
 		pvcDefaultSize:      d.PVCDefaultSize,
+		goldenDiskCachePVC:  d.GoldenDiskCachePVC,
+		goldenDiskCacheSize: d.GoldenDiskCacheSize,
 		hub:                 newWorkspaceHub(sources...),
 		bus:                 d.Bus,
 	}
@@ -1775,8 +1785,42 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 	// so an image outside that org would have no worker and could never become
 	// ready. Empty = the configured default sandbox image.
 	image := req.Msg.GetImage()
-	if image == "" {
-		image = s.defaultSandboxImage
+	// Resolve the OS: for windows/macos pick the VM image, force kvm, set an 8Gi
+	// limit, inject GOLDEN_DISK_URL and mount the shared golden-disk cache PVC.
+	osName := normalizeOS(req.Msg.GetOs())
+	vm := osName != "linux"
+	kvm := req.Msg.GetKvm()
+	memory := req.Msg.GetMemory()
+	extraEnv := map[string]string{}
+	goldenPVC := ""
+	if vm {
+		if _, ok := vmImageName[osName]; !ok {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("unsupported os %q (want linux|windows|macos)", req.Msg.GetOs()))
+		}
+		if image == "" {
+			image = s.vmSandboxImage(osName)
+		}
+		disk := strings.TrimSpace(req.Msg.GetDisk())
+		if disk == "" {
+			disk = vmDefaultDisk[osName]
+		}
+		extraEnv["GOLDEN_DISK_URL"] = disk
+		kvm = true
+		if memory == "" {
+			memory = "8Gi"
+		}
+		goldenPVC = s.goldenDiskCachePVC
+		if goldenPVC == "" {
+			goldenPVC = defaultGoldenDiskCachePVC
+		}
+		if err := s.ensureGoldenDiskCache(ctx, goldenPVC); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	} else {
+		if image == "" {
+			image = s.defaultSandboxImage
+		}
 	}
 	if image == "" {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("no sandbox image given and no default configured"))
@@ -1803,10 +1847,11 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 			fmt.Errorf("sandbox %q already exists; delete it before reusing the name", name))
 	}
 	sb, _, err := s.sbx.Create(ctx, sandboxmgr.Spec{
-		Name: name, Image: image, CPU: req.Msg.GetCpu(), Memory: req.Msg.GetMemory(),
-		Env: s.sandboxEnv(req.Msg.GetEnv()), Creator: tenant, Session: bindSession,
-		Runtime:   s.renderRuntime(req.Msg.GetKvm(), req.Msg.GetGpuCount()),
-		Bootstrap: s.bootstrap,
+		Name: name, Image: image, CPU: req.Msg.GetCpu(), Memory: memory,
+		Env: s.sandboxEnv(withEnv(req.Msg.GetEnv(), extraEnv)), Creator: tenant, Session: bindSession,
+		Runtime:       s.renderRuntime(kvm, req.Msg.GetGpuCount()),
+		Bootstrap:     s.bootstrap,
+		GoldenDiskPVC: goldenPVC,
 	})
 	if err != nil {
 		if errors.Is(err, sandboxmgr.ErrExists) {

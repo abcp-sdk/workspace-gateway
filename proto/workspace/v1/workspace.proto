@@ -741,6 +741,14 @@ message CreateSandboxRequest {
   // The session this sandbox belongs to. Bound as an annotation so the sandbox
   // can be enumerated/fanned out to per session.
   string session = 8;
+  // os selects the sandbox OS: "linux" (default), "windows" or "macos". For
+  // windows/macos the gateway picks the VM image, forces kvm + an 8Gi limit and
+  // injects GOLDEN_DISK_URL (the guest disk is fetched at runtime and cached in
+  // a shared PVC), so the sandbox boots a full OS in a KVM VM.
+  string os = 9;
+  // disk is the golden-disk download URL, used ONLY when os != linux. Empty =
+  // the per-OS default (macOS → the xcode disk, Windows → the devtools disk).
+  string disk = 10;
 }
 message CreateSandboxResponse { SandboxInfo sandbox = 1; }
 

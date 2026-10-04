@@ -89,7 +89,15 @@ type Spec struct {
 	// are pointed at the in-cluster registry WITHOUT changing the sandbox image.
 	// Nil = no bootstrap (the historical behaviour).
 	Bootstrap *Bootstrap
+	// GoldenDiskPVC, when non-empty, mounts that PVC (read-write) at
+	// GoldenDiskCachePath so a VM sandbox's golden-disk base is cached once and
+	// shared across sandboxes. Empty = no cache volume.
+	GoldenDiskPVC string
 }
+
+// GoldenDiskCachePath is where golden-disk.sh caches the base qcow2 (its
+// GOLDEN_DISK_CACHE default). A VM sandbox mounts the shared cache PVC here.
+const GoldenDiskCachePath = "/storage/.cache"
 
 // Bootstrap describes the package-source bootstrap applied to a sandbox Pod.
 type Bootstrap struct {
@@ -371,6 +379,17 @@ func (c *Client) Create(ctx context.Context, s Spec) (Sandbox, string, error) {
 			},
 		})
 		podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, workerMounts...)
+	}
+	if s.GoldenDiskPVC != "" {
+		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+			Name: "golden-disk-cache",
+			VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+				ClaimName: s.GoldenDiskPVC,
+			}},
+		})
+		podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, corev1.VolumeMount{
+			Name: "golden-disk-cache", MountPath: GoldenDiskCachePath,
+		})
 	}
 	if s.Runtime.RuntimeClass != "" {
 		rc := s.Runtime.RuntimeClass

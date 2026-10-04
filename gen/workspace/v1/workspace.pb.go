@@ -7181,7 +7181,15 @@ type CreateSandboxRequest struct {
 	GpuCount int32 `protobuf:"varint,7,opt,name=gpu_count,json=gpuCount,proto3" json:"gpu_count,omitempty"`
 	// The session this sandbox belongs to. Bound as an annotation so the sandbox
 	// can be enumerated/fanned out to per session.
-	Session       string `protobuf:"bytes,8,opt,name=session,proto3" json:"session,omitempty"`
+	Session string `protobuf:"bytes,8,opt,name=session,proto3" json:"session,omitempty"`
+	// os selects the sandbox OS: "linux" (default), "windows" or "macos". For
+	// windows/macos the gateway picks the VM image, forces kvm + an 8Gi limit and
+	// injects GOLDEN_DISK_URL (the guest disk is fetched at runtime and cached in
+	// a shared PVC), so the sandbox boots a full OS in a KVM VM.
+	Os string `protobuf:"bytes,9,opt,name=os,proto3" json:"os,omitempty"`
+	// disk is the golden-disk download URL, used ONLY when os != linux. Empty =
+	// the per-OS default (macOS → the xcode disk, Windows → the devtools disk).
+	Disk          string `protobuf:"bytes,10,opt,name=disk,proto3" json:"disk,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7268,6 +7276,20 @@ func (x *CreateSandboxRequest) GetGpuCount() int32 {
 func (x *CreateSandboxRequest) GetSession() string {
 	if x != nil {
 		return x.Session
+	}
+	return ""
+}
+
+func (x *CreateSandboxRequest) GetOs() string {
+	if x != nil {
+		return x.Os
+	}
+	return ""
+}
+
+func (x *CreateSandboxRequest) GetDisk() string {
+	if x != nil {
+		return x.Disk
 	}
 	return ""
 }
@@ -13610,7 +13632,7 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\brestarts\x18\r \x01(\x05R\brestarts\x12\x18\n" +
 	"\amessage\x18\x0e \x01(\tR\amessage\"P\n" +
 	"\x15ListSandboxesResponse\x127\n" +
-	"\tsandboxes\x18\x01 \x03(\v2\x19.workspace.v1.SandboxInfoR\tsandboxes\"\xaa\x02\n" +
+	"\tsandboxes\x18\x01 \x03(\v2\x19.workspace.v1.SandboxInfoR\tsandboxes\"\xce\x02\n" +
 	"\x14CreateSandboxRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05image\x18\x02 \x01(\tR\x05image\x12\x10\n" +
@@ -13619,7 +13641,10 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\x03env\x18\x05 \x03(\v2+.workspace.v1.CreateSandboxRequest.EnvEntryR\x03env\x12\x10\n" +
 	"\x03kvm\x18\x06 \x01(\bR\x03kvm\x12\x1b\n" +
 	"\tgpu_count\x18\a \x01(\x05R\bgpuCount\x12\x18\n" +
-	"\asession\x18\b \x01(\tR\asession\x1a6\n" +
+	"\asession\x18\b \x01(\tR\asession\x12\x0e\n" +
+	"\x02os\x18\t \x01(\tR\x02os\x12\x12\n" +
+	"\x04disk\x18\n" +
+	" \x01(\tR\x04disk\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"L\n" +
