@@ -234,6 +234,8 @@ func main() {
 		ServiceLogTail:           int64(envOrInt("SERVICE_LOG_TAIL", 500)),
 		PVCStorageClass:          envOr("PVC_STORAGE_CLASS", "workspace-local"),
 		PVCDefaultSize:           envOr("PVC_DEFAULT_SIZE", "1Gi"),
+		GoldenDiskCachePVC:       os.Getenv("SANDBOX_GOLDEN_PVC"),
+		GoldenDiskCacheSize:      os.Getenv("SANDBOX_GOLDEN_PVC_SIZE"),
 		Bus:                      nbus,
 	})
 
