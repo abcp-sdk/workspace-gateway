@@ -19,6 +19,8 @@ github.com/ProtonMail/go-crypto v1.4.1 h1:9RfcZHqEQUvP8RzecWEUafnZVtEvrBVL9BiF67
 github.com/ProtonMail/go-crypto v1.4.1/go.mod h1:e1OaTyu5SYVrO9gKOEhTc+5UcXtTUa+P3uLudwcgPqo=
 github.com/abcp-sdk/abc-protocol-go/v2 v2.6.0 h1:8KcxV3lMRV4fT66iN+c3tWT731Mys5eTZjdxNZLBLE4=
 github.com/abcp-sdk/abc-protocol-go/v2 v2.6.0/go.mod h1:PZqS0RZJqaKljiVvsr30IrzzRN2xdKIjLhwo3vA4VoQ=
+github.com/abcp-sdk/abc-protocol-go/v2 v2.7.1 h1:4irG/NMwj1fJkhnhhkTKlMHoZuXmL5L9kxbiaLbCEXo=
+github.com/abcp-sdk/abc-protocol-go/v2 v2.7.1/go.mod h1:PZqS0RZJqaKljiVvsr30IrzzRN2xdKIjLhwo3vA4VoQ=
 github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be h1:9AeTilPcZAjCFIImctFaOjnTIavg87rW78vTPkQqLI8=
 github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be/go.mod h1:ySMOLuWl6zY27l47sB3qLNK6tF2fkHG55UZxx8oIVo4=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=
