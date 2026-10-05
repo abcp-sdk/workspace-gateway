@@ -1349,6 +1349,46 @@ message HelmPromoteResponse { HelmReleaseInfo release = 1; }
 message HelmRollbackReleaseRequest { string release = 1; }
 message HelmRollbackReleaseResponse { HelmReleaseInfo release = 1; }
 
+// HelmObjectInfo is the LIVE status of one object a release deployed.
+message HelmObjectInfo {
+  string kind = 1;
+  string name = 2;
+  string namespace = 3;
+  // Coarse phase: Ready | Progressing | Failed | Complete | NotFound | <Pod phase>.
+  string status = 4;
+  bool ready = 5;
+  // First unhealthy container's waiting/terminated reason (e.g. CrashLoopBackOff),
+  // or the lookup error. Empty when healthy.
+  string message = 6;
+  // Pod / workload diagnostics (best-effort; zero when not applicable).
+  string phase = 7;
+  int32 restarts = 8;
+  int32 ready_replicas = 9;
+  int32 desired_replicas = 10;
+}
+
+// HelmObjects lists the live status of a release's current-revision objects, so
+// a UI/tool can show each workload/pod (and why one is unhealthy) WITHOUT
+// knowing them up front.
+message HelmObjectsRequest { string release = 1; }
+message HelmObjectsResponse { repeated HelmObjectInfo objects = 1; }
+
+// HelmObjectLogs reads ONE object's container log (kind must be "Pod"). Access
+// is gated on ownership: the object must belong to the release's current revision.
+message HelmObjectLogsRequest {
+  string release = 1;
+  string kind = 2; // must be "Pod"
+  string name = 3;
+  int64 tail_lines = 4;
+  bool previous = 5;
+  string container = 6; // "" = the pod's first container
+}
+message HelmObjectLogsResponse {
+  repeated string lines = 1;
+  bool available = 2;
+  string message = 3; // diagnostics when there is no log output (best-effort)
+}
+
 // ---- service logs ----
 message ServiceLogsRequest {
   string name = 1;
@@ -1580,6 +1620,10 @@ service BranchSessionService {
   // Blue-green slot switch for a Helm release.
   rpc HelmPromote(HelmPromoteRequest) returns (HelmPromoteResponse);
   rpc HelmRollbackRelease(HelmRollbackReleaseRequest) returns (HelmRollbackReleaseResponse);
+  // Live per-object status + logs of a release (so a UI/tool can show each
+  // deployed workload/pod, and read one pod's log).
+  rpc HelmObjects(HelmObjectsRequest) returns (HelmObjectsResponse);
+  rpc HelmObjectLogs(HelmObjectLogsRequest) returns (HelmObjectLogsResponse);
 
   // ---- forwarded agent surface (minimal; no policy RPCs) ----
   rpc Health(agent.v1.HealthRequest) returns (agent.v1.HealthResponse);

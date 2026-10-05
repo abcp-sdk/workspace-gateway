@@ -2767,6 +2767,57 @@ func (s *Service) ownedHelmRelease(ctx context.Context, tenant, release string) 
 	return nil
 }
 
+// HelmObjects lists the LIVE status of a release's current-revision objects
+// (workloads, pods, services, ...), so a UI/tool can show each one — and why an
+// unhealthy pod is failing — without knowing the names up front.
+func (s *Service) HelmObjects(ctx context.Context, req *connect.Request[wsv1.HelmObjectsRequest]) (*connect.Response[wsv1.HelmObjectsResponse], error) {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	if s.helm == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("helm backend not configured"))
+	}
+	if err := s.ownedHelmRelease(ctx, tenant, req.Msg.GetRelease()); err != nil {
+		return nil, err
+	}
+	objs, err := s.helm.Objects(ctx, req.Msg.GetRelease())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	out := make([]*wsv1.HelmObjectInfo, 0, len(objs))
+	for _, o := range objs {
+		out = append(out, &wsv1.HelmObjectInfo{
+			Kind: o.Kind, Name: o.Name, Namespace: o.Namespace,
+			Status: o.Status, Ready: o.Ready, Message: o.Message,
+			Phase: o.Phase, Restarts: o.Restarts,
+			ReadyReplicas: o.ReadyReps, DesiredReplicas: o.DesiredRep,
+		})
+	}
+	return connect.NewResponse(&wsv1.HelmObjectsResponse{Objects: out}), nil
+}
+
+// HelmObjectLogs reads one object's container log (kind must be "Pod"),
+// gated on the object belonging to the release's current revision.
+func (s *Service) HelmObjectLogs(ctx context.Context, req *connect.Request[wsv1.HelmObjectLogsRequest]) (*connect.Response[wsv1.HelmObjectLogsResponse], error) {
+	tenant, err := s.sandboxAuth(ctx, req.Header())
+	if err != nil {
+		return nil, err
+	}
+	if s.helm == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("helm backend not configured"))
+	}
+	if err := s.ownedHelmRelease(ctx, tenant, req.Msg.GetRelease()); err != nil {
+		return nil, err
+	}
+	lines, available, msg, err := s.helm.ObjectLogs(ctx, req.Msg.GetRelease(), req.Msg.GetKind(), req.Msg.GetName(),
+		helmmgr.LogOptions{TailLines: req.Msg.GetTailLines(), Previous: req.Msg.GetPrevious(), Container: req.Msg.GetContainer()})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&wsv1.HelmObjectLogsResponse{Lines: lines, Available: available, Message: msg}), nil
+}
+
 var helmReleaseRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,52}[a-z0-9])?$`)
 
 // ---- Tier 0 conversion helpers (proto -> servicesmgr) ----
