@@ -100,6 +100,14 @@ func TestLogsAndServicesAvailability(t *testing.T) {
 			t.Fatalf("developer must have %q", want)
 		}
 	}
+	// Release observability: live per-object status + one pod's log.
+	for _, r := range []Role{Admin, Developer} {
+		for _, want := range []string{"helm-objects", "helm-object-logs"} {
+			if !has(ToolsFor(r), want) {
+				t.Fatalf("%s must have %q", r, want)
+			}
+		}
+	}
 	// explorer: read-only observability.
 	e := ToolsFor(Explorer)
 	if !has(e, "service-list") || !has(e, "service-logs") {
