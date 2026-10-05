@@ -1788,8 +1788,10 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 	// Resolve the OS: for windows/macos pick the VM image, force kvm, set an 8Gi
 	// limit, inject GOLDEN_DISK_URL and mount the shared golden-disk cache PVC.
 	osName := normalizeOS(req.Msg.GetOs())
-	vm := osName == "macos" || osName == "windows"
-	device := osName == "android" || osName == "ios"
+	// ios is VM-like (a macOS guest booting from a golden disk); android is a
+	// device sandbox with its guest baked into the image.
+	vm := osName == "macos" || osName == "windows" || osName == "ios"
+	device := osName == "android"
 	kvm := req.Msg.GetKvm()
 	memory := req.Msg.GetMemory()
 	extraEnv := map[string]string{}
