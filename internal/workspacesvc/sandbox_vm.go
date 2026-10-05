@@ -23,20 +23,24 @@ const defaultGoldenDiskCachePVC = "sandbox-golden-cache"
 var vmImageName = map[string]string{
 	"macos":   "sandbox-macos:base",
 	"windows": "sandbox-windows:base",
+	// iOS runs INSIDE a macOS guest (Xcode + iOS Simulator), so it boots the
+	// SAME golden disk as macos:xcode and shares the golden-disk cache PVC.
+	"ios": "sandbox-ios:base",
 }
 
 // vmDefaultDisk maps os → its default golden-disk URL.
 var vmDefaultDisk = map[string]string{
 	"macos":   "http://artifact.worker.svc.cluster.local/artifacts/generic/golden-macos/15/data-xcode.qcow2",
 	"windows": "http://artifact.worker.svc.cluster.local/artifacts/generic/golden-windows/11/data-devtools.qcow2",
+	"ios":     "http://artifact.worker.svc.cluster.local/artifacts/generic/golden-macos/15/data-xcode.qcow2",
 }
 
-// deviceImageName maps a "device" os → its canonical sandbox image. A device
-// sandbox (Android emulator, iOS simulator) needs kvm + extra memory like a VM,
-// but no golden disk (its guest is baked/fetched by the image itself).
+// deviceImageName maps a "device" os → its canonical sandbox image. Android
+// boots an emulator inside a Linux container: kvm + extra memory, but NO golden
+// disk (its guest is baked into the image). iOS is NOT here — it uses a golden
+// disk (see vmImageName/vmDefaultDisk) because its macOS guest disk is external.
 var deviceImageName = map[string]string{
 	"android": "sandbox-android:aosp",
-	"ios":     "sandbox-ios:base",
 }
 
 // normalizeOS maps a caller's `os` to a canonical value (default "linux").
