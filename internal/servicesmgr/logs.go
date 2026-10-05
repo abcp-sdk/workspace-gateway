@@ -20,13 +20,13 @@ func (c *Client) LogSource() LogSource { return k8sLogSource{c: c} }
 
 // newestPod returns the most recently created pod for a service (the active
 // replica). Returns apierrors NotFound when none exists.
-func (c *Client) newestPod(ctx context.Context, name string) (string, error) {
+func (c *Client) newestPod(ctx context.Context, name string) (*corev1.Pod, error) {
 	pods, err := c.cs.CoreV1().Pods(c.namespace).List(ctx, metav1.ListOptions{LabelSelector: "app=" + name})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if len(pods.Items) == 0 {
-		return "", &apierrors.StatusError{ErrStatus: metav1.Status{
+		return nil, &apierrors.StatusError{ErrStatus: metav1.Status{
 			Reason: metav1.StatusReasonNotFound, Message: "no pod for service " + name,
 		}}
 	}
@@ -36,14 +36,31 @@ func (c *Client) newestPod(ctx context.Context, name string) (string, error) {
 			newest = pods.Items[i]
 		}
 	}
-	return newest.Name, nil
+	return &newest, nil
 }
 
-// containerName is the single app container every managed service runs.
+// containerName is the app container a workspace-managed SERVICE runs. Other
+// deployments reached through the same log source (e.g. the platform's own
+// easyops) name their container differently, so we fall back to the pod's first
+// container when there is no `svc`.
 const containerName = "svc"
 
-func (s k8sLogSource) logOpts(name string, opts LogOptions) (*corev1.PodLogOptions, error) {
-	o := &corev1.PodLogOptions{Container: containerName, Follow: opts.Follow}
+// containerFor picks the container to read logs from: `svc` when present, else
+// the pod's first container.
+func containerFor(pod *corev1.Pod) string {
+	for _, c := range pod.Spec.Containers {
+		if c.Name == containerName {
+			return c.Name
+		}
+	}
+	if len(pod.Spec.Containers) > 0 {
+		return pod.Spec.Containers[0].Name
+	}
+	return containerName
+}
+
+func (s k8sLogSource) logOpts(container string, opts LogOptions) (*corev1.PodLogOptions, error) {
+	o := &corev1.PodLogOptions{Container: container, Follow: opts.Follow}
 	if opts.TailLines > 0 {
 		n := opts.TailLines
 		o.TailLines = &n
@@ -61,9 +78,9 @@ func (s k8sLogSource) Tail(ctx context.Context, name string, opts LogOptions) ([
 	if err != nil {
 		return nil, err
 	}
-	o, _ := s.logOpts(name, opts)
+	o, _ := s.logOpts(containerFor(pod), opts)
 	o.Follow = false
-	req := s.c.cs.CoreV1().Pods(s.c.namespace).GetLogs(pod, o)
+	req := s.c.cs.CoreV1().Pods(s.c.namespace).GetLogs(pod.Name, o)
 	rc, err := req.Stream(ctx)
 	if err != nil {
 		return nil, err
@@ -92,9 +109,9 @@ func (s k8sLogSource) Follow(ctx context.Context, name string, opts LogOptions) 
 			errc <- err
 			return
 		}
-		o, _ := s.logOpts(name, opts)
+		o, _ := s.logOpts(containerFor(pod), opts)
 		o.Follow = true
-		req := s.c.cs.CoreV1().Pods(s.c.namespace).GetLogs(pod, o)
+		req := s.c.cs.CoreV1().Pods(s.c.namespace).GetLogs(pod.Name, o)
 		rc, err := req.Stream(ctx)
 		if err != nil {
 			errc <- err
