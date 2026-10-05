@@ -1788,7 +1788,8 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 	// Resolve the OS: for windows/macos pick the VM image, force kvm, set an 8Gi
 	// limit, inject GOLDEN_DISK_URL and mount the shared golden-disk cache PVC.
 	osName := normalizeOS(req.Msg.GetOs())
-	vm := osName != "linux"
+	vm := osName == "macos" || osName == "windows"
+	device := osName == "android" || osName == "ios"
 	kvm := req.Msg.GetKvm()
 	memory := req.Msg.GetMemory()
 	extraEnv := map[string]string{}
@@ -1796,7 +1797,7 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 	if vm {
 		if _, ok := vmImageName[osName]; !ok {
 			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("unsupported os %q (want linux|windows|macos)", req.Msg.GetOs()))
+				fmt.Errorf("unsupported os %q (want linux|windows|macos|android|ios)", req.Msg.GetOs()))
 		}
 		if image == "" {
 			image = s.vmSandboxImage(osName)
@@ -1816,6 +1817,16 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 		}
 		if err := s.ensureGoldenDiskCache(ctx, goldenPVC); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	} else if device {
+		// Android/iOS: a device sandbox boots an emulator/simulator — kvm +
+		// extra memory, but no golden disk (the image owns its guest).
+		if image == "" {
+			image = s.vmSandboxImage(osName)
+		}
+		kvm = true
+		if memory == "" {
+			memory = "8Gi"
 		}
 	} else {
 		if image == "" {

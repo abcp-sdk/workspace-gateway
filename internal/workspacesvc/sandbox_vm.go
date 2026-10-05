@@ -31,6 +31,14 @@ var vmDefaultDisk = map[string]string{
 	"windows": "http://artifact.worker.svc.cluster.local/artifacts/generic/golden-windows/11/data-devtools.qcow2",
 }
 
+// deviceImageName maps a "device" os → its canonical sandbox image. A device
+// sandbox (Android emulator, iOS simulator) needs kvm + extra memory like a VM,
+// but no golden disk (its guest is baked/fetched by the image itself).
+var deviceImageName = map[string]string{
+	"android": "sandbox-android:aosp",
+	"ios":     "sandbox-ios:base",
+}
+
 // normalizeOS maps a caller's `os` to a canonical value (default "linux").
 func normalizeOS(os string) string {
 	switch strings.ToLower(strings.TrimSpace(os)) {
@@ -40,6 +48,10 @@ func normalizeOS(os string) string {
 		return "macos"
 	case "windows", "win":
 		return "windows"
+	case "android":
+		return "android"
+	case "ios":
+		return "ios"
 	default:
 		return "linux"
 	}
@@ -52,7 +64,11 @@ func (s *Service) vmSandboxImage(osName string) string {
 	if host == "" {
 		host = "artifact.worker.svc.cluster.local"
 	}
-	return host + "/sandbox/" + vmImageName[osName]
+	name := vmImageName[osName]
+	if name == "" {
+		name = deviceImageName[osName]
+	}
+	return host + "/sandbox/" + name
 }
 
 // withEnv returns a copy of base with extra's keys set (extra wins).
