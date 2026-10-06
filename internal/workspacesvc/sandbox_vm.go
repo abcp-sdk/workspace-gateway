@@ -32,7 +32,7 @@ var vmImageName = map[string]string{
 var vmDefaultDisk = map[string]string{
 	"macos":   "http://artifact.worker.svc.cluster.local/artifacts/generic/golden-macos/15/data-xcode.qcow2",
 	"windows": "http://artifact.worker.svc.cluster.local/artifacts/generic/golden-windows/11/data-devtools.qcow2",
-	"ios":     "http://artifact.worker.svc.cluster.local/artifacts/generic/golden-macos/15/data-xcode.qcow2",
+	"ios":     "http://artifact.worker.svc.cluster.local/artifacts/generic/golden-macos/15/data-ios.qcow2",
 }
 
 // deviceImageName maps a "device" os → its canonical sandbox image. Android
