@@ -331,6 +331,11 @@ func (c *Client) Create(ctx context.Context, s Spec) (Sandbox, string, error) {
 		Ports:           []corev1.ContainerPort{{Name: "worker", ContainerPort: WorkerPort}},
 		Resources:       resources,
 		SecurityContext: s.Runtime.SecurityContext,
+		// Always: a sandbox image tag (e.g. sandbox-macos:base) is REBUILT in
+		// place when the guest disk or worker changes, and a long-lived tag is
+		// otherwise served from the node's image cache — so an update would not
+		// take effect. Always makes the kubelet re-resolve the tag on every pod.
+		ImagePullPolicy: corev1.PullAlways,
 	}
 	podSpec := corev1.PodSpec{
 		RestartPolicy: c.restart,
