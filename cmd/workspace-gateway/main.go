@@ -240,7 +240,10 @@ func main() {
 		// direct network, so it is handed SANDBOX_PROXY and the worker exports
 		// HTTP(S)_PROXY to its jobs. Empty = no injection.
 		VMProxy: os.Getenv("SANDBOX_PROXY"),
-		Bus:     nbus,
+		// Tag for VM/device sandbox images (macos/windows/ios/android). Pinned
+		// here so the mapping does not depend on a prunable alias like `base`.
+		VMImageTag: envOr("SANDBOX_VM_IMAGE_TAG", "base"),
+		Bus:        nbus,
 	})
 
 	// Reclaim idle sandboxes: no worker jobs for SANDBOX_IDLE_TTL (default 24h).

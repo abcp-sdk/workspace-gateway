@@ -18,14 +18,17 @@ import (
 // (single-node RWO). Overridable via SANDBOX_GOLDEN_PVC / SANDBOX_GOLDEN_PVC_SIZE.
 const defaultGoldenDiskCachePVC = "sandbox-golden-cache"
 
-// vmImageName is the canonical sandbox image (single per OS; the VARIANT — base
-// vs xcode/devtools — is chosen by the `disk` URL, never by the tag).
+// vmImageName is the canonical sandbox IMAGE per OS (NO tag). The tag comes from
+// the deployment (SANDBOX_VM_IMAGE_TAG / Deps.VMImageTag) so the mapping never
+// depends on a mutable alias like `base`, which a registry cleanup can prune.
+// (The VARIANT — base vs xcode/devtools — is chosen by the `disk` URL, never by
+// the tag.)
 var vmImageName = map[string]string{
-	"macos":   "sandbox-macos:base",
-	"windows": "sandbox-windows:base",
+	"macos":   "sandbox-macos",
+	"windows": "sandbox-windows",
 	// iOS runs INSIDE a macOS guest (Xcode + iOS Simulator), so it boots the
 	// SAME golden disk as macos:xcode and shares the golden-disk cache PVC.
-	"ios": "sandbox-ios:base",
+	"ios": "sandbox-ios",
 }
 
 // vmDefaultDisk maps os → its default golden-disk URL.
@@ -35,10 +38,15 @@ var vmDefaultDisk = map[string]string{
 	"ios":     "http://artifact.worker.svc.cluster.local/artifacts/generic/golden-macos/15/data-ios.qcow2",
 }
 
-// deviceImageName maps a "device" os → its canonical sandbox image. Android
-// boots an emulator inside a Linux container: kvm + extra memory, but NO golden
-// disk (its guest is baked into the image). iOS is NOT here — it uses a golden
-// disk (see vmImageName/vmDefaultDisk) because its macOS guest disk is external.
+// deviceImageName maps a "device" os → its canonical sandbox image WITH its own
+// tag. Unlike the VM images (whose variant is chosen by the `disk` URL), a
+// device image's variant IS its tag (android: aosp vs gms), so it keeps its own
+// tag rather than the VM image tag.
+//
+// Android boots an emulator inside a Linux container: kvm + extra memory, but
+// NO golden disk (its guest is baked into the image). iOS is NOT here — it uses
+// a golden disk (see vmImageName/vmDefaultDisk) because its macOS guest disk is
+// external.
 var deviceImageName = map[string]string{
 	"android": "sandbox-android:aosp",
 }
@@ -61,18 +69,28 @@ func normalizeOS(os string) string {
 	}
 }
 
-// vmSandboxImage returns the full sandbox image ref for a VM os, using the
-// deployment's sandbox registry host.
+// vmImageTagOrDefault is the tag applied to VM sandbox images (macos/windows/
+// ios). Device images carry their own tag (see deviceImageName).
+// Deployment-pinned (Deps.VMImageTag, env SANDBOX_VM_IMAGE_TAG); "base" default.
+func (s *Service) vmImageTagOrDefault() string {
+	if s.vmImageTag != "" {
+		return s.vmImageTag
+	}
+	return "base"
+}
+
+// vmSandboxImage returns the full sandbox image ref for a VM/device os.
+// VM images (macos/windows/ios) get the deployment-pinned VM tag; a device
+// image (android) keeps its own tag (deviceImageName already carries it).
 func (s *Service) vmSandboxImage(osName string) string {
 	host := s.sandboxImageRegistryHost
 	if host == "" {
 		host = "artifact.worker.svc.cluster.local"
 	}
-	name := vmImageName[osName]
-	if name == "" {
-		name = deviceImageName[osName]
+	if name := vmImageName[osName]; name != "" {
+		return host + "/sandbox/" + name + ":" + s.vmImageTagOrDefault()
 	}
-	return host + "/sandbox/" + name
+	return host + "/sandbox/" + deviceImageName[osName]
 }
 
 // withEnv returns a copy of base with extra's keys set (extra wins).

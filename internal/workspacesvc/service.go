@@ -97,6 +97,10 @@ type Service struct {
 	// HTTP(S)_PROXY for its jobs — letting guest tools (winget/brew/apt…) reach
 	// the network through the cluster proxy. Empty = no injection.
 	vmProxy string
+	// vmImageTag is the tag applied to VM/device sandbox images (macos/windows/
+	// ios/android). Deployment-pinned so the mapping never depends on a mutable
+	// alias like `base` (which a registry cleanup can prune). Empty = "base".
+	vmImageTag string
 	// bootstrap is the rendered package-source bootstrap applied to every
 	// sandbox (nil = none). It is derived from SANDBOX_PACKAGE_UPSTREAM, so a
 	// registry URL change needs no image rebuild.
@@ -166,6 +170,8 @@ type Deps struct {
 	GoldenDiskCacheSize string
 	// VMProxy is exported to VM sandboxes as SANDBOX_PROXY (empty = none).
 	VMProxy string
+	// VMImageTag is the tag for VM/device sandbox images (empty = "base").
+	VMImageTag string
 	// Bus publishes mailbox triggers (e.g. the MR-submitted notification). Nil
 	// disables the notification; it is best-effort and never fails the RPC.
 	Bus bus.Bus
@@ -205,6 +211,7 @@ func New(d Deps) *Service {
 		goldenDiskCachePVC:  d.GoldenDiskCachePVC,
 		goldenDiskCacheSize: d.GoldenDiskCacheSize,
 		vmProxy:             d.VMProxy,
+		vmImageTag:          d.VMImageTag,
 		hub:                 newWorkspaceHub(sources...),
 		bus:                 d.Bus,
 	}
