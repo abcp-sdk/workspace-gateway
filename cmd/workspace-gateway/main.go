@@ -236,7 +236,11 @@ func main() {
 		PVCDefaultSize:           envOr("PVC_DEFAULT_SIZE", "1Gi"),
 		GoldenDiskCachePVC:       os.Getenv("SANDBOX_GOLDEN_PVC"),
 		GoldenDiskCacheSize:      os.Getenv("SANDBOX_GOLDEN_PVC_SIZE"),
-		Bus:                      nbus,
+		// Egress proxy for VM sandboxes (macos/windows/ios): the guest has no
+		// direct network, so it is handed SANDBOX_PROXY and the worker exports
+		// HTTP(S)_PROXY to its jobs. Empty = no injection.
+		VMProxy: os.Getenv("SANDBOX_PROXY"),
+		Bus:     nbus,
 	})
 
 	// Reclaim idle sandboxes: no worker jobs for SANDBOX_IDLE_TTL (default 24h).
