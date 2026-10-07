@@ -91,6 +91,12 @@ type Service struct {
 	// cache PVC mounted by VM (Windows/macOS) sandboxes.
 	goldenDiskCachePVC  string
 	goldenDiskCacheSize string
+	// vmProxy, when set, is exported to a VM sandbox (macos/windows/ios) as
+	// SANDBOX_PROXY. The VM guest has NO direct egress, so the worker's start.sh
+	// persists it (/run/shm/proxy + nginx /proxy) and the worker exports
+	// HTTP(S)_PROXY for its jobs — letting guest tools (winget/brew/apt…) reach
+	// the network through the cluster proxy. Empty = no injection.
+	vmProxy string
 	// bootstrap is the rendered package-source bootstrap applied to every
 	// sandbox (nil = none). It is derived from SANDBOX_PACKAGE_UPSTREAM, so a
 	// registry URL change needs no image rebuild.
@@ -158,6 +164,8 @@ type Deps struct {
 	// cache PVC mounted by VM (Windows/macOS) sandboxes.
 	GoldenDiskCachePVC  string
 	GoldenDiskCacheSize string
+	// VMProxy is exported to VM sandboxes as SANDBOX_PROXY (empty = none).
+	VMProxy string
 	// Bus publishes mailbox triggers (e.g. the MR-submitted notification). Nil
 	// disables the notification; it is best-effort and never fails the RPC.
 	Bus bus.Bus
@@ -196,6 +204,7 @@ func New(d Deps) *Service {
 		pvcDefaultSize:      d.PVCDefaultSize,
 		goldenDiskCachePVC:  d.GoldenDiskCachePVC,
 		goldenDiskCacheSize: d.GoldenDiskCacheSize,
+		vmProxy:             d.VMProxy,
 		hub:                 newWorkspaceHub(sources...),
 		bus:                 d.Bus,
 	}
@@ -1809,6 +1818,12 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 			disk = vmDefaultDisk[osName]
 		}
 		extraEnv["GOLDEN_DISK_URL"] = disk
+		// The VM guest has no direct egress; hand it the cluster proxy so the
+		// worker persists it (/run/shm/proxy) and exports HTTP(S)_PROXY to its
+		// jobs (guest tools like winget/brew/apt reach the network through it).
+		if s.vmProxy != "" {
+			extraEnv["SANDBOX_PROXY"] = s.vmProxy
+		}
 		kvm = true
 		if memory == "" {
 			memory = "8Gi"
