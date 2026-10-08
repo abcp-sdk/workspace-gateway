@@ -122,7 +122,12 @@ func main() {
 		log.Fatalf("sandbox backend: %v", err)
 	}
 	services, err := servicesmgr.New(servicesmgr.Config{
-		Namespace:     sandboxNS,
+		Namespace: sandboxNS,
+		// Docker Hub service images (bare `python:3.14-slim` or `docker.io/...`)
+		// are rewritten to the deployment registry (artifact, a pull-through
+		// mirror) so a service can name a public image even though docker.io is
+		// unreachable from the cluster.
+		RegistryHost:  registryHost,
 		CPURequest:    os.Getenv("SERVICE_CPU_REQUEST"),
 		CPULimit:      os.Getenv("SERVICE_CPU_LIMIT"),
 		MemoryRequest: os.Getenv("SERVICE_MEMORY_REQUEST"),
