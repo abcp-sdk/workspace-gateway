@@ -6,8 +6,10 @@
 // Everything is derived from the registry URL at POD-CREATE time (never baked
 // into an image), so changing the registry needs only an env change on the
 // gateway — no image rebuild. Env-configurable managers (pip/npm/go/cargo/pub/
-// hex) are ALSO set via sandbox env (runtimeprofiles.PackageEnv); the config
-// files here cover the rest and the file-based knobs.
+// hex/huggingface/R) are ALSO set via sandbox env (runtimeprofiles.PackageEnv);
+// the config files here cover the rest (maven/gradle/nuget/rubygems/conda/
+// composer/cran/cpan/luarocks/nix/conan/opam/helm/rpm/sbt/git) and the
+// file-based knobs.
 package sandboxbootstrap
 
 import (
@@ -54,6 +56,8 @@ func mounts(home string) []sandboxmgr.BootstrapMount {
 		{Name: "cfg-nuget", Path: home + "/.nuget/NuGet"},
 		// Conan: config + cache → writable.
 		{Name: "cfg-conan", Path: home + "/.conan2", Writable: true},
+		// Helm (config dir only).
+		{Name: "cfg-helm", Path: home + "/.config/helm"},
 		// Cargo's own git deps use the git CLI's insteadOf; opam/dune below.
 		{Name: "cfg-opam", Path: home + "/.opam", Writable: true},
 		// Single-file configs (subPath mounts).
@@ -65,6 +69,10 @@ func mounts(home string) []sandboxmgr.BootstrapMount {
 		{Name: "f-cpan", Path: home + "/.cpan/CPAN/MyConfig.pm", File: true},
 		{Name: "f-luarocks", Path: home + "/.luarocks/config-5.4.lua", File: true},
 		{Name: "f-nixconf", Path: home + "/.config/nix/nix.conf", File: true},
+		// rpm/dnf (system dir; subPath replaces only this file).
+		{Name: "f-dnf", Path: "/etc/yum.repos.d/artifact.repo", File: true},
+		// sbt (Ivy launcher reads ~/.sbt/repositories).
+		{Name: "f-sbt", Path: home + "/.sbt/repositories", File: true},
 	}
 }
 
@@ -139,5 +147,12 @@ mkdir -p "$H/.opam"
 printf 'opam-version: "2.0"\nrepository: "%%s/artifacts/opam/"\n' "$A" > "$H/.opam/repo"
 # --- git (CLI) — rewrite github to the artifact git mirror.
 git config --global url."$A/artifacts/git/github.com/".insteadOf https://github.com/ 2>/dev/null || true
+# --- helm: add artifact as a chart repo (index.yaml at the mount root).
+mkdir -p "$H/.config/helm"
+printf 'apiVersion: v1\nrepositories:\n- name: artifact\n  url: %%s/artifacts/helm\n' "$A" > "$H/.config/helm/repositories.yaml"
+# --- rpm/dnf (Fedora): the artifact rpm mirror (single file, mounted via subPath).
+printf '[artifact]\nname=artifact\nbaseurl=%%s/artifacts/rpm/pub/fedora/linux/releases/43/Everything/x86_64/os/\nenabled=1\ngpgcheck=0\noptional_metadata_types=primary\n' "$A" > /mnt/f-dnf/cfg
+# --- sbt (Ivy launcher): route every repo (incl. Maven Central) through artifact.
+printf '[repositories]\n  local\n  artifact-maven: %%s/artifacts/maven/\n  artifact-ivy: %%s/artifacts/ivy/\n' "$A" "$A" > /mnt/f-sbt/cfg
 `, base, home)
 }
