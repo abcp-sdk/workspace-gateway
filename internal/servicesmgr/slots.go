@@ -9,8 +9,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // Slot names for a blue-green service. Blue is the stable/production slot and
@@ -86,6 +86,10 @@ func (c *Client) IsSlotted(ctx context.Context, name string) bool {
 func (c *Client) DeploySlot(ctx context.Context, s Spec) (Service, error) {
 	if s.Name == "" || s.Image == "" {
 		return Service{}, fmt.Errorf("name and image required")
+	}
+	s.Image = MirrorDockerHubImage(s.Image, c.registryHost)
+	for i := range s.Sidecars {
+		s.Sidecars[i].Image = MirrorDockerHubImage(s.Sidecars[i].Image, c.registryHost)
 	}
 	if !ValidSlot(s.Slot) || s.Slot == "" {
 		return Service{}, fmt.Errorf("slot must be blue|green")
@@ -558,7 +562,7 @@ func (c *Client) buildPodSpec(s Spec, ports []Port) (corev1.PodSpec, error) {
 	if s.Runtime.NeedsTun {
 		t := corev1.HostPathCharDev
 		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
-			Name: "devtun",
+			Name:         "devtun",
 			VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/dev/net/tun", Type: &t}},
 		})
 		podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, corev1.VolumeMount{

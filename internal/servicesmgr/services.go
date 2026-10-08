@@ -15,8 +15,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/yaml"
 
 	"github.com/abcp-sdk/workspace-gateway/internal/runtimeprofiles"
@@ -173,10 +173,10 @@ func PresetPorts(preset string) (port int32, proto string, ok bool) {
 // Probe is a container probe. Exactly one of HTTPGet/TCP/Exec should be set;
 // HTTPGet wins over TCP over Exec.
 type Probe struct {
-	HTTPPath string
-	HTTPPort int32
-	TCPPort  int32
-	Exec     []string
+	HTTPPath            string
+	HTTPPort            int32
+	TCPPort             int32
+	Exec                []string
 	InitialDelaySeconds int32
 	PeriodSeconds       int32
 	TimeoutSeconds      int32
@@ -233,13 +233,13 @@ type KeyToPath struct {
 
 // Sidecar is an extra container in the pod (Init=true => an init container).
 type Sidecar struct {
-	Name     string
-	Image    string
-	Command  []string
-	Env      map[string]string
-	CPU      string
-	Memory   string
-	Init     bool
+	Name    string
+	Image   string
+	Command []string
+	Env     map[string]string
+	CPU     string
+	Memory  string
+	Init    bool
 }
 
 // Toleration is one pod toleration.
@@ -300,6 +300,10 @@ type Client struct {
 	cs        kubernetes.Interface
 	namespace string
 	res       serviceResources
+	// registryHost, when set, is the deployment registry (artifact). A service
+	// image that names Docker Hub (bare name or docker.io/...) is rewritten to
+	// pull from it (see MirrorDockerHubImage).
+	registryHost string
 }
 
 // serviceResources holds the deployment's default service request/limit values.
@@ -310,6 +314,11 @@ type serviceResources struct {
 // Config configures a Client.
 type Config struct {
 	Namespace string
+	// RegistryHost is the deployment registry (artifact). Docker Hub service
+	// images are rewritten to it (pull-through), so a bare `python:3.14-slim`
+	// works even though docker.io is unreachable from the cluster. Empty =
+	// no rewrite (image used as-is).
+	RegistryHost string
 	// Default resource REQUESTS/LIMITS applied when a service omits cpu/memory.
 	// Requests default to 500m / 1Gi; limits default to 2 / 4Gi. An explicit
 	// cpu/memory on the service still sets request == limit.
@@ -347,6 +356,7 @@ func NewWithClientset(cs kubernetes.Interface, cfg Config) *Client {
 	}
 	return &Client{
 		cs: cs, namespace: ns,
+		registryHost: cfg.RegistryHost,
 		res: serviceResources{
 			cpuReq: cfg.CPURequest, cpuLim: cfg.CPULimit,
 			memReq: cfg.MemoryRequest, memLim: cfg.MemoryLimit,
@@ -364,6 +374,10 @@ func (c *Client) Namespace() string { return c.namespace }
 func (c *Client) Deploy(ctx context.Context, s Spec) (Service, error) {
 	if s.Name == "" || s.Image == "" {
 		return Service{}, fmt.Errorf("name and image required")
+	}
+	s.Image = MirrorDockerHubImage(s.Image, c.registryHost)
+	for i := range s.Sidecars {
+		s.Sidecars[i].Image = MirrorDockerHubImage(s.Sidecars[i].Image, c.registryHost)
 	}
 	if s.ContainerPort == 0 {
 		s.ContainerPort = 8080
