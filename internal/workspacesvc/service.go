@@ -91,14 +91,14 @@ type Service struct {
 	// cache PVC mounted by VM (Windows/macOS) sandboxes.
 	goldenDiskCachePVC  string
 	goldenDiskCacheSize string
-	// vmProxy, when set, is exported to a VM sandbox (macos/windows/ios) as
+	// vmProxy, when set, is exported to a VM sandbox (macos/windows) as
 	// SANDBOX_PROXY. The VM guest has NO direct egress, so the worker's start.sh
 	// persists it (/run/shm/proxy + nginx /proxy) and the worker exports
 	// HTTP(S)_PROXY for its jobs — letting guest tools (winget/brew/apt…) reach
 	// the network through the cluster proxy. Empty = no injection.
 	vmProxy string
 	// vmImageTag is the tag applied to VM/device sandbox images (macos/windows/
-	// ios/android). Deployment-pinned so the mapping never depends on a mutable
+	// android). Deployment-pinned so the mapping never depends on a mutable
 	// alias like `base` (which a registry cleanup can prune). Empty = "base".
 	vmImageTag string
 	// bootstrap is the rendered package-source bootstrap applied to every
@@ -1804,9 +1804,9 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 	// Resolve the OS: for windows/macos pick the VM image, force kvm, set an 8Gi
 	// limit, inject GOLDEN_DISK_URL and mount the shared golden-disk cache PVC.
 	osName := normalizeOS(req.Msg.GetOs())
-	// ios is VM-like (a macOS guest booting from a golden disk); android is a
-	// device sandbox with its guest baked into the image.
-	vm := osName == "macos" || osName == "windows" || osName == "ios"
+	// android is a device sandbox with its guest baked into the image; macos/
+	// windows are VM sandboxes booting from a golden disk.
+	vm := osName == "macos" || osName == "windows"
 	device := osName == "android"
 	kvm := req.Msg.GetKvm()
 	memory := req.Msg.GetMemory()
@@ -1815,7 +1815,7 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 	if vm {
 		if _, ok := vmImageName[osName]; !ok {
 			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("unsupported os %q (want linux|windows|macos|android|ios)", req.Msg.GetOs()))
+				fmt.Errorf("unsupported os %q (want linux|windows|macos|android)", req.Msg.GetOs()))
 		}
 		if image == "" {
 			image = s.vmSandboxImage(osName)
@@ -1843,7 +1843,7 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 	} else if device {
-		// Android/iOS: a device sandbox boots an emulator/simulator — kvm +
+		// Android: a device sandbox boots an emulator — kvm +
 		// extra memory, but no golden disk (the image owns its guest).
 		if image == "" {
 			image = s.vmSandboxImage(osName)

@@ -236,11 +236,11 @@ func main() {
 		PVCDefaultSize:           envOr("PVC_DEFAULT_SIZE", "1Gi"),
 		GoldenDiskCachePVC:       os.Getenv("SANDBOX_GOLDEN_PVC"),
 		GoldenDiskCacheSize:      os.Getenv("SANDBOX_GOLDEN_PVC_SIZE"),
-		// Egress proxy for VM sandboxes (macos/windows/ios): the guest has no
+		// Egress proxy for VM sandboxes (macos/windows): the guest has no
 		// direct network, so it is handed SANDBOX_PROXY and the worker exports
 		// HTTP(S)_PROXY to its jobs. Empty = no injection.
 		VMProxy: os.Getenv("SANDBOX_PROXY"),
-		// Tag for VM/device sandbox images (macos/windows/ios/android). Pinned
+		// Tag for VM/device sandbox images (macos/windows/android). Pinned
 		// here so the mapping does not depend on a prunable alias like `base`.
 		VMImageTag: envOr("SANDBOX_VM_IMAGE_TAG", "base"),
 		Bus:        nbus,

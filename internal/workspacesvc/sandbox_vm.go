@@ -26,16 +26,12 @@ const defaultGoldenDiskCachePVC = "sandbox-golden-cache"
 var vmImageName = map[string]string{
 	"macos":   "sandbox-macos",
 	"windows": "sandbox-windows",
-	// iOS runs INSIDE a macOS guest (Xcode + iOS Simulator), so it boots the
-	// SAME golden disk as macos:xcode and shares the golden-disk cache PVC.
-	"ios": "sandbox-ios",
 }
 
 // vmDefaultDisk maps os → its default golden-disk URL.
 var vmDefaultDisk = map[string]string{
 	"macos":   "http://artifact.worker.svc.cluster.local/artifacts/generic/golden-macos/15/data-xcode.qcow2",
 	"windows": "http://artifact.worker.svc.cluster.local/artifacts/generic/golden-windows/11/data-devtools.qcow2",
-	"ios":     "http://artifact.worker.svc.cluster.local/artifacts/generic/golden-macos/15/data-ios.qcow2",
 }
 
 // deviceImageName maps a "device" os → its canonical sandbox image WITH its own
@@ -44,9 +40,7 @@ var vmDefaultDisk = map[string]string{
 // tag rather than the VM image tag.
 //
 // Android boots an emulator inside a Linux container: kvm + extra memory, but
-// NO golden disk (its guest is baked into the image). iOS is NOT here — it uses
-// a golden disk (see vmImageName/vmDefaultDisk) because its macOS guest disk is
-// external.
+// NO golden disk (its guest is baked into the image).
 var deviceImageName = map[string]string{
 	"android": "sandbox-android:aosp",
 }
@@ -62,15 +56,13 @@ func normalizeOS(os string) string {
 		return "windows"
 	case "android":
 		return "android"
-	case "ios":
-		return "ios"
 	default:
 		return "linux"
 	}
 }
 
-// vmImageTagOrDefault is the tag applied to VM sandbox images (macos/windows/
-// ios). Device images carry their own tag (see deviceImageName).
+// vmImageTagOrDefault is the tag applied to VM sandbox images (macos/windows).
+// Device images carry their own tag (see deviceImageName).
 // Deployment-pinned (Deps.VMImageTag, env SANDBOX_VM_IMAGE_TAG); "base" default.
 func (s *Service) vmImageTagOrDefault() string {
 	if s.vmImageTag != "" {
@@ -80,7 +72,7 @@ func (s *Service) vmImageTagOrDefault() string {
 }
 
 // vmSandboxImage returns the full sandbox image ref for a VM/device os.
-// VM images (macos/windows/ios) get the deployment-pinned VM tag; a device
+// VM images (macos/windows) get the deployment-pinned VM tag; a device
 // image (android) keeps its own tag (deviceImageName already carries it).
 func (s *Service) vmSandboxImage(osName string) string {
 	host := s.sandboxImageRegistryHost
