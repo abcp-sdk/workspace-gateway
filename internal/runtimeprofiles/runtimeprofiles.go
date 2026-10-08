@@ -165,8 +165,8 @@ func (s Settings) Render(kvm bool, gpuCount int) Rendered {
 
 // PackageEnv returns the env vars that route env-configurable package managers
 // at `base` (the artifact registry root). Keys are the ones each tool reads:
-// pip, npm, Go, cargo, pub (Dart), hex (Elixir). Trusted-host/strict-ssl are
-// needed because artifact serves plain HTTP in-cluster.
+// pip, npm, Go, cargo, pub (Dart), hex (Elixir), HuggingFace. Trusted-host/
+// strict-ssl are needed because artifact serves plain HTTP in-cluster.
 // It is also used as the default build-args for sandbox image builds, so a
 // Dockerfile that honors these ARGs fetches from artifact at BUILD time too.
 func PackageEnv(base string) map[string]string {
@@ -201,6 +201,18 @@ func PackageEnv(base string) map[string]string {
 		"PUB_HOSTED_URL": base + "/artifacts/pub",
 		// hex (Elixir)
 		"HEX_MIRROR": base + "/artifacts/hex/",
+		// HuggingFace Hub (transformers/diffusers/huggingface_hub read HF_ENDPOINT):
+		// models/datasets resolve + LFS blobs are pulled through and cached by
+		// artifact instead of hitting huggingface.co directly.
+		"HF_ENDPOINT": base + "/artifacts/huggingface",
+		// NOTE: HF_HOME is deliberately NOT set — the sandbox HOME/workspace
+		// differ per platform (linux/desktop /root, macOS /Users/docker, Windows
+		// C:\Users\Docker), so let huggingface_hub use its default
+		// (~/.cache/huggingface) rather than a platform-specific path.
+		// R: the user library dir. ~/.Rprofile (written by the sandbox
+		// bootstrap) does `.libPaths(Sys.getenv("R_LIBS_USER"))`, so this MUST be
+		// set or R would load from an empty path.
+		"R_LIBS_USER": "/root/R/libs",
 	}
 }
 
