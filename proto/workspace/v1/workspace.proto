@@ -1187,6 +1187,41 @@ message ListPVCsResponse { repeated PVCInfo pvcs = 1; }
 message DeletePVCRequest { string name = 1; }
 message DeletePVCResponse { bool ok = 1; }
 
+// ---- configmaps / secrets ----
+message ConfigMapInfo {
+  string name = 1;
+  map<string, string> data = 2;
+  string creator = 3;
+  int64 created_at = 4;
+  string namespace = 5;
+}
+message PutConfigMapRequest {
+  string name = 1;
+  map<string, string> data = 2;
+}
+message PutConfigMapResponse { ConfigMapInfo configmap = 1; }
+message ListConfigMapsRequest {}
+message ListConfigMapsResponse { repeated ConfigMapInfo configmaps = 1; }
+message DeleteConfigMapRequest { string name = 1; }
+message DeleteConfigMapResponse { bool ok = 1; }
+
+message SecretInfo {
+  string name = 1;
+  map<string, string> data = 2;
+  string creator = 3;
+  int64 created_at = 4;
+  string namespace = 5;
+}
+message PutSecretRequest {
+  string name = 1;
+  map<string, string> data = 2;
+}
+message PutSecretResponse { SecretInfo secret = 1; }
+message ListSecretsRequest {}
+message ListSecretsResponse { repeated SecretInfo secrets = 1; }
+message DeleteSecretRequest { string name = 1; }
+message DeleteSecretResponse { bool ok = 1; }
+
 // PauseService scales a service to zero replicas (without deleting it). The
 // replica count in effect at pause time is remembered so ResumeService can
 // restore it.
@@ -1567,6 +1602,14 @@ service BranchSessionService {
   rpc CreatePVC(CreatePVCRequest) returns (CreatePVCResponse);
   rpc ListPVCs(ListPVCsRequest) returns (ListPVCsResponse);
   rpc DeletePVC(DeletePVCRequest) returns (DeletePVCResponse);
+
+  // ---- configmaps / secrets ----
+  rpc PutConfigMap(PutConfigMapRequest) returns (PutConfigMapResponse);
+  rpc ListConfigMaps(ListConfigMapsRequest) returns (ListConfigMapsResponse);
+  rpc DeleteConfigMap(DeleteConfigMapRequest) returns (DeleteConfigMapResponse);
+  rpc PutSecret(PutSecretRequest) returns (PutSecretResponse);
+  rpc ListSecrets(ListSecretsRequest) returns (ListSecretsResponse);
+  rpc DeleteSecret(DeleteSecretRequest) returns (DeleteSecretResponse);
   // service logs (read a service's container logs; seam for a log backend)
   rpc ServiceLogs(ServiceLogsRequest) returns (ServiceLogsResponse);
   rpc WatchServiceLogs(WatchServiceLogsRequest) returns (stream WatchServiceLogsResponse);
