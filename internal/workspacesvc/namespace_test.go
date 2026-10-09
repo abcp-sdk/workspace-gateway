@@ -40,3 +40,18 @@ func TestCallerNamespace(t *testing.T) {
 		t.Fatalf("webui callerNamespace=%q", got)
 	}
 }
+
+func TestWritablePolicy(t *testing.T) {
+	cases := []struct {
+		creator, tenant string
+		want            bool
+	}{
+		{"alice", "alice", true}, {"alice", "bob", false},
+		{"alice", "", false}, {"", "alice", false}, {"", "", false},
+	}
+	for _, c := range cases {
+		if got := writable(c.creator, c.tenant); got != c.want {
+			t.Fatalf("writable(%q,%q)=%v want %v", c.creator, c.tenant, got, c.want)
+		}
+	}
+}
