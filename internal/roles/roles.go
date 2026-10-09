@@ -128,9 +128,8 @@ var repoDevTools = []string{
 	// releases / images / services
 	"repo-tag-create", "repo-build-image", "repo-build-status",
 	"service-deploy", "service-list", "service-delete", "service-logs",
-	"service-promote", "service-rollback",
+	"service-rollback",
 	"helm-deploy", "helm-list", "helm-history", "helm-rollback", "helm-uninstall",
-	"helm-promote", "helm-rollback-release",
 	"helm-objects", "helm-object-logs",
 }
 
@@ -142,10 +141,9 @@ var adminTools = []string{
 	"repo-set-push-mirror", "repo-list-push-mirrors", "repo-delete-push-mirror",
 	"oci-import",
 	"service-deploy", "service-list", "service-delete", "service-logs",
-	"service-promote", "service-rollback",
+	"service-rollback",
 	"pvc-create", "pvc-list", "pvc-delete",
 	"helm-deploy", "helm-list", "helm-history", "helm-rollback", "helm-uninstall",
-	"helm-promote", "helm-rollback-release",
 	"helm-objects", "helm-object-logs",
 }
 
