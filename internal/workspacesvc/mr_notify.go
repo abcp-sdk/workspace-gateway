@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	abcagent "github.com/abcp-sdk/abc-protocol-go/v2/agent"
 	wsv1 "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1"
 	"github.com/abcp-sdk/workspace-gateway/internal/roles"
@@ -20,7 +20,7 @@ import (
 // Best-effort: every failure is logged and swallowed — a notification must
 // never fail a submitted MR. Skipped when the target IS the submitting session
 // (nothing to notify) or when no bus is configured.
-func (s *Service) notifyMRSubmitted(ctx context.Context, hdr map[string][]string, tenant, org, repo, base string, index int32, title, url string) {
+func (s *Service) notifyMRSubmitted(ctx context.Context, hdr *connect.Header, tenant, org, repo, base string, index int32, title, url string) {
 	if s.bus == nil {
 		return
 	}
@@ -34,10 +34,13 @@ func (s *Service) notifyMRSubmitted(ctx context.Context, hdr map[string][]string
 	}
 	// Ensure the base session exists so its mailbox is durable. Copy the
 	// caller's headers so tenant/identity resolution matches the submit.
-	ereq := connect.NewRequest(&wsv1.EnsureBranchSessionRequest{Org: org, Repo: repo, Branch: base})
-	for k, vs := range hdr {
-		for _, v := range vs {
-			ereq.Header().Add(k, v)
+	ereq := &wsv1.EnsureBranchSessionRequest{Org: org, Repo: repo, Branch: base}
+	ctx, info := connect.NewClientContext(ctx)
+	if hdr != nil {
+		for k, vs := range hdr.All() {
+			for _, v := range vs {
+				info.RequestHeader().Add(k, v)
+			}
 		}
 	}
 	if _, err := s.EnsureBranchSession(ctx, ereq); err != nil {

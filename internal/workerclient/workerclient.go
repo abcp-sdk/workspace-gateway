@@ -5,11 +5,14 @@ package workerclient
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	workerv1 "github.com/abcp-sdk/workspace-gateway/gen/worker/v1"
 	"github.com/abcp-sdk/workspace-gateway/gen/worker/v1/workerv1connect"
@@ -81,22 +84,22 @@ type Client struct {
 
 // New builds a bearer-authenticated client for url.
 func New(url, token string) *Client {
-	opts := []connect.ClientOption{}
+	var interceptors []connect.ClientInterceptor
 	if token != "" {
-		opts = append(opts, connect.WithInterceptors(bearer(token)))
+		interceptors = append(interceptors, bearer(token))
 	}
 	hc := &http.Client{Timeout: 10 * time.Second}
-	return &Client{c: workerv1connect.NewWorkerServiceClient(hc, strings.TrimRight(url, "/"), opts...)}
+	return &Client{c: workerv1connect.NewWorkerServiceClient(connect.NewClient(connecthttp.NewTransport(hc, strings.TrimRight(url, "/"), connecthttp.WithReadMaxBytes(0)), interceptors...))}
 }
 
 // ListJobs returns the worker's job history window (≤500 entries, 24h retained).
 func (c *Client) ListJobs(ctx context.Context) ([]Job, error) {
-	res, err := c.c.ListJobs(ctx, connect.NewRequest(&workerv1.ListJobsRequest{}))
+	res, err := c.c.ListJobs(ctx, &workerv1.ListJobsRequest{})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]Job, 0, len(res.Msg.GetJobs()))
-	for _, j := range res.Msg.GetJobs() {
+	out := make([]Job, 0, len(res.GetJobs()))
+	for _, j := range res.GetJobs() {
 		out = append(out, Job{
 			ID: j.GetId(), Command: j.GetCommand(), State: j.GetState(),
 			ExitCode: j.GetExitCode(), StartedAt: j.GetStartedAt(), FinishedAt: j.GetFinishedAt(),
@@ -107,23 +110,23 @@ func (c *Client) ListJobs(ctx context.Context) ([]Job, error) {
 
 // Info returns the worker's environment summary.
 func (c *Client) Info(ctx context.Context) (Info, error) {
-	res, err := c.c.Info(ctx, connect.NewRequest(&workerv1.InfoRequest{}))
+	res, err := c.c.Info(ctx, &workerv1.InfoRequest{})
 	if err != nil {
 		return Info{}, err
 	}
-	m := res.Msg
+	m := res
 	return Info{OS: m.GetOs(), Arch: m.GetArch(), Workspace: m.GetWorkspace(), Home: m.GetHome()}, nil
 }
 
 // FileList lists a directory (or a single file) on the worker.
 func (c *Client) FileList(ctx context.Context, path string, depth, limit int32) (FileList, error) {
-	res, err := c.c.FileList(ctx, connect.NewRequest(&workerv1.FileListRequest{
+	res, err := c.c.FileList(ctx, &workerv1.FileListRequest{
 		Path: path, Depth: depth, Limit: limit,
-	}))
+	})
 	if err != nil {
 		return FileList{}, err
 	}
-	m := res.Msg
+	m := res
 	out := FileList{IsDir: m.GetIsDir(), Files: make([]FileEntry, 0, len(m.GetFiles()))}
 	for _, f := range m.GetFiles() {
 		out.Files = append(out.Files, FileEntry{Path: f.GetPath(), Size: f.GetSize(), IsDir: f.GetIsDir()})
@@ -133,13 +136,13 @@ func (c *Client) FileList(ctx context.Context, path string, depth, limit int32) 
 
 // FileRead reads a (windowed) file from the worker.
 func (c *Client) FileRead(ctx context.Context, path string, start, end int32) (FileRead, error) {
-	res, err := c.c.FileRead(ctx, connect.NewRequest(&workerv1.FileReadRequest{
+	res, err := c.c.FileRead(ctx, &workerv1.FileReadRequest{
 		Path: path, StartLine: start, EndLine: end,
-	}))
+	})
 	if err != nil {
 		return FileRead{}, err
 	}
-	m := res.Msg
+	m := res
 	return FileRead{
 		Content: m.GetContent(), TotalLines: m.GetTotalLines(),
 		StartLine: m.GetStartLine(), EndLine: m.GetEndLine(),
@@ -148,13 +151,13 @@ func (c *Client) FileRead(ctx context.Context, path string, start, end int32) (F
 
 // JobOutput polls a bounded window of one job's buffered output.
 func (c *Client) JobOutput(ctx context.Context, jobID string, start, end int32, stream string) (JobOutput, error) {
-	res, err := c.c.JobOutput(ctx, connect.NewRequest(&workerv1.JobOutputRequest{
+	res, err := c.c.JobOutput(ctx, &workerv1.JobOutputRequest{
 		JobId: jobID, Start: start, End: end, Stream: stream,
-	}))
+	})
 	if err != nil {
 		return JobOutput{}, err
 	}
-	m := res.Msg
+	m := res
 	return JobOutput{
 		Lines: m.GetLines(), TotalLines: m.GetTotalLines(),
 		StartLine: m.GetStartLine(), EndLine: m.GetEndLine(), Done: m.GetDone(),
@@ -169,14 +172,21 @@ func (c *Client) WatchJob(ctx context.Context, jobID string) (<-chan WatchEvent,
 	go func() {
 		defer close(events)
 		defer close(errc)
-		st, err := c.c.WatchJob(ctx, connect.NewRequest(&workerv1.WatchJobRequest{JobId: jobID}))
+		st, err := c.c.WatchJob(ctx, &workerv1.WatchJobRequest{JobId: jobID})
 		if err != nil {
 			errc <- err
 			return
 		}
 		defer st.Close()
-		for st.Receive() {
-			m := st.Msg()
+		for {
+			msg, err := st.Receive()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				errc <- err
+			}
+			m := msg
 			if d := m.GetDone(); d != nil {
 				events <- WatchEvent{Done: true, ExitCode: d.GetExitCode(), Stdout: d.GetStdout(), Stderr: d.GetStderr()}
 				return
@@ -185,18 +195,18 @@ func (c *Client) WatchJob(ctx context.Context, jobID string) (<-chan WatchEvent,
 				events <- WatchEvent{Output: out}
 			}
 		}
-		if err := st.Err(); err != nil {
-			errc <- err
-		}
+
 	}()
 	return events, errc
 }
 
-func bearer(token string) connect.Interceptor {
-	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			req.Header().Set("Authorization", "Bearer "+token)
-			return next(ctx, req)
+func bearer(token string) connect.ClientInterceptor {
+	return func(next connect.ClientFunc) connect.ClientFunc {
+		return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
+			var info *connect.CallInfo
+			ctx, info = connect.NewClientContext(ctx)
+			info.RequestHeader().Set("Authorization", "Bearer "+token)
+			return next(ctx, spec)
 		}
-	})
+	}
 }

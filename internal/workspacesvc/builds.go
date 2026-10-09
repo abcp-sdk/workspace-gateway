@@ -4,14 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	wsv1 "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1"
 	"github.com/abcp-sdk/workspace-gateway/internal/imagebuild"
@@ -45,13 +44,14 @@ func newBuildID() string {
 
 // BuildSandboxImage starts a background build and returns its id IMMEDIATELY
 // (the build's push is the slow part). Poll GetBuildStatus for the result.
-func (s *Service) BuildSandboxImage(ctx context.Context, req *connect.Request[wsv1.BuildSandboxImageRequest]) (*connect.Response[wsv1.BuildSandboxImageResponse], error) {
-	if _, err := s.sandboxAuth(ctx, req.Header()); err != nil {
+func (s *Service) BuildSandboxImage(ctx context.Context, req *wsv1.BuildSandboxImageRequest) (*wsv1.BuildSandboxImageResponse, error) {
+	info, _ := connect.CallInfoForServerContext(ctx)
+	if _, err := s.sandboxAuth(ctx, info.RequestHeader()); err != nil {
 		return nil, err
 	}
 	// Validate everything up front (fail fast, before returning a build id),
 	// and fetch the repo archive. The slow push happens in the goroutine below.
-	breq, cleanup, err := s.prepareBuild(ctx, req.Msg)
+	breq, cleanup, err := s.prepareBuild(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -87,36 +87,38 @@ func (s *Service) BuildSandboxImage(ctx context.Context, req *connect.Request[ws
 		}
 		st.state, st.imageRef = "done", res
 	}()
-	return connect.NewResponse(&wsv1.BuildSandboxImageResponse{BuildId: id}), nil
+	return &wsv1.BuildSandboxImageResponse{BuildId: id}, nil
 }
 
 // GetBuildStatus returns a background build's state.
-func (s *Service) GetBuildStatus(ctx context.Context, req *connect.Request[wsv1.GetBuildStatusRequest]) (*connect.Response[wsv1.GetBuildStatusResponse], error) {
-	if _, err := s.sandboxAuth(ctx, req.Header()); err != nil {
+func (s *Service) GetBuildStatus(ctx context.Context, req *wsv1.GetBuildStatusRequest) (*wsv1.GetBuildStatusResponse, error) {
+	info, _ := connect.CallInfoForServerContext(ctx)
+	if _, err := s.sandboxAuth(ctx, info.RequestHeader()); err != nil {
 		return nil, err
 	}
-	id := req.Msg.GetBuildId()
+	id := req.GetBuildId()
 	buildsMu.Lock()
 	st := builds[id]
 	buildsMu.Unlock()
 	if st == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("build %q not found", id))
+		return nil, connect.Errorf(connect.CodeNotFound, "build %q not found", id)
 	}
 	// Serve only the output produced since since_offset (incremental polling).
-	since := int(req.Msg.GetSinceOffset())
+	since := int(req.GetSinceOffset())
 	if since < 0 || since > len(st.log) {
 		since = len(st.log)
 	}
-	return connect.NewResponse(&wsv1.GetBuildStatusResponse{
+	return &wsv1.GetBuildStatusResponse{
 		BuildId: id, State: st.state, ImageRef: st.imageRef,
 		Log: st.log[since:], LogOffset: int64(len(st.log)),
-	}), nil
+	}, nil
 }
 
 // ListBuilds returns every in-memory build, newest first, for the UI's build
 // list. (Process-local, like GetBuildStatus.)
-func (s *Service) ListBuilds(ctx context.Context, req *connect.Request[wsv1.ListBuildsRequest]) (*connect.Response[wsv1.ListBuildsResponse], error) {
-	if _, err := s.sandboxAuth(ctx, req.Header()); err != nil {
+func (s *Service) ListBuilds(ctx context.Context, req *wsv1.ListBuildsRequest) (*wsv1.ListBuildsResponse, error) {
+	info, _ := connect.CallInfoForServerContext(ctx)
+	if _, err := s.sandboxAuth(ctx, info.RequestHeader()); err != nil {
 		return nil, err
 	}
 	buildsMu.Lock()
@@ -129,7 +131,7 @@ func (s *Service) ListBuilds(ctx context.Context, req *connect.Request[wsv1.List
 	}
 	buildsMu.Unlock()
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt > out[j].CreatedAt })
-	return connect.NewResponse(&wsv1.ListBuildsResponse{Builds: out}), nil
+	return &wsv1.ListBuildsResponse{Builds: out}, nil
 }
 
 // prepareBuild validates a build request and extracts the repo archive into a
@@ -138,30 +140,30 @@ func (s *Service) ListBuilds(ctx context.Context, req *connect.Request[wsv1.List
 func (s *Service) prepareBuild(ctx context.Context, m *wsv1.BuildSandboxImageRequest) (imagebuild.Request, func(), error) {
 	org, repo, ref := m.GetOrg(), m.GetRepo(), m.GetRef()
 	if !roles.ValidComponent(org) || !roles.ValidComponent(repo) {
-		return imagebuild.Request{}, nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org/repo must be simple names"))
+		return imagebuild.Request{}, nil, connect.NewError(connect.CodeInvalidArgument, "org/repo must be simple names")
 	}
 	if ref == "" {
 		ref = roles.MainBranch
 	}
 	if !roles.ValidComponent(ref) {
-		return imagebuild.Request{}, nil, connect.NewError(connect.CodeInvalidArgument, errors.New("ref must be a simple name"))
+		return imagebuild.Request{}, nil, connect.NewError(connect.CodeInvalidArgument, "ref must be a simple name")
 	}
 	if !imageNameRe.MatchString(m.GetImage()) {
-		return imagebuild.Request{}, nil, connect.NewError(connect.CodeInvalidArgument, errors.New("image must be a single simple name"))
+		return imagebuild.Request{}, nil, connect.NewError(connect.CodeInvalidArgument, "image must be a single simple name")
 	}
 	if !roles.ValidComponent(m.GetTag()) {
-		return imagebuild.Request{}, nil, connect.NewError(connect.CodeInvalidArgument, errors.New("tag must be a simple name"))
+		return imagebuild.Request{}, nil, connect.NewError(connect.CodeInvalidArgument, "tag must be a simple name")
 	}
 	if s.builder == nil {
-		return imagebuild.Request{}, nil, connect.NewError(connect.CodeUnavailable, errors.New("image builder not configured"))
+		return imagebuild.Request{}, nil, connect.NewError(connect.CodeUnavailable, "image builder not configured")
 	}
 	archive, err := s.git.ArchiveTarGz(ctx, org, repo, ref)
 	if err != nil {
-		return imagebuild.Request{}, nil, connect.NewError(connect.CodeInternal, fmt.Errorf("fetch repo archive: %w", err))
+		return imagebuild.Request{}, nil, connect.NewError(connect.CodeInternal, fmt.Errorf("fetch repo archive: %w", err).Error())
 	}
 	dir, cleanup, err := imagebuild.Extract(archive, 0)
 	if err != nil {
-		return imagebuild.Request{}, nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return imagebuild.Request{}, nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	// The image is pushed under the SOURCE REPO's org namespace
 	// (<registry>/<org>/<image>:<tag>).

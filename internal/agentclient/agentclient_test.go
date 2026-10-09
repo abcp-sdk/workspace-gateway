@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	agentv1 "github.com/abcp-sdk/workspace-gateway/gen/agent/v1"
 	"github.com/abcp-sdk/workspace-gateway/gen/agent/v1/agentv1connect"
 )
@@ -21,14 +19,14 @@ type stubAdmin struct {
 	failWith error
 }
 
-func (a *stubAdmin) IssueTenantToken(_ context.Context, req *connect.Request[agentv1.IssueTenantTokenRequest]) (*connect.Response[agentv1.IssueTenantTokenResponse], error) {
+func (a *stubAdmin) IssueTenantToken(_ context.Context, req *agentv1.IssueTenantTokenRequest) (*agentv1.IssueTenantTokenResponse, error) {
 	if a.failWith != nil {
 		return nil, a.failWith
 	}
-	a.minted = append(a.minted, req.Msg.GetTenantId())
-	return connect.NewResponse(&agentv1.IssueTenantTokenResponse{
+	a.minted = append(a.minted, req.GetTenantId())
+	return &agentv1.IssueTenantTokenResponse{
 		Plaintext: a.token,
-	}), nil
+	}, nil
 }
 
 // capture records the headers of the request it was handed and returns 200.

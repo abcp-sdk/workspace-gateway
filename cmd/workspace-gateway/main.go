@@ -20,7 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	"github.com/abcp-sdk/abc-protocol-go/v2/bus"
 	natstransport "github.com/abcp-sdk/abc-protocol-go/v2/transport/nats"
@@ -268,9 +269,10 @@ func main() {
 
 	mux := http.NewServeMux()
 	// workspace.v1 is the gateway's ONLY surface.
-	wpath, whandler := wsv1connect.NewBranchSessionServiceHandler(svc,
-		connect.WithInterceptors())
-	mux.Handle(wpath, whandler)
+	server := connect.NewServer()
+	wsv1connect.RegisterBranchSessionServiceHandler(server, svc)
+
+	connecthttp.Mount(mux, server, connecthttp.WithReadMaxBytes(0))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	})

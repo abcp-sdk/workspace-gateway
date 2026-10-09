@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"k8s.io/client-go/kubernetes/fake"
 
 	agentv1 "github.com/abcp-sdk/workspace-gateway/gen/agent/v1"
@@ -22,8 +22,8 @@ type stubAgent struct {
 	tenant string
 }
 
-func (a stubAgent) GetIdentity(context.Context, *connect.Request[agentv1.GetIdentityRequest]) (*connect.Response[agentv1.GetIdentityResponse], error) {
-	return connect.NewResponse(&agentv1.GetIdentityResponse{Tenant: a.tenant}), nil
+func (a stubAgent) GetIdentity(context.Context, *agentv1.GetIdentityRequest) (*agentv1.GetIdentityResponse, error) {
+	return &agentv1.GetIdentityResponse{Tenant: a.tenant}, nil
 }
 
 func TestSandboxAuthServiceToken(t *testing.T) {
@@ -32,7 +32,7 @@ func TestSandboxAuthServiceToken(t *testing.T) {
 
 	// A matching service token resolves to the configured tenant without ever
 	// dialing the agent.
-	hdr := map[string][]string{"Authorization": {"Bearer svc-secret"}}
+	hdr := testHdr("Authorization", "Bearer svc-secret")
 	tenant, err := s.sandboxAuth(ctx, hdr)
 	if err != nil {
 		t.Fatalf("sandboxAuth: %v", err)
@@ -45,7 +45,7 @@ func TestSandboxAuthServiceToken(t *testing.T) {
 	// identity path, which resolves the caller's own tenant (never the service
 	// tenant).
 	s.agent = stubAgent{tenant: "real-tenant"}
-	bad := map[string][]string{"Authorization": {"Bearer nope"}}
+	bad := testHdr("Authorization", "Bearer nope")
 	got, err := s.sandboxAuth(ctx, bad)
 	if err != nil {
 		t.Fatalf("sandboxAuth: %v", err)
@@ -57,7 +57,7 @@ func TestSandboxAuthServiceToken(t *testing.T) {
 
 func TestSandboxAuthDisabledWithoutToken(t *testing.T) {
 	// bearerToken is case-insensitive on the header name.
-	if got := bearerToken(map[string][]string{"authorization": {"Bearer x"}}); got != "x" {
+	if got := bearerToken(testHdr("authorization", "Bearer x")); got != "x" {
 		t.Fatalf("bearerToken = %q, want x (case-insensitive header)", got)
 	}
 }
@@ -80,7 +80,7 @@ func TestPublicDomainFor(t *testing.T) {
 	s := &Service{sandboxNS: "worker"}
 
 	// Infer from X-Forwarded-Host: drop the first two labels.
-	hdr := map[string][]string{"X-Forwarded-Host": {"workspace.agent.10.199.64.20.nip.io"}}
+	hdr := testHdr("X-Forwarded-Host", "workspace.agent.10.199.64.20.nip.io")
 	if got := s.publicDomainFor(hdr); got != "10.199.64.20.nip.io" {
 		t.Fatalf("inferred domain = %q", got)
 	}
@@ -99,27 +99,27 @@ func TestPublicDomainFor(t *testing.T) {
 	}
 
 	// fenjin.org form.
-	hdr = map[string][]string{"X-Forwarded-Host": {"workspace.agent.fenjin.org"}}
+	hdr = testHdr("X-Forwarded-Host", "workspace.agent.fenjin.org")
 	if got := s.publicDomainFor(hdr); got != "fenjin.org" {
 		t.Fatalf("fenjin domain = %q", got)
 	}
 
 	// A port in the host is stripped.
-	hdr = map[string][]string{"Host": {"workspace.agent.10.199.64.20.nip.io:8443"}}
+	hdr = testHdr("Host", "workspace.agent.10.199.64.20.nip.io:8443")
 	if got := s.publicDomainFor(hdr); got != "10.199.64.20.nip.io" {
 		t.Fatalf("port-stripped domain = %q", got)
 	}
 
 	// Too few labels (bare/custom domain) -> no inference.
-	if got := s.publicDomainFor(map[string][]string{"Host": {"workspace.com"}}); got != "" {
+	if got := s.publicDomainFor(testHdr("Host", "workspace.com")); got != "" {
 		t.Fatalf("bare domain should not infer: %q", got)
 	}
 	// In-cluster callers carry a Service DNS host: never a public domain.
-	if got := s.publicDomainFor(map[string][]string{"Host": {"workspace-gateway.agent.svc.cluster.local"}}); got != "" {
+	if got := s.publicDomainFor(testHdr("Host", "workspace-gateway.agent.svc.cluster.local")); got != "" {
 		t.Fatalf("svc.cluster.local should not infer: %q", got)
 	}
 	// A bare IP (ClusterIP) host -> no domain.
-	if got := s.publicDomainFor(map[string][]string{"Host": {"172.18.15.119"}}); got != "" {
+	if got := s.publicDomainFor(testHdr("Host", "172.18.15.119")); got != "" {
 		t.Fatalf("bare IP should not infer: %q", got)
 	}
 	// No host at all -> empty.
@@ -173,13 +173,13 @@ type stubAgentLocale struct {
 	lastCreate   *agentv1.CreateSessionRequest
 }
 
-func (a *stubAgentLocale) GetConfig(context.Context, *connect.Request[agentv1.GetConfigRequest]) (*connect.Response[agentv1.GetConfigResponse], error) {
-	return connect.NewResponse(&agentv1.GetConfigResponse{Key: "locale", Value: a.configLocale}), nil
+func (a *stubAgentLocale) GetConfig(context.Context, *agentv1.GetConfigRequest) (*agentv1.GetConfigResponse, error) {
+	return &agentv1.GetConfigResponse{Key: "locale", Value: a.configLocale}, nil
 }
 
-func (a *stubAgentLocale) CreateSession(_ context.Context, r *connect.Request[agentv1.CreateSessionRequest]) (*connect.Response[agentv1.CreateSessionResponse], error) {
-	a.lastCreate = r.Msg
-	return connect.NewResponse(&agentv1.CreateSessionResponse{Ok: true, SessionName: r.Msg.GetName()}), nil
+func (a *stubAgentLocale) CreateSession(_ context.Context, r *agentv1.CreateSessionRequest) (*agentv1.CreateSessionResponse, error) {
+	a.lastCreate = r
+	return &agentv1.CreateSessionResponse{Ok: true, SessionName: r.GetName()}, nil
 }
 
 // An EMPTY requested locale must be resolved to the tenant's configured locale
@@ -187,7 +187,7 @@ func (a *stubAgentLocale) CreateSession(_ context.Context, r *connect.Request[ag
 func TestCreateSessionResolvesTenantLocale(t *testing.T) {
 	a := &stubAgentLocale{configLocale: "zh"}
 	s := &Service{agent: a}
-	hdr := map[string][]string{"Authorization": {"Bearer t"}}
+	hdr := testHdr("Authorization", "Bearer t")
 
 	if err := s.createSession(context.Background(), hdr, "sess", "maintainer", "", ""); err != nil {
 		t.Fatalf("createSession: %v", err)
@@ -370,8 +370,8 @@ func TestCreateSandboxRefusesExisting(t *testing.T) {
 	if _, _, err := sm.Create(ctx, sandboxmgr.Spec{Name: "dup", Image: "sandbox/sandbox-base"}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	req := connect.NewRequest(&wsv1.CreateSandboxRequest{Name: "dup"})
-	req.Header().Set("Authorization", "Bearer tok")
+	req := &wsv1.CreateSandboxRequest{Name: "dup"}
+	ctx = WithTestHeaders(ctx, testHdr("Authorization", "Bearer tok"))
 	_, err := s.CreateSandbox(ctx, req)
 	if connect.CodeOf(err) != connect.CodeAlreadyExists {
 		t.Fatalf("create existing code = %v (err %v), want AlreadyExists", connect.CodeOf(err), err)
@@ -432,4 +432,13 @@ func TestSessionSandboxesOrdering(t *testing.T) {
 	if got := sessionSandboxes([]sandboxmgr.Sandbox{mk("x", "Running", true, 1)}, "other"); got != nil {
 		t.Fatalf("want nil for foreign session, got %v", got)
 	}
+}
+
+// testHdr builds a connect.Header from key/value pairs (v2 request metadata).
+func testHdr(pairs ...string) *connect.Header {
+	h := &connect.Header{}
+	for i := 0; i+1 < len(pairs); i += 2 {
+		h.Set(pairs[i], pairs[i+1])
+	}
+	return h
 }
