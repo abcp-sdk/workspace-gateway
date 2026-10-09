@@ -1793,6 +1793,7 @@ func (s *Service) listSandboxes(ctx context.Context, tenant, want string, hdr *c
 	if caller := sessionFromHeaders(hdr); caller != "" {
 		want = caller
 	}
+	caller := sessionFromHeaders(hdr)
 	for _, sb := range sbxs {
 		if sb.Creator != "" && sb.Creator != tenant {
 			continue
@@ -1800,7 +1801,9 @@ func (s *Service) listSandboxes(ctx context.Context, tenant, want string, hdr *c
 		if want != "" && sb.Session != want {
 			continue
 		}
-		out = append(out, toSandboxInfo(sb))
+		info := toSandboxInfo(sb)
+		info.Operable = sandboxAccessible(sb, tenant, caller)
+		out = append(out, info)
 	}
 	sortByCreatedAtDesc(out)
 	return out, nil
@@ -2096,6 +2099,7 @@ func (s *Service) GetSandbox(ctx context.Context, req *wsv1.GetSandboxRequest) (
 		return nil, connect.NewError(connect.CodeNotFound, "sandbox not found")
 	}
 	info := toSandboxInfo(sb)
+	info.Operable = true
 	// Best-effort worker environment (workspace root + home) so the webui can
 	// anchor relative paths and show `~`. Never fails the request.
 	if url, token, rerr := s.sbx.Resolve(ctx, sb.Name); rerr == nil {
@@ -2620,7 +2624,9 @@ func (s *Service) listHelmReleases(ctx context.Context, tenant string) ([]*wsv1.
 		if r.Creator != "" && r.Creator != tenant {
 			continue
 		}
-		out = append(out, toHelmReleaseInfo(r))
+		info := toHelmReleaseInfo(r)
+		info.Operable = r.Creator == "" || r.Creator == tenant
+		out = append(out, info)
 	}
 	return out, nil
 }
@@ -2916,7 +2922,9 @@ func (s *Service) listPVCs(ctx context.Context, tenant string) ([]*wsv1.PVCInfo,
 		if p.Creator != "" && p.Creator != tenant {
 			continue
 		}
-		out = append(out, toPVCInfo(p))
+		info := toPVCInfo(p)
+		info.Operable = p.Creator == "" || p.Creator == tenant
+		out = append(out, info)
 	}
 	return out, nil
 }
@@ -2979,7 +2987,9 @@ func (s *Service) listServices(ctx context.Context, tenant string, hdr *connect.
 		if svc.Creator != "" && svc.Creator != tenant {
 			continue
 		}
-		out = append(out, s.toServiceInfo(svc, hdr))
+		info := s.toServiceInfo(svc, hdr)
+		info.Operable = svc.Creator == "" || svc.Creator == tenant
+		out = append(out, info)
 	}
 	sortByCreatedAtDesc(out)
 	return out, nil

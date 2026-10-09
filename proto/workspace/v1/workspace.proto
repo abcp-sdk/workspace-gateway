@@ -723,6 +723,9 @@ message SandboxInfo {
   // `RunContainerError`). Empty when healthy.
   int32 restarts = 13;
   string message = 14;
+  // True when the CALLER's tenant owns this row (read-only UI signal; does NOT
+  // change visibility).
+  bool operable = 15;
 }
 message ListSandboxesResponse { repeated SandboxInfo sandboxes = 1; }
 
@@ -923,6 +926,8 @@ message ServiceInfo {
   reserved 31, 32; // was blue-green (active_slot/slots)
   // Current rollout revision of the service's Deployment (RollbackService).
   int64 revision = 33;
+  // True when the CALLER's tenant owns this service (read-only UI signal).
+  bool operable = 34;
 }
 
 // VolumeMountInfo is one PVC mounted into a service container.
@@ -1152,6 +1157,8 @@ message PVCInfo {
   int64 created_at = 6;     // unix millis
   // Names of the tenant's services currently mounting this PVC.
   repeated string mounted_by = 7;
+  // True when the CALLER's tenant owns this claim (read-only UI signal).
+  bool operable = 8;
 }
 message CreatePVCRequest {
   // DNS-1123 label (the claim name).
@@ -1241,6 +1248,8 @@ message HelmReleaseInfo {
   // Objects the CURRENT revision deployed, as "Kind/name". Lets a list view
   // show "N objects" without a second HelmHistory round-trip.
   repeated string objects = 16;
+  // True when the CALLER's tenant owns this release (read-only UI signal).
+  bool operable = 17;
 }
 
 message HelmRevisionInfo {
