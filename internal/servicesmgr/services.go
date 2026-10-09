@@ -757,21 +757,28 @@ func (c *Client) portsFor(ctx context.Context, name string) []Port {
 	}
 	out := []Port{}
 	for i := range list.Items {
-		svc := &list.Items[i]
-		suffix := ""
-		if svc.Name != name {
-			suffix = strings.TrimPrefix(svc.Name, name+"-")
+		out = append(out, portsFromService(&list.Items[i], name)...)
+	}
+	return out
+}
+
+// portsFromService maps one k8s Service to its ports; `name` is the logical
+// service name (so the suffix is derived from a sibling `<name>-<suffix>`).
+func portsFromService(svc *corev1.Service, name string) []Port {
+	out := []Port{}
+	suffix := ""
+	if svc.Name != name {
+		suffix = strings.TrimPrefix(svc.Name, name+"-")
+	}
+	for _, p := range svc.Spec.Ports {
+		proto := "tcp"
+		if p.Protocol == corev1.ProtocolUDP {
+			proto = "udp"
 		}
-		for _, p := range svc.Spec.Ports {
-			proto := "tcp"
-			if p.Protocol == corev1.ProtocolUDP {
-				proto = "udp"
-			}
-			out = append(out, Port{
-				Suffix: suffix, Port: p.Port, Protocol: proto,
-				TargetPort: p.TargetPort.IntVal,
-			})
-		}
+		out = append(out, Port{
+			Suffix: suffix, Port: p.Port, Protocol: proto,
+			TargetPort: p.TargetPort.IntVal,
+		})
 	}
 	return out
 }
@@ -791,11 +798,13 @@ func (c *Client) List(ctx context.Context) ([]Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	portsBy := c.portsByService(ctx)
+	diagBy := c.podDiagnosticsByService(ctx)
 	out := make([]Service, 0, len(list.Items))
 	for i := range list.Items {
 		d := &list.Items[i]
-		svc := toService(c, d, c.portsFor(ctx, d.Name))
-		svc.PodPhase, svc.Restarts, svc.Message = c.podDiagnostics(ctx, d.Name)
+		svc := toService(c, d, portsBy[d.Name])
+		svc.PodPhase, svc.Restarts, svc.Message = diagBy[d.Name].phase, diagBy[d.Name].restarts, diagBy[d.Name].message
 		out = append(out, svc)
 	}
 	return out, nil
@@ -862,9 +871,10 @@ func (c *Client) ListPVCs(ctx context.Context) ([]PVC, error) {
 	if err != nil {
 		return nil, err
 	}
+	mounted := c.mountedIndex(ctx)
 	out := make([]PVC, 0, len(list.Items))
 	for i := range list.Items {
-		out = append(out, toPVC(&list.Items[i], c.mountedBy(ctx, list.Items[i].Name)))
+		out = append(out, toPVC(&list.Items[i], mounted[list.Items[i].Name]))
 	}
 	return out, nil
 }
@@ -888,16 +898,21 @@ func (c *Client) DeletePVC(ctx context.Context, name string) (bool, error) {
 
 // mountedBy returns the names of managed Deployments that mount the claim.
 func (c *Client) mountedBy(ctx context.Context, name string) []string {
+	return c.mountedIndex(ctx)[name]
+}
+
+// mountedIndex maps each claim name to the managed Deployments that mount it,
+// from ONE Deployments List (so a PVC list is O(1) k8s calls, not O(N)).
+func (c *Client) mountedIndex(ctx context.Context) map[string][]string {
+	out := map[string][]string{}
 	deps, err := c.cs.AppsV1().Deployments(c.namespace).List(ctx, metav1.ListOptions{LabelSelector: LabelManaged + "=1"})
 	if err != nil {
-		return nil
+		return out
 	}
-	var out []string
 	for i := range deps.Items {
 		for _, v := range deps.Items[i].Spec.Template.Spec.Volumes {
-			if v.PersistentVolumeClaim != nil && v.PersistentVolumeClaim.ClaimName == name {
-				out = append(out, deps.Items[i].Name)
-				break
+			if v.PersistentVolumeClaim != nil && v.PersistentVolumeClaim.ClaimName != "" {
+				out[v.PersistentVolumeClaim.ClaimName] = append(out[v.PersistentVolumeClaim.ClaimName], deps.Items[i].Name)
 			}
 		}
 	}
@@ -1535,4 +1550,74 @@ func (c *Client) WatchPVCs(ctx context.Context) (watch.Interface, error) {
 	return c.cs.CoreV1().PersistentVolumeClaims(c.namespace).Watch(ctx, metav1.ListOptions{
 		LabelSelector: LabelPVC + "=1",
 	})
+}
+
+// diag is the per-service pod diagnostics summary.
+type diag struct {
+	phase    string
+	restarts int32
+	message  string
+}
+
+// portsByService maps each managed service name to its exposed ports, in ONE
+// Services List (instead of a List per service).
+func (c *Client) portsByService(ctx context.Context) map[string][]Port {
+	out := map[string][]Port{}
+	list, err := c.cs.CoreV1().Services(c.namespace).List(ctx, metav1.ListOptions{LabelSelector: LabelManaged + "=1"})
+	if err != nil {
+		return out
+	}
+	for i := range list.Items {
+		svc := &list.Items[i]
+		name := svc.Labels[LabelName]
+		if name == "" {
+			name = svc.Name
+		}
+		out[name] = append(out[name], portsFromService(svc, name)...)
+	}
+	return out
+}
+
+// podDiagnosticsByService maps each managed service name to its newest pod's
+// diagnostics, in ONE Pods List (instead of a List per service).
+func (c *Client) podDiagnosticsByService(ctx context.Context) map[string]diag {
+	out := map[string]diag{}
+	pods, err := c.cs.CoreV1().Pods(c.namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return out
+	}
+	newest := map[string]*corev1.Pod{}
+	for i := range pods.Items {
+		p := &pods.Items[i]
+		name := p.Labels["app"]
+		if name == "" {
+			continue
+		}
+		if cur := newest[name]; cur == nil || p.CreationTimestamp.After(cur.CreationTimestamp.Time) {
+			newest[name] = p
+		}
+	}
+	for name, p := range newest {
+		out[name] = diagFromPod(p)
+	}
+	return out
+}
+
+// diagFromPod summarizes a pod's phase/restarts/first-failure reason.
+func diagFromPod(pod *corev1.Pod) diag {
+	d := diag{phase: string(pod.Status.Phase)}
+	for _, cs := range pod.Status.ContainerStatuses {
+		d.restarts += cs.RestartCount
+		if d.message == "" && cs.State.Waiting != nil && cs.State.Waiting.Reason != "" {
+			d.message = cs.State.Waiting.Reason
+			if cs.State.Waiting.Message != "" {
+				d.message += ": " + cs.State.Waiting.Message
+			}
+		}
+		if d.message == "" && cs.State.Terminated != nil && cs.State.Terminated.Reason != "" &&
+			cs.State.Terminated.Reason != "Completed" {
+			d.message = cs.State.Terminated.Reason
+		}
+	}
+	return d
 }
