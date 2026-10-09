@@ -928,6 +928,9 @@ message ServiceInfo {
   int64 revision = 33;
   // True when the CALLER's tenant owns this service (read-only UI signal).
   bool operable = 34;
+  // namespace is the tenant-internal namespace (org segment of the creating
+  // session) for the tenant-internal read/write split. "" for legacy rows.
+  string namespace = 35;
 }
 
 // VolumeMountInfo is one PVC mounted into a service container.
@@ -1122,6 +1125,8 @@ message DeployServiceRequest {
   map<string, string> node_selector = 23;
   repeated TolerationSpec tolerations = 24;
   reserved 25; // was blue-green slot
+  // namespace is the tenant-internal namespace to record (see ServiceInfo).
+  string namespace = 26;
 }
 message DeployServiceResponse { ServiceInfo service = 1; }
 
@@ -1159,6 +1164,8 @@ message PVCInfo {
   repeated string mounted_by = 7;
   // True when the CALLER's tenant owns this claim (read-only UI signal).
   bool operable = 8;
+  // namespace is the tenant-internal namespace (see ServiceInfo.namespace).
+  string namespace = 9;
 }
 message CreatePVCRequest {
   // DNS-1123 label (the claim name).
@@ -1169,6 +1176,8 @@ message CreatePVCRequest {
   // StorageClass. Empty = the deployment's configured class; a non-empty value
   // must equal that class (only the self-hosted local-path is supported).
   string storage_class = 3;
+  // namespace is the tenant-internal namespace to record.
+  string namespace = 4;
 }
 message CreatePVCResponse { PVCInfo pvc = 1; }
 
@@ -1250,6 +1259,8 @@ message HelmReleaseInfo {
   repeated string objects = 16;
   // True when the CALLER's tenant owns this release (read-only UI signal).
   bool operable = 17;
+  // org_namespace is the tenant-internal namespace (see ServiceInfo.namespace).
+  string org_namespace = 18;
 }
 
 message HelmRevisionInfo {
@@ -1275,6 +1286,8 @@ message HelmDeployRequest {
   // Dry-run: render + validate only (no apply, no release record).
   bool dry_run = 7;
   reserved 8; // was blue-green slot
+  // namespace is the tenant-internal namespace to record.
+  string namespace = 9;
 }
 message HelmDeployResponse {
   HelmReleaseInfo release = 1;

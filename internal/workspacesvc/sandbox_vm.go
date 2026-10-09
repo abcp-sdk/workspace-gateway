@@ -103,7 +103,7 @@ func (s *Service) ensureGoldenDiskCache(ctx context.Context, name string) error 
 	if size == "" {
 		size = "40Gi"
 	}
-	if _, err := s.services.CreatePVC(ctx, name, size, s.pvcStorageClass, ""); err != nil {
+	if _, err := s.services.CreatePVC(ctx, name, size, s.pvcStorageClass, "", ""); err != nil {
 		return fmt.Errorf("ensure golden-disk cache pvc %q: %w", name, err)
 	}
 	return nil

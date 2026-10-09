@@ -213,7 +213,7 @@ func TestResolveVolumesOwnership(t *testing.T) {
 	s := &Service{services: sm}
 	ctx := context.Background()
 
-	if _, err := sm.CreatePVC(ctx, "data", "1Gi", "workspace-local", "myuser"); err != nil {
+	if _, err := sm.CreatePVC(ctx, "data", "1Gi", "workspace-local", "myuser", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -399,7 +399,7 @@ func TestCreateSandboxAuthorizesPVCs(t *testing.T) {
 	ctx := WithTestHeaders(context.Background(), testHdr("Authorization", "Bearer tok"))
 
 	// A claim owned by another tenant is refused (never leaks it).
-	if _, err := sm.CreatePVC(ctx, "foreign", "1Gi", "workspace-local", "other"); err != nil {
+	if _, err := sm.CreatePVC(ctx, "foreign", "1Gi", "workspace-local", "other", ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.CreateSandbox(ctx, &wsv1.CreateSandboxRequest{

@@ -2335,6 +2335,9 @@ func (s *Service) DeployService(ctx context.Context, req *wsv1.DeployServiceRequ
 		if existing.Creator != "" && existing.Creator != tenant {
 			return nil, connect.NewError(connect.CodePermissionDenied, "service belongs to another tenant")
 		}
+		if !canWrite(existing.Namespace, hdrFrom(ctx)) {
+			return nil, connect.NewError(connect.CodePermissionDenied, "service belongs to another namespace")
+		}
 	}
 
 	// Resolve the exposed ports. Empty `services` = the default single public
@@ -2354,6 +2357,7 @@ func (s *Service) DeployService(ctx context.Context, req *wsv1.DeployServiceRequ
 		Replicas: m.GetReplicas(), ContainerPort: m.GetContainerPort(),
 		ServicePort: m.GetServicePort(), Creator: tenant,
 		Session:        sessionFromHeaders(hdrFrom(ctx)),
+		Namespace:      resolveNamespace(hdrFrom(ctx), m.GetNamespace()),
 		Ports:          ports,
 		Runtime:        s.renderRuntime(m.GetKvm(), m.GetGpuCount()),
 		Volumes:        vols,
@@ -2407,8 +2411,12 @@ func (s *Service) awaitServiceReady(ctx context.Context, name string) error {
 
 // RollbackService rolls a service's Deployment back to a prior revision.
 func (s *Service) RollbackService(ctx context.Context, req *wsv1.RollbackServiceRequest) (*wsv1.RollbackServiceResponse, error) {
-	if _, err := s.ownedService(ctx, hdrFrom(ctx), req.GetName()); err != nil {
+	cur, err := s.ownedService(ctx, hdrFrom(ctx), req.GetName())
+	if err != nil {
 		return nil, err
+	}
+	if !canWrite(cur.Namespace, hdrFrom(ctx)) {
+		return nil, connect.NewError(connect.CodePermissionDenied, "service belongs to another namespace")
 	}
 	if s.services == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, "service backend not configured")
@@ -2499,6 +2507,7 @@ func toHelmReleaseInfo(r helmmgr.Release) *wsv1.HelmReleaseInfo {
 		Ref: r.Ref, ChartPath: r.ChartPath, Revision: int32(r.Revision),
 		Status: r.Status, UpdatedAt: r.UpdatedAt,
 		ChartVersion: r.ChartVersion, AppVersion: r.AppVersion,
+		OrgNamespace: r.OrgNS,
 	}
 	// The current revision's objects ("Kind/name"). The head denormalizes them
 	// for the list view; fall back to the materialized history (e.g. a legacy
@@ -2561,6 +2570,18 @@ func (s *Service) HelmDeploy(ctx context.Context, req *wsv1.HelmDeployRequest) (
 	if !helmReleaseRe.MatchString(m.GetRelease()) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "release must be a DNS-1123 label")
 	}
+	// HelmDeploy UPSERTS by name: refuse to overwrite an existing release owned
+	// by another tenant (cross-tenant guard), and require namespace write access.
+	if cur, ok, gerr := s.helm.Get(ctx, m.GetRelease()); gerr != nil {
+		return nil, connect.NewError(connect.CodeInternal, gerr.Error()).WithCause(gerr)
+	} else if ok {
+		if cur.Creator != "" && cur.Creator != tenant {
+			return nil, connect.NewError(connect.CodePermissionDenied, "release belongs to another tenant")
+		}
+		if !canWrite(cur.OrgNS, hdrFrom(ctx)) {
+			return nil, connect.NewError(connect.CodePermissionDenied, "release belongs to another namespace")
+		}
+	}
 	chartDir, cleanup, err := s.helmChartDir(ctx, org, repo, ref, m.GetChartPath())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
@@ -2569,6 +2590,7 @@ func (s *Service) HelmDeploy(ctx context.Context, req *wsv1.HelmDeployRequest) (
 	opts := helmmgr.RenderOptions{
 		Release: m.GetRelease(), ChartPath: m.GetChartPath(),
 		ValuesYAML: m.GetValues(), Ref: ref,
+		OrgNS: resolveNamespace(hdrFrom(ctx), m.GetNamespace()),
 	}
 	if m.GetDryRun() {
 		manifest, objects, _, terr := s.helm.Template(chartDir, opts)
@@ -2625,7 +2647,7 @@ func (s *Service) listHelmReleases(ctx context.Context, tenant string) ([]*wsv1.
 			continue
 		}
 		info := toHelmReleaseInfo(r)
-		info.Operable = r.Creator == "" || r.Creator == tenant
+		info.Operable = (r.Creator == "" || r.Creator == tenant) && canWrite(r.OrgNS, hdrFrom(ctx))
 		out = append(out, info)
 	}
 	return out, nil
@@ -2677,6 +2699,9 @@ func (s *Service) HelmRollback(ctx context.Context, req *wsv1.HelmRollbackReques
 	if !ok || (cur.Creator != "" && cur.Creator != tenant) {
 		return nil, connect.NewError(connect.CodeNotFound, "release not found")
 	}
+	if !canWrite(cur.OrgNS, hdrFrom(ctx)) {
+		return nil, connect.NewError(connect.CodeNotFound, "release not found")
+	}
 	target := int(req.GetRevision())
 	if target == 0 {
 		target = cur.Revision - 1
@@ -2702,6 +2727,9 @@ func (s *Service) HelmUninstall(ctx context.Context, req *wsv1.HelmUninstallRequ
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if !ok || (cur.Creator != "" && cur.Creator != tenant) {
+		return nil, connect.NewError(connect.CodeNotFound, "release not found")
+	}
+	if !canWrite(cur.OrgNS, hdrFrom(ctx)) {
 		return nil, connect.NewError(connect.CodeNotFound, "release not found")
 	}
 	ok2, err := s.helm.Uninstall(ctx, req.GetRelease())
@@ -2888,7 +2916,7 @@ func (s *Service) CreatePVC(ctx context.Context, req *wsv1.CreatePVCRequest) (*w
 	if size == "" {
 		size = s.pvcDefaultSize
 	}
-	pvc, err := s.services.CreatePVC(ctx, m.GetName(), size, s.pvcStorageClass, tenant)
+	pvc, err := s.services.CreatePVC(ctx, m.GetName(), size, s.pvcStorageClass, tenant, resolveNamespace(hdrFrom(ctx), m.GetNamespace()))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
@@ -2923,7 +2951,7 @@ func (s *Service) listPVCs(ctx context.Context, tenant string) ([]*wsv1.PVCInfo,
 			continue
 		}
 		info := toPVCInfo(p)
-		info.Operable = p.Creator == "" || p.Creator == tenant
+		info.Operable = (p.Creator == "" || p.Creator == tenant) && canWrite(p.Namespace, hdrFrom(ctx))
 		out = append(out, info)
 	}
 	return out, nil
@@ -2945,6 +2973,9 @@ func (s *Service) DeletePVC(ctx context.Context, req *wsv1.DeletePVCRequest) (*w
 	if cur.Creator != "" && cur.Creator != tenant {
 		return nil, connect.NewError(connect.CodeNotFound, "pvc not found")
 	}
+	if !canWrite(cur.Namespace, hdrFrom(ctx)) {
+		return nil, connect.NewError(connect.CodeNotFound, "pvc not found")
+	}
 	ok, err := s.services.DeletePVC(ctx, req.GetName())
 	if err != nil {
 		// Mounted-by is the common refusal: surface it as FailedPrecondition.
@@ -2957,6 +2988,7 @@ func toPVCInfo(p servicesmgr.PVC) *wsv1.PVCInfo {
 	return &wsv1.PVCInfo{
 		Name: p.Name, Size: p.Size, StorageClass: p.StorageClass, Phase: p.Phase,
 		Creator: p.Creator, CreatedAt: p.CreatedAt, MountedBy: p.MountedBy,
+		Namespace: p.Namespace,
 	}
 }
 
@@ -2988,7 +3020,7 @@ func (s *Service) listServices(ctx context.Context, tenant string, hdr *connect.
 			continue
 		}
 		info := s.toServiceInfo(svc, hdr)
-		info.Operable = svc.Creator == "" || svc.Creator == tenant
+		info.Operable = (svc.Creator == "" || svc.Creator == tenant) && canWrite(svc.Namespace, hdr)
 		out = append(out, info)
 	}
 	sortByCreatedAtDesc(out)
@@ -3021,6 +3053,9 @@ func (s *Service) DeleteService(ctx context.Context, req *wsv1.DeleteServiceRequ
 		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
 	if svc.Creator != "" && svc.Creator != tenant {
+		return nil, connect.NewError(connect.CodeNotFound, "service not found")
+	}
+	if !canWrite(svc.Namespace, hdrFrom(ctx)) {
 		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
 	ok, err := s.services.Delete(ctx, req.GetName())
@@ -3065,6 +3100,9 @@ func (s *Service) ScaleService(ctx context.Context, req *wsv1.ScaleServiceReques
 	if cur.Creator != "" && cur.Creator != tenant {
 		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
+	if !canWrite(cur.Namespace, hdrFrom(ctx)) {
+		return nil, connect.NewError(connect.CodeNotFound, "service not found")
+	}
 	if req.GetReplicas() < 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "replicas must be >= 0")
 	}
@@ -3092,8 +3130,12 @@ func (s *Service) GetServiceManifest(ctx context.Context, req *wsv1.GetServiceMa
 
 // ApplyServiceManifest replaces a service from an edited multi-document YAML.
 func (s *Service) ApplyServiceManifest(ctx context.Context, req *wsv1.ApplyServiceManifestRequest) (*wsv1.ApplyServiceManifestResponse, error) {
-	if _, err := s.ownedService(ctx, hdrFrom(ctx), req.GetName()); err != nil {
+	cur, err := s.ownedService(ctx, hdrFrom(ctx), req.GetName())
+	if err != nil {
 		return nil, err
+	}
+	if !canWrite(cur.Namespace, hdrFrom(ctx)) {
+		return nil, connect.NewError(connect.CodePermissionDenied, "service belongs to another namespace")
 	}
 	if s.services == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, "service backend not configured")
@@ -3124,6 +3166,9 @@ func (s *Service) pauseResume(ctx context.Context, hdr *connect.Header, name str
 		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
 	if cur.Creator != "" && cur.Creator != tenant {
+		return nil, connect.NewError(connect.CodeNotFound, "service not found")
+	}
+	if !canWrite(cur.Namespace, hdr) {
 		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
 	var out servicesmgr.Service
@@ -3353,6 +3398,38 @@ func (s *Service) FileDiff(ctx context.Context, req *wsv1.FileDiffRequest) (*wsv
 
 // sessionFromHeaders extracts the caller's session name (used to derive a
 // default service name). The extension passes it via X-Session-Name.
+// callerNamespace returns the tenant-internal namespace of the caller: the org
+// segment of its session name (X-Session-Name = org:repo:branch). Empty for a
+// webui caller (no session header).
+func callerNamespace(hdr *connect.Header) string {
+	session := sessionFromHeaders(hdr)
+	if session == "" {
+		return ""
+	}
+	if org, _, _, ok := roles.ParseSession(session); ok {
+		return org
+	}
+	return ""
+}
+
+// canWrite reports whether the caller may MUTATE a resource in `resourceNS`
+// (the caller's tenant already matched). Within the tenant a write additionally
+// requires the resource's namespace to match the caller's; a caller with NO
+// namespace (webui) and a resource with NO namespace (legacy) are tenant-wide.
+func canWrite(resourceNS string, hdr *connect.Header) bool {
+	callerNS := callerNamespace(hdr)
+	return callerNS == "" || resourceNS == "" || resourceNS == callerNS
+}
+
+// resolveNamespace returns the namespace to RECORD: the caller's session-derived
+// namespace (agent), else the explicit request namespace (webui).
+func resolveNamespace(hdr *connect.Header, explicit string) string {
+	if ns := callerNamespace(hdr); ns != "" {
+		return ns
+	}
+	return explicit
+}
+
 func sessionFromHeaders(hdr *connect.Header) string {
 	if hdr == nil {
 		return ""
@@ -3413,6 +3490,7 @@ func toServiceInfoImpl(svc servicesmgr.Service, publicURLs map[string]string) *w
 		StartupProbe:   fromProbeSpec(svc.StartupProbe),
 		Rollout:        fromRollout(svc.Rollout),
 		SidecarCount:   svc.SidecarCount,
+		Namespace:      svc.Namespace,
 	}
 }
 
