@@ -2332,8 +2332,8 @@ func (s *Service) DeployService(ctx context.Context, req *wsv1.DeployServiceRequ
 	}
 	// Ownership guard: only the creator may update an existing service.
 	if existing, gerr := s.services.Get(ctx, name); gerr == nil {
-		if existing.Creator != "" && existing.Creator != tenant {
-			return nil, connect.NewError(connect.CodePermissionDenied, "service belongs to another tenant")
+		if !writable(existing.Creator, tenant) {
+			return nil, connect.NewError(connect.CodePermissionDenied, "service not writable by this tenant")
 		}
 		if !canWrite(existing.Namespace, hdrFrom(ctx)) {
 			return nil, connect.NewError(connect.CodePermissionDenied, "service belongs to another namespace")
@@ -2575,8 +2575,8 @@ func (s *Service) HelmDeploy(ctx context.Context, req *wsv1.HelmDeployRequest) (
 	if cur, ok, gerr := s.helm.Get(ctx, m.GetRelease()); gerr != nil {
 		return nil, connect.NewError(connect.CodeInternal, gerr.Error()).WithCause(gerr)
 	} else if ok {
-		if cur.Creator != "" && cur.Creator != tenant {
-			return nil, connect.NewError(connect.CodePermissionDenied, "release belongs to another tenant")
+		if !writable(cur.Creator, tenant) {
+			return nil, connect.NewError(connect.CodePermissionDenied, "release not writable by this tenant")
 		}
 		if !canWrite(cur.OrgNS, hdrFrom(ctx)) {
 			return nil, connect.NewError(connect.CodePermissionDenied, "release belongs to another namespace")
@@ -2647,7 +2647,7 @@ func (s *Service) listHelmReleases(ctx context.Context, tenant string) ([]*wsv1.
 			continue
 		}
 		info := toHelmReleaseInfo(r)
-		info.Operable = (r.Creator == "" || r.Creator == tenant) && canWrite(r.OrgNS, hdrFrom(ctx))
+		info.Operable = writable(r.Creator, tenant) && canWrite(r.OrgNS, hdrFrom(ctx))
 		out = append(out, info)
 	}
 	return out, nil
@@ -2696,7 +2696,7 @@ func (s *Service) HelmRollback(ctx context.Context, req *wsv1.HelmRollbackReques
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	if !ok || (cur.Creator != "" && cur.Creator != tenant) {
+	if !ok || !writable(cur.Creator, tenant) {
 		return nil, connect.NewError(connect.CodeNotFound, "release not found")
 	}
 	if !canWrite(cur.OrgNS, hdrFrom(ctx)) {
@@ -2726,7 +2726,7 @@ func (s *Service) HelmUninstall(ctx context.Context, req *wsv1.HelmUninstallRequ
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	if !ok || (cur.Creator != "" && cur.Creator != tenant) {
+	if !ok || !writable(cur.Creator, tenant) {
 		return nil, connect.NewError(connect.CodeNotFound, "release not found")
 	}
 	if !canWrite(cur.OrgNS, hdrFrom(ctx)) {
@@ -2916,6 +2916,13 @@ func (s *Service) CreatePVC(ctx context.Context, req *wsv1.CreatePVCRequest) (*w
 	if size == "" {
 		size = s.pvcDefaultSize
 	}
+	// A1: CreatePVC is a same-name upsert; refuse to (re)claim an existing claim
+	// that is not writable by the caller (unowned included).
+	if cur, gerr := s.services.GetPVC(ctx, m.GetName()); gerr == nil {
+		if !writable(cur.Creator, tenant) {
+			return nil, connect.NewError(connect.CodePermissionDenied, "pvc not writable by this tenant")
+		}
+	}
 	pvc, err := s.services.CreatePVC(ctx, m.GetName(), size, s.pvcStorageClass, tenant, resolveNamespace(hdrFrom(ctx), m.GetNamespace()))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -2951,7 +2958,7 @@ func (s *Service) listPVCs(ctx context.Context, tenant string) ([]*wsv1.PVCInfo,
 			continue
 		}
 		info := toPVCInfo(p)
-		info.Operable = (p.Creator == "" || p.Creator == tenant) && canWrite(p.Namespace, hdrFrom(ctx))
+		info.Operable = writable(p.Creator, tenant) && canWrite(p.Namespace, hdrFrom(ctx))
 		out = append(out, info)
 	}
 	return out, nil
@@ -2970,7 +2977,7 @@ func (s *Service) DeletePVC(ctx context.Context, req *wsv1.DeletePVCRequest) (*w
 	if gerr != nil {
 		return nil, connect.NewError(connect.CodeNotFound, "pvc not found")
 	}
-	if cur.Creator != "" && cur.Creator != tenant {
+	if !writable(cur.Creator, tenant) {
 		return nil, connect.NewError(connect.CodeNotFound, "pvc not found")
 	}
 	if !canWrite(cur.Namespace, hdrFrom(ctx)) {
@@ -3020,7 +3027,7 @@ func (s *Service) listServices(ctx context.Context, tenant string, hdr *connect.
 			continue
 		}
 		info := s.toServiceInfo(svc, hdr)
-		info.Operable = (svc.Creator == "" || svc.Creator == tenant) && canWrite(svc.Namespace, hdr)
+		info.Operable = writable(svc.Creator, tenant) && canWrite(svc.Namespace, hdr)
 		out = append(out, info)
 	}
 	sortByCreatedAtDesc(out)
@@ -3052,7 +3059,7 @@ func (s *Service) DeleteService(ctx context.Context, req *wsv1.DeleteServiceRequ
 	if gerr != nil {
 		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
-	if svc.Creator != "" && svc.Creator != tenant {
+	if !writable(svc.Creator, tenant) {
 		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
 	if !canWrite(svc.Namespace, hdrFrom(ctx)) {
@@ -3097,7 +3104,7 @@ func (s *Service) ScaleService(ctx context.Context, req *wsv1.ScaleServiceReques
 	if gerr != nil {
 		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
-	if cur.Creator != "" && cur.Creator != tenant {
+	if !writable(cur.Creator, tenant) {
 		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
 	if !canWrite(cur.Namespace, hdrFrom(ctx)) {
@@ -3165,7 +3172,7 @@ func (s *Service) pauseResume(ctx context.Context, hdr *connect.Header, name str
 	if gerr != nil {
 		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
-	if cur.Creator != "" && cur.Creator != tenant {
+	if !writable(cur.Creator, tenant) {
 		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
 	if !canWrite(cur.Namespace, hdr) {
@@ -3416,6 +3423,12 @@ func callerNamespace(hdr *connect.Header) string {
 // (the caller's tenant already matched). Within the tenant a write additionally
 // requires the resource's namespace to match the caller's; a caller with NO
 // namespace (webui) and a resource with NO namespace (legacy) are tenant-wide.
+// writable reports whether `tenant` may MUTATE an object created by `creator`.
+// A1: an UNOWNED object (creator "") is NOT writable by anyone.
+func writable(creator, tenant string) bool {
+	return creator != "" && creator == tenant
+}
+
 func canWrite(resourceNS string, hdr *connect.Header) bool {
 	callerNS := callerNamespace(hdr)
 	return callerNS == "" || resourceNS == "" || resourceNS == callerNS
