@@ -342,6 +342,12 @@ const (
 	// BranchSessionServiceListPresetsProcedure is the procedure name of the BranchSessionService's
 	// ListPresets RPC.
 	BranchSessionServiceListPresetsProcedure = "/workspace.v1.BranchSessionService/ListPresets"
+	// BranchSessionServiceUpsertPresetProcedure is the procedure name of the BranchSessionService's
+	// UpsertPreset RPC.
+	BranchSessionServiceUpsertPresetProcedure = "/workspace.v1.BranchSessionService/UpsertPreset"
+	// BranchSessionServiceDeletePresetProcedure is the procedure name of the BranchSessionService's
+	// DeletePreset RPC.
+	BranchSessionServiceDeletePresetProcedure = "/workspace.v1.BranchSessionService/DeletePreset"
 	// BranchSessionServiceGetConfigProcedure is the procedure name of the BranchSessionService's
 	// GetConfig RPC.
 	BranchSessionServiceGetConfigProcedure = "/workspace.v1.BranchSessionService/GetConfig"
@@ -1106,6 +1112,20 @@ var (
 			Procedure:  BranchSessionServiceListPresetsProcedure,
 		}
 	})
+	branchSessionServiceUpsertPresetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("UpsertPreset"),
+			Procedure:  BranchSessionServiceUpsertPresetProcedure,
+		}
+	})
+	branchSessionServiceDeletePresetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("DeletePreset"),
+			Procedure:  BranchSessionServiceDeletePresetProcedure,
+		}
+	})
 	branchSessionServiceGetConfigSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
@@ -1337,8 +1357,12 @@ type BranchSessionServiceClient interface {
 	DeleteProvider(context.Context, *v11.DeleteProviderRequest) (*v11.DeleteProviderResponse, error)
 	TestProvider(context.Context, *v11.TestProviderRequest) (*v11.TestProviderResponse, error)
 	ListModels(context.Context, *v11.ListModelsRequest) (*v11.ListModelsResponse, error)
-	// presets (READ-ONLY: no upsert/delete)
+	// presets: a tenant may UPSERT its own preset that SHADOWS a system preset of
+	// the same id (the system row stays immutable), and DELETE the user row to
+	// fall back to the system one.
 	ListPresets(context.Context, *v11.ListPresetsRequest) (*v11.ListPresetsResponse, error)
+	UpsertPreset(context.Context, *v11.UpsertPresetRequest) (*v11.UpsertPresetResponse, error)
+	DeletePreset(context.Context, *v11.DeletePresetRequest) (*v11.DeletePresetResponse, error)
 	// config + tools (per-tenant config)
 	GetConfig(context.Context, *v11.GetConfigRequest) (*v11.GetConfigResponse, error)
 	SetConfig(context.Context, *v11.SetConfigRequest) (*v11.SetConfigResponse, error)
@@ -1660,8 +1684,12 @@ type BranchSessionServiceHandler interface {
 	DeleteProvider(context.Context, *v11.DeleteProviderRequest) (*v11.DeleteProviderResponse, error)
 	TestProvider(context.Context, *v11.TestProviderRequest) (*v11.TestProviderResponse, error)
 	ListModels(context.Context, *v11.ListModelsRequest) (*v11.ListModelsResponse, error)
-	// presets (READ-ONLY: no upsert/delete)
+	// presets: a tenant may UPSERT its own preset that SHADOWS a system preset of
+	// the same id (the system row stays immutable), and DELETE the user row to
+	// fall back to the system one.
 	ListPresets(context.Context, *v11.ListPresetsRequest) (*v11.ListPresetsResponse, error)
+	UpsertPreset(context.Context, *v11.UpsertPresetRequest) (*v11.UpsertPresetResponse, error)
+	DeletePreset(context.Context, *v11.DeletePresetRequest) (*v11.DeletePresetResponse, error)
 	// config + tools (per-tenant config)
 	GetConfig(context.Context, *v11.GetConfigRequest) (*v11.GetConfigResponse, error)
 	SetConfig(context.Context, *v11.SetConfigRequest) (*v11.SetConfigResponse, error)
@@ -1786,6 +1814,8 @@ func RegisterBranchSessionServiceHandler(server *connect.Server, svc BranchSessi
 		connect.Method{Spec: branchSessionServiceTestProviderSpec(), Handler: adapter.testProvider},
 		connect.Method{Spec: branchSessionServiceListModelsSpec(), Handler: adapter.listModels},
 		connect.Method{Spec: branchSessionServiceListPresetsSpec(), Handler: adapter.listPresets},
+		connect.Method{Spec: branchSessionServiceUpsertPresetSpec(), Handler: adapter.upsertPreset},
+		connect.Method{Spec: branchSessionServiceDeletePresetSpec(), Handler: adapter.deletePreset},
 		connect.Method{Spec: branchSessionServiceGetConfigSpec(), Handler: adapter.getConfig},
 		connect.Method{Spec: branchSessionServiceSetConfigSpec(), Handler: adapter.setConfig},
 		connect.Method{Spec: branchSessionServiceListToolsSpec(), Handler: adapter.listTools},
@@ -2329,6 +2359,14 @@ func (UnimplementedBranchSessionServiceHandler) ListModels(context.Context, *v11
 
 func (UnimplementedBranchSessionServiceHandler) ListPresets(context.Context, *v11.ListPresetsRequest) (*v11.ListPresetsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListPresets is not implemented")
+}
+
+func (UnimplementedBranchSessionServiceHandler) UpsertPreset(context.Context, *v11.UpsertPresetRequest) (*v11.UpsertPresetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.UpsertPreset is not implemented")
+}
+
+func (UnimplementedBranchSessionServiceHandler) DeletePreset(context.Context, *v11.DeletePresetRequest) (*v11.DeletePresetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.DeletePreset is not implemented")
 }
 
 func (UnimplementedBranchSessionServiceHandler) GetConfig(context.Context, *v11.GetConfigRequest) (*v11.GetConfigResponse, error) {
@@ -3206,6 +3244,22 @@ func (c *branchSessionServiceClient) ListModels(ctx context.Context, req *v11.Li
 func (c *branchSessionServiceClient) ListPresets(ctx context.Context, req *v11.ListPresetsRequest) (*v11.ListPresetsResponse, error) {
 	var res v11.ListPresetsResponse
 	if err := c.client.CallUnary(ctx, branchSessionServiceListPresetsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) UpsertPreset(ctx context.Context, req *v11.UpsertPresetRequest) (*v11.UpsertPresetResponse, error) {
+	var res v11.UpsertPresetResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceUpsertPresetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) DeletePreset(ctx context.Context, req *v11.DeletePresetRequest) (*v11.DeletePresetResponse, error) {
+	var res v11.DeletePresetResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceDeletePresetSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -4519,6 +4573,30 @@ func (h branchSessionServiceHandler) listPresets(ctx context.Context, _ connect.
 		return err
 	}
 	res, err := h.svc.ListPresets(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) upsertPreset(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.UpsertPresetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpsertPreset(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) deletePreset(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.DeletePresetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeletePreset(ctx, &req)
 	if err != nil {
 		return err
 	}

@@ -55,3 +55,16 @@ func TestWritablePolicy(t *testing.T) {
 		}
 	}
 }
+
+func TestReservedPresetID(t *testing.T) {
+	for _, id := range []string{"admin", "developer", "explorer"} {
+		if !reservedPresetID(id) {
+			t.Fatalf("reservedPresetID(%q)=false", id)
+		}
+	}
+	for _, id := range []string{"", "my-preset", "admin2"} {
+		if reservedPresetID(id) {
+			t.Fatalf("reservedPresetID(%q)=true", id)
+		}
+	}
+}

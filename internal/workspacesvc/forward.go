@@ -10,6 +10,7 @@ import (
 	agentv1 "github.com/abcp-sdk/workspace-gateway/gen/agent/v1"
 	wsv1 "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1"
 	wsv1connect "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1/wsv1connect"
+	"github.com/abcp-sdk/workspace-gateway/internal/roles"
 )
 
 // This file forwards the minimal agent surface the webui needs. The webui
@@ -186,6 +187,28 @@ func (s *Service) TestProvider(ctx context.Context, r *agentv1.TestProviderReque
 
 func (s *Service) ListModels(ctx context.Context, r *agentv1.ListModelsRequest) (*agentv1.ListModelsResponse, error) {
 	return s.agent.ListModels(fwdCtx(ctx), r)
+}
+
+// reservedPresetID reports whether an id names a ROLE preset. The role preset's
+// `tools` is the role's immutable tool whitelist (see roles.ToolsFor), so a
+// tenant MUST NOT upsert/delete it — doing so would widen its own tool surface.
+func reservedPresetID(id string) bool { return roles.ValidRole(id) }
+
+// UpsertPreset writes the tenant's OWN preset (shadows a NON-role preset).
+// Role presets (admin/developer/explorer) are RESERVED.
+func (s *Service) UpsertPreset(ctx context.Context, r *agentv1.UpsertPresetRequest) (*agentv1.UpsertPresetResponse, error) {
+	if id := r.GetPreset().GetId(); reservedPresetID(id) {
+		return nil, connect.Errorf(connect.CodePermissionDenied, "preset %q is a reserved role preset", id)
+	}
+	return s.agent.UpsertPreset(fwdCtx(ctx), r)
+}
+
+// DeletePreset removes the tenant's own preset row. Role presets are RESERVED.
+func (s *Service) DeletePreset(ctx context.Context, r *agentv1.DeletePresetRequest) (*agentv1.DeletePresetResponse, error) {
+	if reservedPresetID(r.GetId()) {
+		return nil, connect.Errorf(connect.CodePermissionDenied, "preset %q is a reserved role preset", r.GetId())
+	}
+	return s.agent.DeletePreset(fwdCtx(ctx), r)
 }
 
 func (s *Service) ListPresets(ctx context.Context, r *agentv1.ListPresetsRequest) (*agentv1.ListPresetsResponse, error) {

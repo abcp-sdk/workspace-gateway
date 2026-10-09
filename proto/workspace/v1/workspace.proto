@@ -1616,8 +1616,12 @@ service BranchSessionService {
   rpc DeleteProvider(agent.v1.DeleteProviderRequest) returns (agent.v1.DeleteProviderResponse);
   rpc TestProvider(agent.v1.TestProviderRequest) returns (agent.v1.TestProviderResponse);
   rpc ListModels(agent.v1.ListModelsRequest) returns (agent.v1.ListModelsResponse);
-  // presets (READ-ONLY: no upsert/delete)
+  // presets: a tenant may UPSERT its own preset that SHADOWS a system preset of
+  // the same id (the system row stays immutable), and DELETE the user row to
+  // fall back to the system one.
   rpc ListPresets(agent.v1.ListPresetsRequest) returns (agent.v1.ListPresetsResponse);
+  rpc UpsertPreset(agent.v1.UpsertPresetRequest) returns (agent.v1.UpsertPresetResponse);
+  rpc DeletePreset(agent.v1.DeletePresetRequest) returns (agent.v1.DeletePresetResponse);
   // config + tools (per-tenant config)
   rpc GetConfig(agent.v1.GetConfigRequest) returns (agent.v1.GetConfigResponse);
   rpc SetConfig(agent.v1.SetConfigRequest) returns (agent.v1.SetConfigResponse);
