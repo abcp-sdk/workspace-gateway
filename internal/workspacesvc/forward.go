@@ -18,6 +18,25 @@ import (
 // forward call re-seeds the outbound client context from the inbound server
 // context — the tenant bearer reaches the agent verbatim.
 
+// watchUpstream closes the upstream agent stream as soon as ctx is canceled
+// (the browser closed the tab / the connection dropped). Without it the receive
+// loop blocks on up.Receive() forever, so the deferred up.Close() never runs,
+// the upstream RPC is never canceled, and the agent's context signal never
+// aborts — which leaks its NATS ephemeral consumer (the SDK deletes a consumer
+// only on abort). The returned stop func MUST be deferred by the caller, so it
+// runs (and lets the watcher exit) before the deferred up.Close().
+func watchUpstream(ctx context.Context, up io.Closer) (stop func()) {
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = up.Close()
+		case <-done:
+		}
+	}()
+	return func() { close(done) }
+}
+
 // fwdCtx returns a client context whose request headers carry the caller's
 // (server-side) request headers, so the forwarded agent call authenticates the
 // real tenant.
@@ -64,6 +83,7 @@ func (s *Service) Prompt(ctx context.Context, r *agentv1.PromptRequest, st wsv1c
 		return err
 	}
 	defer up.Close()
+	defer watchUpstream(ctx, up)()
 	for {
 		msg, err := up.Receive()
 		if err != nil {
@@ -84,6 +104,7 @@ func (s *Service) WatchSession(ctx context.Context, r *agentv1.WatchSessionReque
 		return err
 	}
 	defer up.Close()
+	defer watchUpstream(ctx, up)()
 	for {
 		msg, err := up.Receive()
 		if err != nil {
@@ -104,6 +125,7 @@ func (s *Service) WatchSessions(ctx context.Context, r *agentv1.WatchSessionsReq
 		return err
 	}
 	defer up.Close()
+	defer watchUpstream(ctx, up)()
 	for {
 		msg, err := up.Receive()
 		if err != nil {
@@ -253,6 +275,7 @@ func (s *Service) GetFileStream(ctx context.Context, r *agentv1.GetFileRequest, 
 		return err
 	}
 	defer up.Close()
+	defer watchUpstream(ctx, up)()
 	for {
 		msg, err := up.Receive()
 		if err != nil {
