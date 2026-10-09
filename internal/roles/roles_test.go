@@ -116,6 +116,15 @@ func TestLogsAndServicesAvailability(t *testing.T) {
 			}
 		}
 	}
+	// config-* / secret-* (ConfigMap/Secret CRUD) for the roles that manage
+	// tenant resources.
+	for _, r := range []Role{Admin, Developer} {
+		for _, want := range []string{"config-put", "config-list", "config-delete", "secret-put", "secret-list", "secret-delete"} {
+			if !has(ToolsFor(r), want) {
+				t.Fatalf("%s must have %q", r, want)
+			}
+		}
+	}
 	// explorer: read-only observability.
 	e := ToolsFor(Explorer)
 	if !has(e, "service-list") || !has(e, "service-logs") {

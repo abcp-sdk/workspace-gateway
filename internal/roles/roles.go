@@ -129,6 +129,7 @@ var repoDevTools = []string{
 	"repo-tag-create", "repo-build-image", "repo-build-status",
 	"service-create", "service-update", "service-deploy", "service-list", "service-delete", "service-logs",
 	"service-rollback",
+	"config-put", "config-list", "config-delete", "secret-put", "secret-list", "secret-delete",
 	"helm-deploy", "helm-list", "helm-history", "helm-rollback", "helm-uninstall",
 	"helm-objects", "helm-object-logs",
 }
@@ -143,6 +144,7 @@ var adminTools = []string{
 	"service-create", "service-update", "service-deploy", "service-list", "service-delete", "service-logs",
 	"service-rollback",
 	"pvc-create", "pvc-list", "pvc-delete",
+	"config-put", "config-list", "config-delete", "secret-put", "secret-list", "secret-delete",
 	"helm-deploy", "helm-list", "helm-history", "helm-rollback", "helm-uninstall",
 	"helm-objects", "helm-object-logs",
 }
