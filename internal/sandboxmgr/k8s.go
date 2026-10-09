@@ -93,6 +93,16 @@ type Spec struct {
 	// GoldenDiskCachePath so a VM sandbox's golden-disk base is cached once and
 	// shared across sandboxes. Empty = no cache volume.
 	GoldenDiskPVC string
+	// Volumes are extra PVCs to mount into the worker container (tenant-owned).
+	Volumes []VolumeMount
+}
+
+// VolumeMount is one PVC mounted into a sandbox container.
+type VolumeMount struct {
+	PVC       string
+	MountPath string
+	ReadOnly  bool
+	SubPath   string
 }
 
 // GoldenDiskCachePath is where golden-disk.sh caches the base qcow2 (its
@@ -395,6 +405,21 @@ func (c *Client) Create(ctx context.Context, s Spec) (Sandbox, string, error) {
 		podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, corev1.VolumeMount{
 			Name: "golden-disk-cache", MountPath: GoldenDiskCachePath,
 		})
+	}
+	if len(s.Volumes) > 0 {
+		for i, v := range s.Volumes {
+			name := fmt.Sprintf("vol-%d", i)
+			podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+				Name: name,
+				VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: v.PVC,
+					ReadOnly:  v.ReadOnly,
+				}},
+			})
+			podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, corev1.VolumeMount{
+				Name: name, MountPath: v.MountPath, ReadOnly: v.ReadOnly, SubPath: v.SubPath,
+			})
+		}
 	}
 	if s.Runtime.RuntimeClass != "" {
 		rc := s.Runtime.RuntimeClass
