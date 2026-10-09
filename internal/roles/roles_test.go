@@ -108,6 +108,14 @@ func TestLogsAndServicesAvailability(t *testing.T) {
 			}
 		}
 	}
+	// service-create / service-update (split from service-deploy).
+	for _, r := range []Role{Admin, Developer} {
+		for _, want := range []string{"service-create", "service-update"} {
+			if !has(ToolsFor(r), want) {
+				t.Fatalf("%s must have %q", r, want)
+			}
+		}
+	}
 	// explorer: read-only observability.
 	e := ToolsFor(Explorer)
 	if !has(e, "service-list") || !has(e, "service-logs") {
