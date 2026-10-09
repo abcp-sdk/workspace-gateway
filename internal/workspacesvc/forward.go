@@ -10,7 +10,6 @@ import (
 	agentv1 "github.com/abcp-sdk/workspace-gateway/gen/agent/v1"
 	wsv1 "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1"
 	wsv1connect "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1/wsv1connect"
-	"github.com/abcp-sdk/workspace-gateway/internal/roles"
 )
 
 // This file forwards the minimal agent surface the webui needs. The webui
@@ -189,25 +188,18 @@ func (s *Service) ListModels(ctx context.Context, r *agentv1.ListModelsRequest) 
 	return s.agent.ListModels(fwdCtx(ctx), r)
 }
 
-// reservedPresetID reports whether an id names a ROLE preset. The role preset's
-// `tools` is the role's immutable tool whitelist (see roles.ToolsFor), so a
-// tenant MUST NOT upsert/delete it — doing so would widen its own tool surface.
-func reservedPresetID(id string) bool { return roles.ValidRole(id) }
-
-// UpsertPreset writes the tenant's OWN preset (shadows a NON-role preset).
-// Role presets (admin/developer/explorer) are RESERVED.
+// UpsertPreset writes the tenant's OWN preset. A tenant may override ANY id,
+// including a system/role preset (`admin`/`developer`/`explorer`) and its
+// `tools` whitelist — the tenant token IS the authority boundary (it only ever
+// touches its OWN tenant's presets). The system row is never modified; deleting
+// the user row restores it. (abc-protocol/agent DEVELOP.md "Preset write
+// authority".)
 func (s *Service) UpsertPreset(ctx context.Context, r *agentv1.UpsertPresetRequest) (*agentv1.UpsertPresetResponse, error) {
-	if id := r.GetPreset().GetId(); reservedPresetID(id) {
-		return nil, connect.Errorf(connect.CodePermissionDenied, "preset %q is a reserved role preset", id)
-	}
 	return s.agent.UpsertPreset(fwdCtx(ctx), r)
 }
 
-// DeletePreset removes the tenant's own preset row. Role presets are RESERVED.
+// DeletePreset removes the tenant's own preset row, revealing the system row.
 func (s *Service) DeletePreset(ctx context.Context, r *agentv1.DeletePresetRequest) (*agentv1.DeletePresetResponse, error) {
-	if reservedPresetID(r.GetId()) {
-		return nil, connect.Errorf(connect.CodePermissionDenied, "preset %q is a reserved role preset", r.GetId())
-	}
 	return s.agent.DeletePreset(fwdCtx(ctx), r)
 }
 
