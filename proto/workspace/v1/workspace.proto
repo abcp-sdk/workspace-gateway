@@ -665,6 +665,10 @@ message BuildInfo {
   int64 created_at = 5; // unix millis
 }
 
+// CancelBuild aborts a running background build.
+message CancelBuildRequest { string build_id = 1; }
+message CancelBuildResponse { bool ok = 1; }
+
 // ImportImage mirrors an upstream image (public or, with credentials, private)
 // into the deployment registry under an org the caller owns, with a no-op
 // `FROM <source>` rebuild. The upstream config (entrypoint/env/...) is kept.
@@ -1509,6 +1513,8 @@ service BranchSessionService {
   // build_id immediately; poll this for its state/image_ref/log).
   rpc GetBuildStatus(GetBuildStatusRequest) returns (GetBuildStatusResponse);
   rpc ListBuilds(ListBuildsRequest) returns (ListBuildsResponse);
+  // CancelBuild aborts a running background build.
+  rpc CancelBuild(CancelBuildRequest) returns (CancelBuildResponse);
   rpc ImportImage(ImportImageRequest) returns (ImportImageResponse);
   // sandboxes
   rpc ListSandboxes(ListSandboxesRequest) returns (ListSandboxesResponse);

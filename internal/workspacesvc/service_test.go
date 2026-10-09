@@ -421,6 +421,45 @@ func TestCreateSandboxAuthorizesPVCs(t *testing.T) {
 	}
 }
 
+// TestCancelBuild exercises the CancelBuild handler directly: an unknown id is
+// NotFound, a running build is canceled (ok=true, state failed, log annotated),
+// and a second cancel is a no-op (ok=false).
+func TestCancelBuild(t *testing.T) {
+	s := &Service{svcToken: "tok", svcTenant: "ten"}
+	ctx := WithTestHeaders(context.Background(), testHdr("Authorization", "Bearer tok"))
+
+	if _, err := s.CancelBuild(ctx, &wsv1.CancelBuildRequest{BuildId: "missing"}); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("unknown build: code = %v, want NotFound", connect.CodeOf(err))
+	}
+
+	id := "b1"
+	canceled := false
+	buildsMu.Lock()
+	builds[id] = &buildState{state: "running", image: "o/i:t", created: 1, cancel: func() { canceled = true }}
+	buildsMu.Unlock()
+	t.Cleanup(func() { buildsMu.Lock(); delete(builds, id); buildsMu.Unlock() })
+
+	res, err := s.CancelBuild(ctx, &wsv1.CancelBuildRequest{BuildId: id})
+	if err != nil || !res.GetOk() {
+		t.Fatalf("cancel running: res=%v err=%v", res, err)
+	}
+	if !canceled {
+		t.Fatal("cancel func was not called")
+	}
+	buildsMu.Lock()
+	st := builds[id]
+	state, log := st.state, st.log
+	buildsMu.Unlock()
+	if state != "failed" || log != "build canceled by user" {
+		t.Fatalf("state=%q log=%q, want failed + canceled note", state, log)
+	}
+
+	// Second cancel is a no-op.
+	if res, err := s.CancelBuild(ctx, &wsv1.CancelBuildRequest{BuildId: id}); err != nil || res.GetOk() {
+		t.Fatalf("second cancel: res=%v err=%v, want ok=false no error", res, err)
+	}
+}
+
 func TestSortByCreatedAtDesc(t *testing.T) {
 	items := []*wsv1.SandboxInfo{
 		{Name: "a", CreatedAt: 100},

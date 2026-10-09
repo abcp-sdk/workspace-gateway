@@ -24,6 +24,8 @@ type buildState struct {
 	log      string
 	image    string // "<org>/<image>:<tag>" (for the build list)
 	created  int64  // unix millis
+	// cancel stops a running build's buildkit process.
+	cancel context.CancelFunc
 }
 
 // builds tracks background image builds by id. The map is process-local (a
@@ -60,10 +62,17 @@ func (s *Service) BuildSandboxImage(ctx context.Context, req *wsv1.BuildSandboxI
 	buildsMu.Lock()
 	builds[id] = &buildState{state: "running", image: imgLabel, created: time.Now().UnixMilli()}
 	buildsMu.Unlock()
+	buildCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	buildsMu.Lock()
+	if st := builds[id]; st != nil {
+		st.cancel = cancel
+	}
+	buildsMu.Unlock()
 	// Detach from the request context so the build survives the RPC returning.
 	go func() {
+		defer cancel()
 		defer cleanup()
-		res, err := s.builder.BuildStream(context.WithoutCancel(ctx), breq, func(chunk string) {
+		res, err := s.builder.BuildStream(buildCtx, breq, func(chunk string) {
 			// Append live so GetBuildStatus can serve the log as it grows.
 			buildsMu.Lock()
 			if st := builds[id]; st != nil {
@@ -175,4 +184,32 @@ func (s *Service) prepareBuild(ctx context.Context, m *wsv1.BuildSandboxImageReq
 		Tag:        m.GetTag(),
 		BuildArgs:  s.buildArgs(m.GetBuildArgs()),
 	}, cleanup, nil
+}
+
+// CancelBuild aborts a running background build (cancels its context, which
+// terminates the buildkit process). Idempotent.
+func (s *Service) CancelBuild(ctx context.Context, req *wsv1.CancelBuildRequest) (*wsv1.CancelBuildResponse, error) {
+	if _, err := s.sandboxAuth(ctx, hdrFrom(ctx)); err != nil {
+		return nil, err
+	}
+	id := req.GetBuildId()
+	buildsMu.Lock()
+	st := builds[id]
+	if st == nil {
+		buildsMu.Unlock()
+		return nil, connect.Errorf(connect.CodeNotFound, "build %q not found", id)
+	}
+	if st.state != "running" || st.cancel == nil {
+		buildsMu.Unlock()
+		return &wsv1.CancelBuildResponse{Ok: false}, nil
+	}
+	st.cancel()
+	st.cancel = nil
+	st.state = "failed"
+	if st.log != "" && !strings.HasSuffix(st.log, "\n") {
+		st.log += "\n"
+	}
+	st.log += "build canceled by user"
+	buildsMu.Unlock()
+	return &wsv1.CancelBuildResponse{Ok: true}, nil
 }
