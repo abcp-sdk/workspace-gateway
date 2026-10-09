@@ -7073,8 +7073,11 @@ type SandboxInfo struct {
 	// Pod diagnostics (best-effort): total container restarts and the first
 	// unhealthy container's reason+message (e.g. `OOMKilled`, `CrashLoopBackOff`,
 	// `RunContainerError`). Empty when healthy.
-	Restarts      int32  `protobuf:"varint,13,opt,name=restarts,proto3" json:"restarts,omitempty"`
-	Message       string `protobuf:"bytes,14,opt,name=message,proto3" json:"message,omitempty"`
+	Restarts int32  `protobuf:"varint,13,opt,name=restarts,proto3" json:"restarts,omitempty"`
+	Message  string `protobuf:"bytes,14,opt,name=message,proto3" json:"message,omitempty"`
+	// True when the CALLER's tenant owns this row (read-only UI signal; does NOT
+	// change visibility).
+	Operable      bool `protobuf:"varint,15,opt,name=operable,proto3" json:"operable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7205,6 +7208,13 @@ func (x *SandboxInfo) GetMessage() string {
 		return x.Message
 	}
 	return ""
+}
+
+func (x *SandboxInfo) GetOperable() bool {
+	if x != nil {
+		return x.Operable
+	}
+	return false
 }
 
 type ListSandboxesResponse struct {
@@ -8561,7 +8571,9 @@ type ServiceInfo struct {
 	Rollout        *RolloutSpec       `protobuf:"bytes,29,opt,name=rollout,proto3" json:"rollout,omitempty"`
 	SidecarCount   int32              `protobuf:"varint,30,opt,name=sidecar_count,json=sidecarCount,proto3" json:"sidecar_count,omitempty"`
 	// Current rollout revision of the service's Deployment (RollbackService).
-	Revision      int64 `protobuf:"varint,33,opt,name=revision,proto3" json:"revision,omitempty"`
+	Revision int64 `protobuf:"varint,33,opt,name=revision,proto3" json:"revision,omitempty"`
+	// True when the CALLER's tenant owns this service (read-only UI signal).
+	Operable      bool `protobuf:"varint,34,opt,name=operable,proto3" json:"operable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8797,6 +8809,13 @@ func (x *ServiceInfo) GetRevision() int64 {
 		return x.Revision
 	}
 	return 0
+}
+
+func (x *ServiceInfo) GetOperable() bool {
+	if x != nil {
+		return x.Operable
+	}
+	return false
 }
 
 // VolumeMountInfo is one PVC mounted into a service container.
@@ -10389,7 +10408,9 @@ type PVCInfo struct {
 	Creator   string `protobuf:"bytes,5,opt,name=creator,proto3" json:"creator,omitempty"`                       // owning tenant
 	CreatedAt int64  `protobuf:"varint,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"` // unix millis
 	// Names of the tenant's services currently mounting this PVC.
-	MountedBy     []string `protobuf:"bytes,7,rep,name=mounted_by,json=mountedBy,proto3" json:"mounted_by,omitempty"`
+	MountedBy []string `protobuf:"bytes,7,rep,name=mounted_by,json=mountedBy,proto3" json:"mounted_by,omitempty"`
+	// True when the CALLER's tenant owns this claim (read-only UI signal).
+	Operable      bool `protobuf:"varint,8,opt,name=operable,proto3" json:"operable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -10471,6 +10492,13 @@ func (x *PVCInfo) GetMountedBy() []string {
 		return x.MountedBy
 	}
 	return nil
+}
+
+func (x *PVCInfo) GetOperable() bool {
+	if x != nil {
+		return x.Operable
+	}
+	return false
 }
 
 type CreatePVCRequest struct {
@@ -11257,7 +11285,9 @@ type HelmReleaseInfo struct {
 	AppVersion string `protobuf:"bytes,15,opt,name=app_version,json=appVersion,proto3" json:"app_version,omitempty"`
 	// Objects the CURRENT revision deployed, as "Kind/name". Lets a list view
 	// show "N objects" without a second HelmHistory round-trip.
-	Objects       []string `protobuf:"bytes,16,rep,name=objects,proto3" json:"objects,omitempty"`
+	Objects []string `protobuf:"bytes,16,rep,name=objects,proto3" json:"objects,omitempty"`
+	// True when the CALLER's tenant owns this release (read-only UI signal).
+	Operable      bool `protobuf:"varint,17,opt,name=operable,proto3" json:"operable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -11374,6 +11404,13 @@ func (x *HelmReleaseInfo) GetObjects() []string {
 		return x.Objects
 	}
 	return nil
+}
+
+func (x *HelmReleaseInfo) GetOperable() bool {
+	if x != nil {
+		return x.Operable
+	}
+	return false
 }
 
 type HelmRevisionInfo struct {
@@ -13520,7 +13557,7 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\timage_ref\x18\x01 \x01(\tR\bimageRef\x12\x10\n" +
 	"\x03log\x18\x02 \x01(\tR\x03log\"0\n" +
 	"\x14ListSandboxesRequest\x12\x18\n" +
-	"\asession\x18\x01 \x01(\tR\asession\"\xd4\x02\n" +
+	"\asession\x18\x01 \x01(\tR\asession\"\xf0\x02\n" +
 	"\vSandboxInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05image\x18\x02 \x01(\tR\x05image\x12\x14\n" +
@@ -13537,7 +13574,8 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\x02os\x18\v \x01(\tR\x02os\x12\x12\n" +
 	"\x04arch\x18\f \x01(\tR\x04arch\x12\x1a\n" +
 	"\brestarts\x18\r \x01(\x05R\brestarts\x12\x18\n" +
-	"\amessage\x18\x0e \x01(\tR\amessage\"P\n" +
+	"\amessage\x18\x0e \x01(\tR\amessage\x12\x1a\n" +
+	"\boperable\x18\x0f \x01(\bR\boperable\"P\n" +
 	"\x15ListSandboxesResponse\x127\n" +
 	"\tsandboxes\x18\x01 \x03(\v2\x19.workspace.v1.SandboxInfoR\tsandboxes\"\x87\x03\n" +
 	"\x14CreateSandboxRequest\x12\x12\n" +
@@ -13635,7 +13673,7 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"totalLines\x12\x1d\n" +
 	"\n" +
 	"start_line\x18\x03 \x01(\x05R\tstartLine\x12\x19\n" +
-	"\bend_line\x18\x04 \x01(\x05R\aendLine\"\x81\t\n" +
+	"\bend_line\x18\x04 \x01(\x05R\aendLine\"\x9d\t\n" +
 	"\vServiceInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05image\x18\x02 \x01(\tR\x05image\x12\x14\n" +
@@ -13668,7 +13706,8 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\rstartup_probe\x18\x1c \x01(\v2\x17.workspace.v1.ProbeSpecR\fstartupProbe\x123\n" +
 	"\arollout\x18\x1d \x01(\v2\x19.workspace.v1.RolloutSpecR\arollout\x12#\n" +
 	"\rsidecar_count\x18\x1e \x01(\x05R\fsidecarCount\x12\x1a\n" +
-	"\brevision\x18! \x01(\x03R\brevision\x1a6\n" +
+	"\brevision\x18! \x01(\x03R\brevision\x12\x1a\n" +
+	"\boperable\x18\" \x01(\bR\boperable\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\v\x10\fJ\x04\b\x0f\x10\x10J\x04\b\x1f\x10 J\x04\b \x10!\"z\n" +
@@ -13807,7 +13846,7 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\x14DeleteServiceRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"'\n" +
 	"\x15DeleteServiceResponse\x12\x0e\n" +
-	"\x02ok\x18\x01 \x01(\bR\x02ok\"\xc4\x01\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\"\xe0\x01\n" +
 	"\aPVCInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04size\x18\x02 \x01(\tR\x04size\x12#\n" +
@@ -13817,7 +13856,8 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x06 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"mounted_by\x18\a \x03(\tR\tmountedBy\"_\n" +
+	"mounted_by\x18\a \x03(\tR\tmountedBy\x12\x1a\n" +
+	"\boperable\x18\b \x01(\bR\boperable\"_\n" +
 	"\x10CreatePVCRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04size\x18\x02 \x01(\tR\x04size\x12#\n" +
@@ -13854,7 +13894,7 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\adry_run\x18\x03 \x01(\bR\x06dryRun\"g\n" +
 	"\x1cApplyServiceManifestResponse\x123\n" +
 	"\aservice\x18\x01 \x01(\v2\x19.workspace.v1.ServiceInfoR\aservice\x12\x12\n" +
-	"\x04yaml\x18\x02 \x01(\tR\x04yaml\"\xf3\x02\n" +
+	"\x04yaml\x18\x02 \x01(\tR\x04yaml\"\x8f\x03\n" +
 	"\x0fHelmReleaseInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x18\n" +
@@ -13870,7 +13910,8 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\rchart_version\x18\x0e \x01(\tR\fchartVersion\x12\x1f\n" +
 	"\vapp_version\x18\x0f \x01(\tR\n" +
 	"appVersion\x12\x18\n" +
-	"\aobjects\x18\x10 \x03(\tR\aobjectsJ\x04\b\n" +
+	"\aobjects\x18\x10 \x03(\tR\aobjects\x12\x1a\n" +
+	"\boperable\x18\x11 \x01(\bR\boperableJ\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0e\"\xb0\x01\n" +
 	"\x10HelmRevisionInfo\x12\x1a\n" +
 	"\brevision\x18\x01 \x01(\x05R\brevision\x12\x10\n" +
