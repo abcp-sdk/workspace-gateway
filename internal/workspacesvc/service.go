@@ -3429,6 +3429,12 @@ func writable(creator, tenant string) bool {
 	return creator != "" && creator == tenant
 }
 
+// owned is the READ filter: an object is visible to `tenant` unless it belongs
+// to a DIFFERENT tenant (unowned is visible to all).
+func owned(creator, tenant string) bool {
+	return creator == "" || creator == tenant
+}
+
 func canWrite(resourceNS string, hdr *connect.Header) bool {
 	callerNS := callerNamespace(hdr)
 	return callerNS == "" || resourceNS == "" || resourceNS == callerNS
@@ -3845,3 +3851,128 @@ var hopHeaders = map[string]bool{
 func copyHeaders[T any](_ *T, _ *connect.Header) {}
 
 var _ wsv1connect.BranchSessionServiceHandler = (*Service)(nil)
+
+// ---- configmaps / secrets ----
+
+// PutConfigMap creates/updates a ConfigMap (A1 gating lives in servicesmgr).
+func (s *Service) PutConfigMap(ctx context.Context, req *wsv1.PutConfigMapRequest) (*wsv1.PutConfigMapResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if s.services == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, "service backend not configured")
+	}
+	cm, err := s.services.PutConfigMap(ctx, req.GetName(), req.GetData(), tenant, resolveNamespace(hdrFrom(ctx), ""))
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	return &wsv1.PutConfigMapResponse{Configmap: toConfigMapInfo(cm)}, nil
+}
+
+func (s *Service) ListConfigMaps(ctx context.Context, _ *wsv1.ListConfigMapsRequest) (*wsv1.ListConfigMapsResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if s.services == nil {
+		return &wsv1.ListConfigMapsResponse{}, nil
+	}
+	all, err := s.services.ListConfigMaps(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	out := make([]*wsv1.ConfigMapInfo, 0, len(all))
+	for _, cm := range all {
+		if !owned(cm.Creator, tenant) {
+			continue
+		}
+		out = append(out, toConfigMapInfo(cm))
+	}
+	return &wsv1.ListConfigMapsResponse{Configmaps: out}, nil
+}
+
+func (s *Service) DeleteConfigMap(ctx context.Context, req *wsv1.DeleteConfigMapRequest) (*wsv1.DeleteConfigMapResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if s.services == nil {
+		return &wsv1.DeleteConfigMapResponse{Ok: false}, nil
+	}
+	cur, gerr := s.services.GetConfigMap(ctx, req.GetName())
+	if gerr != nil || !writable(cur.Creator, tenant) {
+		return &wsv1.DeleteConfigMapResponse{Ok: false}, nil
+	}
+	ok, err := s.services.DeleteConfigMap(ctx, req.GetName())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	return &wsv1.DeleteConfigMapResponse{Ok: ok}, nil
+}
+
+func toConfigMapInfo(cm servicesmgr.ConfigMap) *wsv1.ConfigMapInfo {
+	return &wsv1.ConfigMapInfo{Name: cm.Name, Data: cm.Data, Creator: cm.Creator,
+		Namespace: cm.Namespace, CreatedAt: cm.CreatedAt}
+}
+
+func (s *Service) PutSecret(ctx context.Context, req *wsv1.PutSecretRequest) (*wsv1.PutSecretResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if s.services == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, "service backend not configured")
+	}
+	sec, err := s.services.PutSecret(ctx, req.GetName(), req.GetData(), tenant, resolveNamespace(hdrFrom(ctx), ""))
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	return &wsv1.PutSecretResponse{Secret: toSecretInfo(sec)}, nil
+}
+
+func (s *Service) ListSecrets(ctx context.Context, _ *wsv1.ListSecretsRequest) (*wsv1.ListSecretsResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if s.services == nil {
+		return &wsv1.ListSecretsResponse{}, nil
+	}
+	all, err := s.services.ListSecrets(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	out := make([]*wsv1.SecretInfo, 0, len(all))
+	for _, sec := range all {
+		if !owned(sec.Creator, tenant) {
+			continue
+		}
+		out = append(out, toSecretInfo(sec))
+	}
+	return &wsv1.ListSecretsResponse{Secrets: out}, nil
+}
+
+func (s *Service) DeleteSecret(ctx context.Context, req *wsv1.DeleteSecretRequest) (*wsv1.DeleteSecretResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if s.services == nil {
+		return &wsv1.DeleteSecretResponse{Ok: false}, nil
+	}
+	cur, gerr := s.services.GetSecret(ctx, req.GetName())
+	if gerr != nil || !writable(cur.Creator, tenant) {
+		return &wsv1.DeleteSecretResponse{Ok: false}, nil
+	}
+	ok, err := s.services.DeleteSecret(ctx, req.GetName())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	return &wsv1.DeleteSecretResponse{Ok: ok}, nil
+}
+
+func toSecretInfo(sec servicesmgr.Secret) *wsv1.SecretInfo {
+	return &wsv1.SecretInfo{Name: sec.Name, Data: sec.Data, Creator: sec.Creator,
+		Namespace: sec.Namespace, CreatedAt: sec.CreatedAt}
+}

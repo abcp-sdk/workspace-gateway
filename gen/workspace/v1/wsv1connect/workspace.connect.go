@@ -242,6 +242,24 @@ const (
 	// BranchSessionServiceDeletePVCProcedure is the procedure name of the BranchSessionService's
 	// DeletePVC RPC.
 	BranchSessionServiceDeletePVCProcedure = "/workspace.v1.BranchSessionService/DeletePVC"
+	// BranchSessionServicePutConfigMapProcedure is the procedure name of the BranchSessionService's
+	// PutConfigMap RPC.
+	BranchSessionServicePutConfigMapProcedure = "/workspace.v1.BranchSessionService/PutConfigMap"
+	// BranchSessionServiceListConfigMapsProcedure is the procedure name of the BranchSessionService's
+	// ListConfigMaps RPC.
+	BranchSessionServiceListConfigMapsProcedure = "/workspace.v1.BranchSessionService/ListConfigMaps"
+	// BranchSessionServiceDeleteConfigMapProcedure is the procedure name of the BranchSessionService's
+	// DeleteConfigMap RPC.
+	BranchSessionServiceDeleteConfigMapProcedure = "/workspace.v1.BranchSessionService/DeleteConfigMap"
+	// BranchSessionServicePutSecretProcedure is the procedure name of the BranchSessionService's
+	// PutSecret RPC.
+	BranchSessionServicePutSecretProcedure = "/workspace.v1.BranchSessionService/PutSecret"
+	// BranchSessionServiceListSecretsProcedure is the procedure name of the BranchSessionService's
+	// ListSecrets RPC.
+	BranchSessionServiceListSecretsProcedure = "/workspace.v1.BranchSessionService/ListSecrets"
+	// BranchSessionServiceDeleteSecretProcedure is the procedure name of the BranchSessionService's
+	// DeleteSecret RPC.
+	BranchSessionServiceDeleteSecretProcedure = "/workspace.v1.BranchSessionService/DeleteSecret"
 	// BranchSessionServiceServiceLogsProcedure is the procedure name of the BranchSessionService's
 	// ServiceLogs RPC.
 	BranchSessionServiceServiceLogsProcedure = "/workspace.v1.BranchSessionService/ServiceLogs"
@@ -874,6 +892,48 @@ var (
 			Procedure:  BranchSessionServiceDeletePVCProcedure,
 		}
 	})
+	branchSessionServicePutConfigMapSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("PutConfigMap"),
+			Procedure:  BranchSessionServicePutConfigMapProcedure,
+		}
+	})
+	branchSessionServiceListConfigMapsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListConfigMaps"),
+			Procedure:  BranchSessionServiceListConfigMapsProcedure,
+		}
+	})
+	branchSessionServiceDeleteConfigMapSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("DeleteConfigMap"),
+			Procedure:  BranchSessionServiceDeleteConfigMapProcedure,
+		}
+	})
+	branchSessionServicePutSecretSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("PutSecret"),
+			Procedure:  BranchSessionServicePutSecretProcedure,
+		}
+	})
+	branchSessionServiceListSecretsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListSecrets"),
+			Procedure:  BranchSessionServiceListSecretsProcedure,
+		}
+	})
+	branchSessionServiceDeleteSecretSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("DeleteSecret"),
+			Procedure:  BranchSessionServiceDeleteSecretProcedure,
+		}
+	})
 	branchSessionServiceServiceLogsSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
@@ -1310,6 +1370,13 @@ type BranchSessionServiceClient interface {
 	CreatePVC(context.Context, *v1.CreatePVCRequest) (*v1.CreatePVCResponse, error)
 	ListPVCs(context.Context, *v1.ListPVCsRequest) (*v1.ListPVCsResponse, error)
 	DeletePVC(context.Context, *v1.DeletePVCRequest) (*v1.DeletePVCResponse, error)
+	// ---- configmaps / secrets ----
+	PutConfigMap(context.Context, *v1.PutConfigMapRequest) (*v1.PutConfigMapResponse, error)
+	ListConfigMaps(context.Context, *v1.ListConfigMapsRequest) (*v1.ListConfigMapsResponse, error)
+	DeleteConfigMap(context.Context, *v1.DeleteConfigMapRequest) (*v1.DeleteConfigMapResponse, error)
+	PutSecret(context.Context, *v1.PutSecretRequest) (*v1.PutSecretResponse, error)
+	ListSecrets(context.Context, *v1.ListSecretsRequest) (*v1.ListSecretsResponse, error)
+	DeleteSecret(context.Context, *v1.DeleteSecretRequest) (*v1.DeleteSecretResponse, error)
 	// service logs (read a service's container logs; seam for a log backend)
 	ServiceLogs(context.Context, *v1.ServiceLogsRequest) (*v1.ServiceLogsResponse, error)
 	WatchServiceLogs(context.Context, *v1.WatchServiceLogsRequest) (BranchSessionServiceWatchServiceLogsClientStream, error)
@@ -1637,6 +1704,13 @@ type BranchSessionServiceHandler interface {
 	CreatePVC(context.Context, *v1.CreatePVCRequest) (*v1.CreatePVCResponse, error)
 	ListPVCs(context.Context, *v1.ListPVCsRequest) (*v1.ListPVCsResponse, error)
 	DeletePVC(context.Context, *v1.DeletePVCRequest) (*v1.DeletePVCResponse, error)
+	// ---- configmaps / secrets ----
+	PutConfigMap(context.Context, *v1.PutConfigMapRequest) (*v1.PutConfigMapResponse, error)
+	ListConfigMaps(context.Context, *v1.ListConfigMapsRequest) (*v1.ListConfigMapsResponse, error)
+	DeleteConfigMap(context.Context, *v1.DeleteConfigMapRequest) (*v1.DeleteConfigMapResponse, error)
+	PutSecret(context.Context, *v1.PutSecretRequest) (*v1.PutSecretResponse, error)
+	ListSecrets(context.Context, *v1.ListSecretsRequest) (*v1.ListSecretsResponse, error)
+	DeleteSecret(context.Context, *v1.DeleteSecretRequest) (*v1.DeleteSecretResponse, error)
 	// service logs (read a service's container logs; seam for a log backend)
 	ServiceLogs(context.Context, *v1.ServiceLogsRequest) (*v1.ServiceLogsResponse, error)
 	WatchServiceLogs(context.Context, *v1.WatchServiceLogsRequest, BranchSessionServiceWatchServiceLogsServerStream) error
@@ -1780,6 +1854,12 @@ func RegisterBranchSessionServiceHandler(server *connect.Server, svc BranchSessi
 		connect.Method{Spec: branchSessionServiceCreatePVCSpec(), Handler: adapter.createPVC},
 		connect.Method{Spec: branchSessionServiceListPVCsSpec(), Handler: adapter.listPVCs},
 		connect.Method{Spec: branchSessionServiceDeletePVCSpec(), Handler: adapter.deletePVC},
+		connect.Method{Spec: branchSessionServicePutConfigMapSpec(), Handler: adapter.putConfigMap},
+		connect.Method{Spec: branchSessionServiceListConfigMapsSpec(), Handler: adapter.listConfigMaps},
+		connect.Method{Spec: branchSessionServiceDeleteConfigMapSpec(), Handler: adapter.deleteConfigMap},
+		connect.Method{Spec: branchSessionServicePutSecretSpec(), Handler: adapter.putSecret},
+		connect.Method{Spec: branchSessionServiceListSecretsSpec(), Handler: adapter.listSecrets},
+		connect.Method{Spec: branchSessionServiceDeleteSecretSpec(), Handler: adapter.deleteSecret},
 		connect.Method{Spec: branchSessionServiceServiceLogsSpec(), Handler: adapter.serviceLogs},
 		connect.Method{Spec: branchSessionServiceWatchServiceLogsSpec(), Handler: adapter.watchServiceLogs},
 		connect.Method{Spec: branchSessionServiceSandboxLogsSpec(), Handler: adapter.sandboxLogs},
@@ -2223,6 +2303,30 @@ func (UnimplementedBranchSessionServiceHandler) ListPVCs(context.Context, *v1.Li
 
 func (UnimplementedBranchSessionServiceHandler) DeletePVC(context.Context, *v1.DeletePVCRequest) (*v1.DeletePVCResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.DeletePVC is not implemented")
+}
+
+func (UnimplementedBranchSessionServiceHandler) PutConfigMap(context.Context, *v1.PutConfigMapRequest) (*v1.PutConfigMapResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.PutConfigMap is not implemented")
+}
+
+func (UnimplementedBranchSessionServiceHandler) ListConfigMaps(context.Context, *v1.ListConfigMapsRequest) (*v1.ListConfigMapsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListConfigMaps is not implemented")
+}
+
+func (UnimplementedBranchSessionServiceHandler) DeleteConfigMap(context.Context, *v1.DeleteConfigMapRequest) (*v1.DeleteConfigMapResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.DeleteConfigMap is not implemented")
+}
+
+func (UnimplementedBranchSessionServiceHandler) PutSecret(context.Context, *v1.PutSecretRequest) (*v1.PutSecretResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.PutSecret is not implemented")
+}
+
+func (UnimplementedBranchSessionServiceHandler) ListSecrets(context.Context, *v1.ListSecretsRequest) (*v1.ListSecretsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListSecrets is not implemented")
+}
+
+func (UnimplementedBranchSessionServiceHandler) DeleteSecret(context.Context, *v1.DeleteSecretRequest) (*v1.DeleteSecretResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.DeleteSecret is not implemented")
 }
 
 func (UnimplementedBranchSessionServiceHandler) ServiceLogs(context.Context, *v1.ServiceLogsRequest) (*v1.ServiceLogsResponse, error) {
@@ -2972,6 +3076,54 @@ func (c *branchSessionServiceClient) ListPVCs(ctx context.Context, req *v1.ListP
 func (c *branchSessionServiceClient) DeletePVC(ctx context.Context, req *v1.DeletePVCRequest) (*v1.DeletePVCResponse, error) {
 	var res v1.DeletePVCResponse
 	if err := c.client.CallUnary(ctx, branchSessionServiceDeletePVCSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) PutConfigMap(ctx context.Context, req *v1.PutConfigMapRequest) (*v1.PutConfigMapResponse, error) {
+	var res v1.PutConfigMapResponse
+	if err := c.client.CallUnary(ctx, branchSessionServicePutConfigMapSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListConfigMaps(ctx context.Context, req *v1.ListConfigMapsRequest) (*v1.ListConfigMapsResponse, error) {
+	var res v1.ListConfigMapsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListConfigMapsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) DeleteConfigMap(ctx context.Context, req *v1.DeleteConfigMapRequest) (*v1.DeleteConfigMapResponse, error) {
+	var res v1.DeleteConfigMapResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceDeleteConfigMapSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) PutSecret(ctx context.Context, req *v1.PutSecretRequest) (*v1.PutSecretResponse, error) {
+	var res v1.PutSecretResponse
+	if err := c.client.CallUnary(ctx, branchSessionServicePutSecretSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListSecrets(ctx context.Context, req *v1.ListSecretsRequest) (*v1.ListSecretsResponse, error) {
+	var res v1.ListSecretsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListSecretsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) DeleteSecret(ctx context.Context, req *v1.DeleteSecretRequest) (*v1.DeleteSecretResponse, error) {
+	var res v1.DeleteSecretResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceDeleteSecretSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -4185,6 +4337,78 @@ func (h branchSessionServiceHandler) deletePVC(ctx context.Context, _ connect.Sp
 		return err
 	}
 	res, err := h.svc.DeletePVC(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) putConfigMap(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PutConfigMapRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PutConfigMap(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listConfigMaps(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListConfigMapsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListConfigMaps(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) deleteConfigMap(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteConfigMapRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteConfigMap(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) putSecret(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PutSecretRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PutSecret(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listSecrets(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSecretsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSecrets(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) deleteSecret(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteSecretRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteSecret(ctx, &req)
 	if err != nil {
 		return err
 	}
