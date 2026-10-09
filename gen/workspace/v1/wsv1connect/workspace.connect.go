@@ -170,6 +170,9 @@ const (
 	// BranchSessionServiceListBuildsProcedure is the procedure name of the BranchSessionService's
 	// ListBuilds RPC.
 	BranchSessionServiceListBuildsProcedure = "/workspace.v1.BranchSessionService/ListBuilds"
+	// BranchSessionServiceCancelBuildProcedure is the procedure name of the BranchSessionService's
+	// CancelBuild RPC.
+	BranchSessionServiceCancelBuildProcedure = "/workspace.v1.BranchSessionService/CancelBuild"
 	// BranchSessionServiceImportImageProcedure is the procedure name of the BranchSessionService's
 	// ImportImage RPC.
 	BranchSessionServiceImportImageProcedure = "/workspace.v1.BranchSessionService/ImportImage"
@@ -695,6 +698,13 @@ var (
 			StreamType: connect.StreamTypeUnary,
 			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListBuilds"),
 			Procedure:  BranchSessionServiceListBuildsProcedure,
+		}
+	})
+	branchSessionServiceCancelBuildSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("CancelBuild"),
+			Procedure:  BranchSessionServiceCancelBuildProcedure,
 		}
 	})
 	branchSessionServiceImportImageSpec = sync.OnceValue(func() connect.Spec {
@@ -1248,6 +1258,8 @@ type BranchSessionServiceClient interface {
 	// build_id immediately; poll this for its state/image_ref/log).
 	GetBuildStatus(context.Context, *v1.GetBuildStatusRequest) (*v1.GetBuildStatusResponse, error)
 	ListBuilds(context.Context, *v1.ListBuildsRequest) (*v1.ListBuildsResponse, error)
+	// CancelBuild aborts a running background build.
+	CancelBuild(context.Context, *v1.CancelBuildRequest) (*v1.CancelBuildResponse, error)
 	ImportImage(context.Context, *v1.ImportImageRequest) (*v1.ImportImageResponse, error)
 	// sandboxes
 	ListSandboxes(context.Context, *v1.ListSandboxesRequest) (*v1.ListSandboxesResponse, error)
@@ -1569,6 +1581,8 @@ type BranchSessionServiceHandler interface {
 	// build_id immediately; poll this for its state/image_ref/log).
 	GetBuildStatus(context.Context, *v1.GetBuildStatusRequest) (*v1.GetBuildStatusResponse, error)
 	ListBuilds(context.Context, *v1.ListBuildsRequest) (*v1.ListBuildsResponse, error)
+	// CancelBuild aborts a running background build.
+	CancelBuild(context.Context, *v1.CancelBuildRequest) (*v1.CancelBuildResponse, error)
 	ImportImage(context.Context, *v1.ImportImageRequest) (*v1.ImportImageResponse, error)
 	// sandboxes
 	ListSandboxes(context.Context, *v1.ListSandboxesRequest) (*v1.ListSandboxesResponse, error)
@@ -1714,6 +1728,7 @@ func RegisterBranchSessionServiceHandler(server *connect.Server, svc BranchSessi
 		connect.Method{Spec: branchSessionServiceBuildSandboxImageSpec(), Handler: adapter.buildSandboxImage},
 		connect.Method{Spec: branchSessionServiceGetBuildStatusSpec(), Handler: adapter.getBuildStatus},
 		connect.Method{Spec: branchSessionServiceListBuildsSpec(), Handler: adapter.listBuilds},
+		connect.Method{Spec: branchSessionServiceCancelBuildSpec(), Handler: adapter.cancelBuild},
 		connect.Method{Spec: branchSessionServiceImportImageSpec(), Handler: adapter.importImage},
 		connect.Method{Spec: branchSessionServiceListSandboxesSpec(), Handler: adapter.listSandboxes},
 		connect.Method{Spec: branchSessionServiceCreateSandboxSpec(), Handler: adapter.createSandbox},
@@ -2082,6 +2097,10 @@ func (UnimplementedBranchSessionServiceHandler) GetBuildStatus(context.Context, 
 
 func (UnimplementedBranchSessionServiceHandler) ListBuilds(context.Context, *v1.ListBuildsRequest) (*v1.ListBuildsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListBuilds is not implemented")
+}
+
+func (UnimplementedBranchSessionServiceHandler) CancelBuild(context.Context, *v1.CancelBuildRequest) (*v1.CancelBuildResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.CancelBuild is not implemented")
 }
 
 func (UnimplementedBranchSessionServiceHandler) ImportImage(context.Context, *v1.ImportImageRequest) (*v1.ImportImageResponse, error) {
@@ -2723,6 +2742,14 @@ func (c *branchSessionServiceClient) GetBuildStatus(ctx context.Context, req *v1
 func (c *branchSessionServiceClient) ListBuilds(ctx context.Context, req *v1.ListBuildsRequest) (*v1.ListBuildsResponse, error) {
 	var res v1.ListBuildsResponse
 	if err := c.client.CallUnary(ctx, branchSessionServiceListBuildsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) CancelBuild(ctx context.Context, req *v1.CancelBuildRequest) (*v1.CancelBuildResponse, error) {
+	var res v1.CancelBuildResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceCancelBuildSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -3820,6 +3847,18 @@ func (h branchSessionServiceHandler) listBuilds(ctx context.Context, _ connect.S
 		return err
 	}
 	res, err := h.svc.ListBuilds(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) cancelBuild(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CancelBuildRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CancelBuild(ctx, &req)
 	if err != nil {
 		return err
 	}
