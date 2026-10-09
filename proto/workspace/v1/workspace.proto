@@ -913,12 +913,9 @@ message ServiceInfo {
   ProbeSpec startup_probe = 28;
   RolloutSpec rollout = 29;
   int32 sidecar_count = 30;
-  // ---- blue-green ----
-  // The slot the primary URL currently targets: "blue" or "green". Empty for a
-  // non-slotted (plain) service.
-  string active_slot = 31;
-  // Every slot that exists (blue/green), with its own address + status.
-  repeated ServiceSlotInfo slots = 32;
+  reserved 31, 32; // was blue-green (active_slot/slots)
+  // Current rollout revision of the service's Deployment (RollbackService).
+  int64 revision = 33;
 }
 
 // VolumeMountInfo is one PVC mounted into a service container.
@@ -1024,26 +1021,6 @@ message ConfigMountInfo {
   string mount_path = 3;
 }
 
-// ServiceSlotInfo describes one blue-green slot of a service. The service's
-// primary URL always targets the ACTIVE slot; each slot also has its own
-// address (`<name>-blue` / `<name>-green`).
-message ServiceSlotInfo {
-  // "blue" (the stable slot) or "green" (the candidate slot).
-  string slot = 1;
-  string image = 2;
-  bool ready = 3;
-  int32 replicas = 4;
-  int32 ready_replicas = 5;
-  // In-cluster URL of this slot's own Service.
-  string url = 6;
-  // Public URL of this slot's own Service (`https://<name>-<slot>.<domain>`).
-  string public_url = 7;
-  int64 created_at = 8;
-  string pod_phase = 9;
-  int32 restarts = 10;
-  string message = 11;
-}
-
 // ServicePortInfo is one exposed port of a service.
 message ServicePortInfo {
   // Service suffix ("" = the primary service `<name>`; else `<name>-<suffix>`).
@@ -1132,28 +1109,19 @@ message DeployServiceRequest {
   // Scheduling.
   map<string, string> node_selector = 23;
   repeated TolerationSpec tolerations = 24;
-  // Blue-green slot to deploy into: "blue" (default) or "green". Blue keeps the
-  // base Deployment; green is `<name>-green`. The primary URL always targets
-  // the ACTIVE slot (blue until a Promote); each slot has its own address.
-  string slot = 25;
+  reserved 25; // was blue-green slot
 }
 message DeployServiceResponse { ServiceInfo service = 1; }
 
 message ListServicesRequest {}
 message ListServicesResponse { repeated ServiceInfo services = 1; }
 
-// PromoteService switches a blue-green service's primary URL to the non-active
-// slot (blue<->green). By default the target slot must be fully ready.
-message PromoteServiceRequest {
+// RollbackService rolls the service's Deployment back to a prior revision
+// (revision 0 = the previous revision).
+message RollbackServiceRequest {
   string name = 1;
-  // Allow promoting a slot that is not fully ready.
-  bool force = 2;
+  int32 revision = 2;
 }
-message PromoteServiceResponse { ServiceInfo service = 1; }
-
-// RollbackService switches the primary URL back to the other slot (the inverse
-// of PromoteService).
-message RollbackServiceRequest { string name = 1; }
 message RollbackServiceResponse { ServiceInfo service = 1; }
 
 message DeleteServiceRequest { string name = 1; }
@@ -1258,15 +1226,7 @@ message HelmReleaseInfo {
   int32 revision = 7;
   string status = 8; // deployed | failed
   int64 updated_at = 9;
-  // Blue-green: "blue"/"green" for a slot release (empty = plain release).
-  string slot = 10;
-  // Router is the logical release name a slot release belongs to (empty for a
-  // plain release).
-  string router = 11;
-  // ActiveSlot is set on a blue-green release's router entry.
-  string active_slot = 12;
-  // Slots lists the live slots of a blue-green release (empty for plain).
-  repeated HelmSlotInfo slots = 13;
+  reserved 10, 11, 12, 13; // was blue-green (slot/router/active_slot/slots)
   // Chart.yaml `version` of the chart at the CURRENT revision.
   string chart_version = 14;
   // Chart.yaml `appVersion` of the chart at the CURRENT revision (may be empty).
@@ -1274,15 +1234,6 @@ message HelmReleaseInfo {
   // Objects the CURRENT revision deployed, as "Kind/name". Lets a list view
   // show "N objects" without a second HelmHistory round-trip.
   repeated string objects = 16;
-}
-
-// HelmSlotInfo is one slot of a blue-green Helm release.
-message HelmSlotInfo {
-  string slot = 1;
-  string release = 2;
-  bool ready = 3;
-  int32 ready_workload = 4;
-  int32 total_workload = 5;
 }
 
 message HelmRevisionInfo {
@@ -1307,10 +1258,7 @@ message HelmDeployRequest {
   string values = 6;
   // Dry-run: render + validate only (no apply, no release record).
   bool dry_run = 7;
-  // Blue-green slot: "blue"/"green" (empty = a plain release). A slot deploy
-  // stores the release under `<release>-<slot>` and creates/keeps a router
-  // Service named `<release>`; the router targets the ACTIVE slot.
-  string slot = 8;
+  reserved 8; // was blue-green slot
 }
 message HelmDeployResponse {
   HelmReleaseInfo release = 1;
@@ -1337,17 +1285,6 @@ message HelmRollbackResponse { HelmReleaseInfo release = 1; }
 
 message HelmUninstallRequest { string release = 1; }
 message HelmUninstallResponse { bool ok = 1; }
-
-// HelmPromoteRequest / HelmRollbackRelease switch a blue-green release's router
-// to the non-active / other slot.
-message HelmPromoteRequest {
-  string release = 1;
-  bool force = 2;
-}
-message HelmPromoteResponse { HelmReleaseInfo release = 1; }
-
-message HelmRollbackReleaseRequest { string release = 1; }
-message HelmRollbackReleaseResponse { HelmReleaseInfo release = 1; }
 
 // HelmObjectInfo is the LIVE status of one object a release deployed.
 message HelmObjectInfo {
@@ -1590,8 +1527,6 @@ service BranchSessionService {
   rpc ResumeService(ResumeServiceRequest) returns (ResumeServiceResponse);
   // ScaleService sets the desired replica count (0 = scaled down).
   rpc ScaleService(ScaleServiceRequest) returns (ScaleServiceResponse);
-  // PromoteService / RollbackService: blue-green slot switch.
-  rpc PromoteService(PromoteServiceRequest) returns (PromoteServiceResponse);
   rpc RollbackService(RollbackServiceRequest) returns (RollbackServiceResponse);
   // GetServiceManifest returns the Deployment + Services as YAML (read-only).
   rpc GetServiceManifest(GetServiceManifestRequest) returns (GetServiceManifestResponse);
@@ -1617,9 +1552,6 @@ service BranchSessionService {
   rpc HelmHistory(HelmHistoryRequest) returns (HelmHistoryResponse);
   rpc HelmRollback(HelmRollbackRequest) returns (HelmRollbackResponse);
   rpc HelmUninstall(HelmUninstallRequest) returns (HelmUninstallResponse);
-  // Blue-green slot switch for a Helm release.
-  rpc HelmPromote(HelmPromoteRequest) returns (HelmPromoteResponse);
-  rpc HelmRollbackRelease(HelmRollbackReleaseRequest) returns (HelmRollbackReleaseResponse);
   // Live per-object status + logs of a release (so a UI/tool can show each
   // deployed workload/pod, and read one pod's log).
   rpc HelmObjects(HelmObjectsRequest) returns (HelmObjectsResponse);

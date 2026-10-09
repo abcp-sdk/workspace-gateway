@@ -2351,27 +2351,18 @@ func (s *Service) DeployService(ctx context.Context, req *wsv1.DeployServiceRequ
 		Sidecars:       toSidecars(m.GetSidecars()),
 		NodeSelector:   m.GetNodeSelector(),
 		Tolerations:    toTolerations(m.GetTolerations()),
-		Slot:           m.GetSlot(),
 	}
 	if spec.Image == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "image is required")
 	}
-	if !servicesmgr.ValidSlot(m.GetSlot()) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, "slot must be blue|green")
-	}
-	var svc servicesmgr.Service
-	if m.GetSlot() != "" {
-		svc, err = s.services.DeploySlot(ctx, spec)
-	} else {
-		svc, err = s.services.Deploy(ctx, spec)
-	}
+	svc, err := s.services.Deploy(ctx, spec)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	// Bounded readiness wait: surface a deterministic start failure (bad
 	// command, image pull error, unschedulable pod) right away instead of
 	// returning a Pending shell the caller cannot distinguish from success.
-	if err := s.awaitServiceReady(ctx, name, spec.Slot); err != nil {
+	if err := s.awaitServiceReady(ctx, name); err != nil {
 		return nil, err
 	}
 	// Re-read so the response reflects the settled pod state.
@@ -2385,12 +2376,8 @@ func (s *Service) DeployService(ctx context.Context, req *wsv1.DeployServiceRequ
 // to become ready. Returns a FailedPrecondition error on a deterministic
 // failure; on timeout it returns nil (the service is left running; the response
 // view carries the observed phase/message).
-func (s *Service) awaitServiceReady(ctx context.Context, name, slot string) error {
-	deployName := name
-	if slot != "" {
-		deployName = servicesmgr.SlotDeployName(name, slot)
-	}
-	res, err := s.services.WaitReady(ctx, deployName, serviceReadyTimeout)
+func (s *Service) awaitServiceReady(ctx context.Context, name string) error {
+	res, err := s.services.WaitReady(ctx, name, serviceReadyTimeout)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
@@ -2401,22 +2388,7 @@ func (s *Service) awaitServiceReady(ctx context.Context, name, slot string) erro
 	return nil
 }
 
-// PromoteService switches a blue-green service's primary URL to the other slot.
-func (s *Service) PromoteService(ctx context.Context, req *wsv1.PromoteServiceRequest) (*wsv1.PromoteServiceResponse, error) {
-	if _, err := s.ownedService(ctx, hdrFrom(ctx), req.GetName()); err != nil {
-		return nil, err
-	}
-	if s.services == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, "service backend not configured")
-	}
-	svc, err := s.services.Promote(ctx, req.GetName(), !req.GetForce())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
-	}
-	return &wsv1.PromoteServiceResponse{Service: s.toServiceInfo(svc, hdrFrom(ctx))}, nil
-}
-
-// RollbackService switches a blue-green service's primary URL back a slot.
+// RollbackService rolls a service's Deployment back to a prior revision.
 func (s *Service) RollbackService(ctx context.Context, req *wsv1.RollbackServiceRequest) (*wsv1.RollbackServiceResponse, error) {
 	if _, err := s.ownedService(ctx, hdrFrom(ctx), req.GetName()); err != nil {
 		return nil, err
@@ -2424,7 +2396,7 @@ func (s *Service) RollbackService(ctx context.Context, req *wsv1.RollbackService
 	if s.services == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, "service backend not configured")
 	}
-	svc, err := s.services.Rollback(ctx, req.GetName())
+	svc, err := s.services.Rollback(ctx, req.GetName(), req.GetRevision())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
@@ -2510,7 +2482,6 @@ func toHelmReleaseInfo(r helmmgr.Release) *wsv1.HelmReleaseInfo {
 		Ref: r.Ref, ChartPath: r.ChartPath, Revision: int32(r.Revision),
 		Status: r.Status, UpdatedAt: r.UpdatedAt,
 		ChartVersion: r.ChartVersion, AppVersion: r.AppVersion,
-		Slot: r.Slot, Router: r.Router, ActiveSlot: r.ActiveSlot,
 	}
 	// The current revision's objects ("Kind/name"). The head denormalizes them
 	// for the list view; fall back to the materialized history (e.g. a legacy
@@ -2521,24 +2492,6 @@ func toHelmReleaseInfo(r helmmgr.Release) *wsv1.HelmReleaseInfo {
 	}
 	for _, o := range objs {
 		info.Objects = append(info.Objects, o.Kind+"/"+o.Name)
-	}
-	return info
-}
-
-// helmReleaseInfoWithSlots attaches the live slot list (for a blue-green
-// release's router entry).
-func (s *Service) helmReleaseInfoWithSlots(ctx context.Context, r helmmgr.Release) *wsv1.HelmReleaseInfo {
-	info := toHelmReleaseInfo(r)
-	if r.Router == "" && r.ActiveSlot != "" {
-		if slots, active, err := s.helm.Slots(ctx, r.Name); err == nil {
-			info.ActiveSlot = active
-			for _, sl := range slots {
-				info.Slots = append(info.Slots, &wsv1.HelmSlotInfo{
-					Slot: sl.Slot, Release: sl.Release, Ready: sl.Ready,
-					ReadyWorkload: int32(sl.ReadyWorkload), TotalWorkload: int32(sl.TotalWorkload),
-				})
-			}
-		}
 	}
 	return info
 }
@@ -2596,12 +2549,9 @@ func (s *Service) HelmDeploy(ctx context.Context, req *wsv1.HelmDeployRequest) (
 		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	defer cleanup()
-	if !helmmgr.ValidHelmSlot(m.GetSlot()) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, "slot must be blue|green")
-	}
 	opts := helmmgr.RenderOptions{
 		Release: m.GetRelease(), ChartPath: m.GetChartPath(),
-		ValuesYAML: m.GetValues(), Ref: ref, Slot: m.GetSlot(),
+		ValuesYAML: m.GetValues(), Ref: ref,
 	}
 	if m.GetDryRun() {
 		manifest, objects, _, terr := s.helm.Template(chartDir, opts)
@@ -2614,17 +2564,12 @@ func (s *Service) HelmDeploy(ctx context.Context, req *wsv1.HelmDeployRequest) (
 		}
 		return &wsv1.HelmDeployResponse{Manifest: manifest, Objects: names}, nil
 	}
-	var rel helmmgr.Release
-	if m.GetSlot() != "" {
-		rel, err = s.helm.ApplySlot(ctx, chartDir, opts, tenant, sessionFromHeaders(hdrFrom(ctx)))
-	} else {
-		rel, err = s.helm.Apply(ctx, chartDir, opts, tenant, sessionFromHeaders(hdrFrom(ctx)))
-	}
+	rel, err := s.helm.Apply(ctx, chartDir, opts, tenant, sessionFromHeaders(hdrFrom(ctx)))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &wsv1.HelmDeployResponse{
-		Release: s.helmReleaseInfoWithSlots(ctx, rel),
+		Release: toHelmReleaseInfo(rel),
 		Manifest: func() string {
 			if len(rel.History) > 0 {
 				return rel.History[len(rel.History)-1].Manifest
@@ -2647,7 +2592,7 @@ func (s *Service) HelmList(ctx context.Context, req *wsv1.HelmListRequest) (*wsv
 	return &wsv1.HelmListResponse{Releases: out}, nil
 }
 
-// listHelmReleases returns the tenant's visible Helm releases (slot releases
+// listHelmReleases returns the tenant's visible Helm releases
 // are folded into their router entry).
 func (s *Service) listHelmReleases(ctx context.Context, tenant string) ([]*wsv1.HelmReleaseInfo, error) {
 	if s.helm == nil {
@@ -2662,12 +2607,7 @@ func (s *Service) listHelmReleases(ctx context.Context, tenant string) ([]*wsv1.
 		if r.Creator != "" && r.Creator != tenant {
 			continue
 		}
-		// A slot release is surfaced through its router entry's Slots, not as
-		// its own row.
-		if r.Router != "" {
-			continue
-		}
-		out = append(out, s.helmReleaseInfoWithSlots(ctx, r))
+		out = append(out, toHelmReleaseInfo(r))
 	}
 	return out, nil
 }
@@ -2699,7 +2639,7 @@ func (s *Service) HelmHistory(ctx context.Context, req *wsv1.HelmHistoryRequest)
 			Values: rv.Values, CreatedAt: rv.CreatedAt, Objects: objs,
 		})
 	}
-	return &wsv1.HelmHistoryResponse{Release: s.helmReleaseInfoWithSlots(ctx, rel), Revisions: revs}, nil
+	return &wsv1.HelmHistoryResponse{Release: toHelmReleaseInfo(rel), Revisions: revs}, nil
 }
 
 // HelmRollback re-applies a prior revision.
@@ -2745,55 +2685,11 @@ func (s *Service) HelmUninstall(ctx context.Context, req *wsv1.HelmUninstallRequ
 	if !ok || (cur.Creator != "" && cur.Creator != tenant) {
 		return nil, connect.NewError(connect.CodeNotFound, "release not found")
 	}
-	var ok2 bool
-	if cur.ActiveSlot != "" {
-		// Blue-green router entry: remove both slots + the router Service.
-		ok2, err = s.helm.UninstallRouter(ctx, req.GetRelease())
-	} else {
-		ok2, err = s.helm.Uninstall(ctx, req.GetRelease())
-	}
+	ok2, err := s.helm.Uninstall(ctx, req.GetRelease())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &wsv1.HelmUninstallResponse{Ok: ok2}, nil
-}
-
-// HelmPromote switches a blue-green Helm release's router to the other slot.
-func (s *Service) HelmPromote(ctx context.Context, req *wsv1.HelmPromoteRequest) (*wsv1.HelmPromoteResponse, error) {
-	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
-	if err != nil {
-		return nil, err
-	}
-	if s.helm == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, "helm backend not configured")
-	}
-	if err := s.ownedHelmRelease(ctx, tenant, req.GetRelease()); err != nil {
-		return nil, err
-	}
-	rel, err := s.helm.Promote(ctx, req.GetRelease(), !req.GetForce())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
-	}
-	return &wsv1.HelmPromoteResponse{Release: s.helmReleaseInfoWithSlots(ctx, rel)}, nil
-}
-
-// HelmRollbackRelease switches a blue-green Helm release's router back a slot.
-func (s *Service) HelmRollbackRelease(ctx context.Context, req *wsv1.HelmRollbackReleaseRequest) (*wsv1.HelmRollbackReleaseResponse, error) {
-	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
-	if err != nil {
-		return nil, err
-	}
-	if s.helm == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, "helm backend not configured")
-	}
-	if err := s.ownedHelmRelease(ctx, tenant, req.GetRelease()); err != nil {
-		return nil, err
-	}
-	rel, err := s.helm.RollbackRouter(ctx, req.GetRelease())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
-	}
-	return &wsv1.HelmRollbackReleaseResponse{Release: s.helmReleaseInfoWithSlots(ctx, rel)}, nil
 }
 
 // ownedHelmRelease verifies the release exists and belongs to the tenant.
@@ -3443,31 +3339,10 @@ func sessionFromHeaders(hdr *connect.Header) string {
 
 func (s *Service) toServiceInfo(svc servicesmgr.Service, hdr *connect.Header) *wsv1.ServiceInfo {
 	publicURLs := s.servicePublicURLs(svc, hdr)
-	slotURLs := s.slotPublicURLs(svc, hdr)
-	return toServiceInfoImpl(svc, publicURLs, slotURLs)
+	return toServiceInfoImpl(svc, publicURLs)
 }
 
-// slotPublicURLs returns each slot's own public URL (`https://<name>-<slot>.<ns>.<domain>`).
-func (s *Service) slotPublicURLs(svc servicesmgr.Service, hdr *connect.Header) map[string]string {
-	if len(svc.Slots) == 0 {
-		return nil
-	}
-	domain := s.publicDomainFor(hdr)
-	if domain == "" {
-		return nil
-	}
-	ns := s.sandboxNS
-	if ns == "" {
-		ns = "worker"
-	}
-	out := map[string]string{}
-	for _, sl := range svc.Slots {
-		out[sl.Slot] = "https://" + svc.Name + "-" + sl.Slot + "." + ns + "." + domain
-	}
-	return out
-}
-
-func toServiceInfoImpl(svc servicesmgr.Service, publicURLs, slotURLs map[string]string) *wsv1.ServiceInfo {
+func toServiceInfoImpl(svc servicesmgr.Service, publicURLs map[string]string) *wsv1.ServiceInfo {
 	ports := make([]*wsv1.ServicePortInfo, 0, len(svc.Ports))
 	primary := ""
 	for _, p := range svc.Ports {
@@ -3515,26 +3390,7 @@ func toServiceInfoImpl(svc servicesmgr.Service, publicURLs, slotURLs map[string]
 		StartupProbe:   fromProbeSpec(svc.StartupProbe),
 		Rollout:        fromRollout(svc.Rollout),
 		SidecarCount:   svc.SidecarCount,
-		ActiveSlot:     svc.ActiveSlot,
-		Slots:          toSlotInfos(svc.Slots, slotURLs),
 	}
-}
-
-// toSlotInfos maps the live slots to proto, attaching each slot's public URL.
-func toSlotInfos(slots []servicesmgr.ServiceSlot, slotURLs map[string]string) []*wsv1.ServiceSlotInfo {
-	if len(slots) == 0 {
-		return nil
-	}
-	out := make([]*wsv1.ServiceSlotInfo, 0, len(slots))
-	for _, sl := range slots {
-		out = append(out, &wsv1.ServiceSlotInfo{
-			Slot: sl.Slot, Image: sl.Image, Ready: sl.Ready,
-			Replicas: sl.Replicas, ReadyReplicas: sl.ReadyReplicas,
-			Url: sl.URL, PublicUrl: slotURLs[sl.Slot], CreatedAt: sl.CreatedAt,
-			PodPhase: sl.PodPhase, Restarts: sl.Restarts, Message: sl.Message,
-		})
-	}
-	return out
 }
 
 // ---- Tier 0 reverse mapping (servicesmgr -> proto) ----

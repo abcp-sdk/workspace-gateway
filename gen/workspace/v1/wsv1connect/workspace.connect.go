@@ -221,9 +221,6 @@ const (
 	// BranchSessionServiceScaleServiceProcedure is the procedure name of the BranchSessionService's
 	// ScaleService RPC.
 	BranchSessionServiceScaleServiceProcedure = "/workspace.v1.BranchSessionService/ScaleService"
-	// BranchSessionServicePromoteServiceProcedure is the procedure name of the BranchSessionService's
-	// PromoteService RPC.
-	BranchSessionServicePromoteServiceProcedure = "/workspace.v1.BranchSessionService/PromoteService"
 	// BranchSessionServiceRollbackServiceProcedure is the procedure name of the BranchSessionService's
 	// RollbackService RPC.
 	BranchSessionServiceRollbackServiceProcedure = "/workspace.v1.BranchSessionService/RollbackService"
@@ -269,12 +266,6 @@ const (
 	// BranchSessionServiceHelmUninstallProcedure is the procedure name of the BranchSessionService's
 	// HelmUninstall RPC.
 	BranchSessionServiceHelmUninstallProcedure = "/workspace.v1.BranchSessionService/HelmUninstall"
-	// BranchSessionServiceHelmPromoteProcedure is the procedure name of the BranchSessionService's
-	// HelmPromote RPC.
-	BranchSessionServiceHelmPromoteProcedure = "/workspace.v1.BranchSessionService/HelmPromote"
-	// BranchSessionServiceHelmRollbackReleaseProcedure is the procedure name of the
-	// BranchSessionService's HelmRollbackRelease RPC.
-	BranchSessionServiceHelmRollbackReleaseProcedure = "/workspace.v1.BranchSessionService/HelmRollbackRelease"
 	// BranchSessionServiceHelmObjectsProcedure is the procedure name of the BranchSessionService's
 	// HelmObjects RPC.
 	BranchSessionServiceHelmObjectsProcedure = "/workspace.v1.BranchSessionService/HelmObjects"
@@ -825,13 +816,6 @@ var (
 			Procedure:  BranchSessionServiceScaleServiceProcedure,
 		}
 	})
-	branchSessionServicePromoteServiceSpec = sync.OnceValue(func() connect.Spec {
-		return connect.Spec{
-			StreamType: connect.StreamTypeUnary,
-			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("PromoteService"),
-			Procedure:  BranchSessionServicePromoteServiceProcedure,
-		}
-	})
 	branchSessionServiceRollbackServiceSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
@@ -935,20 +919,6 @@ var (
 			StreamType: connect.StreamTypeUnary,
 			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("HelmUninstall"),
 			Procedure:  BranchSessionServiceHelmUninstallProcedure,
-		}
-	})
-	branchSessionServiceHelmPromoteSpec = sync.OnceValue(func() connect.Spec {
-		return connect.Spec{
-			StreamType: connect.StreamTypeUnary,
-			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("HelmPromote"),
-			Procedure:  BranchSessionServiceHelmPromoteProcedure,
-		}
-	})
-	branchSessionServiceHelmRollbackReleaseSpec = sync.OnceValue(func() connect.Spec {
-		return connect.Spec{
-			StreamType: connect.StreamTypeUnary,
-			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("HelmRollbackRelease"),
-			Procedure:  BranchSessionServiceHelmRollbackReleaseProcedure,
 		}
 	})
 	branchSessionServiceHelmObjectsSpec = sync.OnceValue(func() connect.Spec {
@@ -1299,8 +1269,6 @@ type BranchSessionServiceClient interface {
 	ResumeService(context.Context, *v1.ResumeServiceRequest) (*v1.ResumeServiceResponse, error)
 	// ScaleService sets the desired replica count (0 = scaled down).
 	ScaleService(context.Context, *v1.ScaleServiceRequest) (*v1.ScaleServiceResponse, error)
-	// PromoteService / RollbackService: blue-green slot switch.
-	PromoteService(context.Context, *v1.PromoteServiceRequest) (*v1.PromoteServiceResponse, error)
 	RollbackService(context.Context, *v1.RollbackServiceRequest) (*v1.RollbackServiceResponse, error)
 	// GetServiceManifest returns the Deployment + Services as YAML (read-only).
 	GetServiceManifest(context.Context, *v1.GetServiceManifestRequest) (*v1.GetServiceManifestResponse, error)
@@ -1325,9 +1293,6 @@ type BranchSessionServiceClient interface {
 	HelmHistory(context.Context, *v1.HelmHistoryRequest) (*v1.HelmHistoryResponse, error)
 	HelmRollback(context.Context, *v1.HelmRollbackRequest) (*v1.HelmRollbackResponse, error)
 	HelmUninstall(context.Context, *v1.HelmUninstallRequest) (*v1.HelmUninstallResponse, error)
-	// Blue-green slot switch for a Helm release.
-	HelmPromote(context.Context, *v1.HelmPromoteRequest) (*v1.HelmPromoteResponse, error)
-	HelmRollbackRelease(context.Context, *v1.HelmRollbackReleaseRequest) (*v1.HelmRollbackReleaseResponse, error)
 	// Live per-object status + logs of a release (so a UI/tool can show each
 	// deployed workload/pod, and read one pod's log).
 	HelmObjects(context.Context, *v1.HelmObjectsRequest) (*v1.HelmObjectsResponse, error)
@@ -1625,8 +1590,6 @@ type BranchSessionServiceHandler interface {
 	ResumeService(context.Context, *v1.ResumeServiceRequest) (*v1.ResumeServiceResponse, error)
 	// ScaleService sets the desired replica count (0 = scaled down).
 	ScaleService(context.Context, *v1.ScaleServiceRequest) (*v1.ScaleServiceResponse, error)
-	// PromoteService / RollbackService: blue-green slot switch.
-	PromoteService(context.Context, *v1.PromoteServiceRequest) (*v1.PromoteServiceResponse, error)
 	RollbackService(context.Context, *v1.RollbackServiceRequest) (*v1.RollbackServiceResponse, error)
 	// GetServiceManifest returns the Deployment + Services as YAML (read-only).
 	GetServiceManifest(context.Context, *v1.GetServiceManifestRequest) (*v1.GetServiceManifestResponse, error)
@@ -1651,9 +1614,6 @@ type BranchSessionServiceHandler interface {
 	HelmHistory(context.Context, *v1.HelmHistoryRequest) (*v1.HelmHistoryResponse, error)
 	HelmRollback(context.Context, *v1.HelmRollbackRequest) (*v1.HelmRollbackResponse, error)
 	HelmUninstall(context.Context, *v1.HelmUninstallRequest) (*v1.HelmUninstallResponse, error)
-	// Blue-green slot switch for a Helm release.
-	HelmPromote(context.Context, *v1.HelmPromoteRequest) (*v1.HelmPromoteResponse, error)
-	HelmRollbackRelease(context.Context, *v1.HelmRollbackReleaseRequest) (*v1.HelmRollbackReleaseResponse, error)
 	// Live per-object status + logs of a release (so a UI/tool can show each
 	// deployed workload/pod, and read one pod's log).
 	HelmObjects(context.Context, *v1.HelmObjectsRequest) (*v1.HelmObjectsResponse, error)
@@ -1771,7 +1731,6 @@ func RegisterBranchSessionServiceHandler(server *connect.Server, svc BranchSessi
 		connect.Method{Spec: branchSessionServicePauseServiceSpec(), Handler: adapter.pauseService},
 		connect.Method{Spec: branchSessionServiceResumeServiceSpec(), Handler: adapter.resumeService},
 		connect.Method{Spec: branchSessionServiceScaleServiceSpec(), Handler: adapter.scaleService},
-		connect.Method{Spec: branchSessionServicePromoteServiceSpec(), Handler: adapter.promoteService},
 		connect.Method{Spec: branchSessionServiceRollbackServiceSpec(), Handler: adapter.rollbackService},
 		connect.Method{Spec: branchSessionServiceGetServiceManifestSpec(), Handler: adapter.getServiceManifest},
 		connect.Method{Spec: branchSessionServiceApplyServiceManifestSpec(), Handler: adapter.applyServiceManifest},
@@ -1787,8 +1746,6 @@ func RegisterBranchSessionServiceHandler(server *connect.Server, svc BranchSessi
 		connect.Method{Spec: branchSessionServiceHelmHistorySpec(), Handler: adapter.helmHistory},
 		connect.Method{Spec: branchSessionServiceHelmRollbackSpec(), Handler: adapter.helmRollback},
 		connect.Method{Spec: branchSessionServiceHelmUninstallSpec(), Handler: adapter.helmUninstall},
-		connect.Method{Spec: branchSessionServiceHelmPromoteSpec(), Handler: adapter.helmPromote},
-		connect.Method{Spec: branchSessionServiceHelmRollbackReleaseSpec(), Handler: adapter.helmRollbackRelease},
 		connect.Method{Spec: branchSessionServiceHelmObjectsSpec(), Handler: adapter.helmObjects},
 		connect.Method{Spec: branchSessionServiceHelmObjectLogsSpec(), Handler: adapter.helmObjectLogs},
 		connect.Method{Spec: branchSessionServiceHealthSpec(), Handler: adapter.health},
@@ -2195,10 +2152,6 @@ func (UnimplementedBranchSessionServiceHandler) ScaleService(context.Context, *v
 	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ScaleService is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) PromoteService(context.Context, *v1.PromoteServiceRequest) (*v1.PromoteServiceResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.PromoteService is not implemented")
-}
-
 func (UnimplementedBranchSessionServiceHandler) RollbackService(context.Context, *v1.RollbackServiceRequest) (*v1.RollbackServiceResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.RollbackService is not implemented")
 }
@@ -2257,14 +2210,6 @@ func (UnimplementedBranchSessionServiceHandler) HelmRollback(context.Context, *v
 
 func (UnimplementedBranchSessionServiceHandler) HelmUninstall(context.Context, *v1.HelmUninstallRequest) (*v1.HelmUninstallResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.HelmUninstall is not implemented")
-}
-
-func (UnimplementedBranchSessionServiceHandler) HelmPromote(context.Context, *v1.HelmPromoteRequest) (*v1.HelmPromoteResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.HelmPromote is not implemented")
-}
-
-func (UnimplementedBranchSessionServiceHandler) HelmRollbackRelease(context.Context, *v1.HelmRollbackReleaseRequest) (*v1.HelmRollbackReleaseResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.HelmRollbackRelease is not implemented")
 }
 
 func (UnimplementedBranchSessionServiceHandler) HelmObjects(context.Context, *v1.HelmObjectsRequest) (*v1.HelmObjectsResponse, error) {
@@ -2919,14 +2864,6 @@ func (c *branchSessionServiceClient) ScaleService(ctx context.Context, req *v1.S
 	return &res, nil
 }
 
-func (c *branchSessionServiceClient) PromoteService(ctx context.Context, req *v1.PromoteServiceRequest) (*v1.PromoteServiceResponse, error) {
-	var res v1.PromoteServiceResponse
-	if err := c.client.CallUnary(ctx, branchSessionServicePromoteServiceSpec(), req, &res); err != nil {
-		return nil, err
-	}
-	return &res, nil
-}
-
 func (c *branchSessionServiceClient) RollbackService(ctx context.Context, req *v1.RollbackServiceRequest) (*v1.RollbackServiceResponse, error) {
 	var res v1.RollbackServiceResponse
 	if err := c.client.CallUnary(ctx, branchSessionServiceRollbackServiceSpec(), req, &res); err != nil {
@@ -3042,22 +2979,6 @@ func (c *branchSessionServiceClient) HelmRollback(ctx context.Context, req *v1.H
 func (c *branchSessionServiceClient) HelmUninstall(ctx context.Context, req *v1.HelmUninstallRequest) (*v1.HelmUninstallResponse, error) {
 	var res v1.HelmUninstallResponse
 	if err := c.client.CallUnary(ctx, branchSessionServiceHelmUninstallSpec(), req, &res); err != nil {
-		return nil, err
-	}
-	return &res, nil
-}
-
-func (c *branchSessionServiceClient) HelmPromote(ctx context.Context, req *v1.HelmPromoteRequest) (*v1.HelmPromoteResponse, error) {
-	var res v1.HelmPromoteResponse
-	if err := c.client.CallUnary(ctx, branchSessionServiceHelmPromoteSpec(), req, &res); err != nil {
-		return nil, err
-	}
-	return &res, nil
-}
-
-func (c *branchSessionServiceClient) HelmRollbackRelease(ctx context.Context, req *v1.HelmRollbackReleaseRequest) (*v1.HelmRollbackReleaseResponse, error) {
-	var res v1.HelmRollbackReleaseResponse
-	if err := c.client.CallUnary(ctx, branchSessionServiceHelmRollbackReleaseSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -4105,18 +4026,6 @@ func (h branchSessionServiceHandler) scaleService(ctx context.Context, _ connect
 	return stream.Send(res)
 }
 
-func (h branchSessionServiceHandler) promoteService(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
-	var req v1.PromoteServiceRequest
-	if err := stream.Receive(&req); err != nil {
-		return err
-	}
-	res, err := h.svc.PromoteService(ctx, &req)
-	if err != nil {
-		return err
-	}
-	return stream.Send(res)
-}
-
 func (h branchSessionServiceHandler) rollbackService(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
 	var req v1.RollbackServiceRequest
 	if err := stream.Receive(&req); err != nil {
@@ -4283,30 +4192,6 @@ func (h branchSessionServiceHandler) helmUninstall(ctx context.Context, _ connec
 		return err
 	}
 	res, err := h.svc.HelmUninstall(ctx, &req)
-	if err != nil {
-		return err
-	}
-	return stream.Send(res)
-}
-
-func (h branchSessionServiceHandler) helmPromote(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
-	var req v1.HelmPromoteRequest
-	if err := stream.Receive(&req); err != nil {
-		return err
-	}
-	res, err := h.svc.HelmPromote(ctx, &req)
-	if err != nil {
-		return err
-	}
-	return stream.Send(res)
-}
-
-func (h branchSessionServiceHandler) helmRollbackRelease(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
-	var req v1.HelmRollbackReleaseRequest
-	if err := stream.Receive(&req); err != nil {
-		return err
-	}
-	res, err := h.svc.HelmRollbackRelease(ctx, &req)
 	if err != nil {
 		return err
 	}

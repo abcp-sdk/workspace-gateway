@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes/fake"
 	"testing"
 )
@@ -152,91 +151,6 @@ func indexOf(s, sub string) int {
 		}
 	}
 	return -1
-}
-
-func TestInjectSlotLabel(t *testing.T) {
-	in := `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: demo
-spec:
-  template:
-    metadata:
-      labels:
-        app: demo
-    spec:
-      containers:
-        - name: app
-          image: nginx
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: demo
-spec:
-  selector:
-    app: demo
-  ports:
-    - port: 80
-      targetPort: 8080
-`
-	out, err := injectSlotLabel(in, "web-green", "green")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var dep map[string]any
-	for _, doc := range splitDocs(out) {
-		var u map[string]any
-		if err := yaml.Unmarshal([]byte(doc), &u); err != nil {
-			t.Fatal(err)
-		}
-		if u["kind"] == "Deployment" {
-			dep = u
-		}
-	}
-	if dep == nil {
-		t.Fatal("no deployment")
-	}
-	labels := dep["spec"].(map[string]any)["template"].(map[string]any)["metadata"].(map[string]any)["labels"].(map[string]any)
-	if labels["workspace/helm-slot"] != "green" || labels["workspace/helm-release"] != "web-green" {
-		t.Fatalf("labels = %+v", labels)
-	}
-}
-
-func TestRouterPortsFromManifest(t *testing.T) {
-	m := `apiVersion: v1
-kind: Service
-metadata:
-  name: demo
-spec:
-  ports:
-    - port: 80
-      targetPort: 8080
-`
-	ports := routerPortsFromManifest(m)
-	if len(ports) != 1 || ports[0].Port != 80 || ports[0].TargetPort.IntVal != 8080 {
-		t.Fatalf("ports = %+v", ports)
-	}
-}
-
-func TestRouterPortsFallback(t *testing.T) {
-	m := `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: demo
-spec:
-  template:
-    spec:
-      containers:
-        - name: app
-          image: nginx
-          ports:
-            - containerPort: 3000
-`
-	ports := routerPortsFromManifest(m)
-	if len(ports) != 1 || ports[0].Port != 3000 {
-		t.Fatalf("ports = %+v", ports)
-	}
 }
 
 func splitDocs(m string) []string {

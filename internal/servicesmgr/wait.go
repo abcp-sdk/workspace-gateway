@@ -40,8 +40,7 @@ var deterministicFailureReasons = map[string]bool{
 // WaitReady polls a service's Deployment (and its pods) until it is ready, a
 // deterministic failure is observed, the timeout elapses, or ctx is done. It
 // NEVER returns an error for "still not ready": the caller decides how to
-// present a timeout. `deployName` is the concrete Deployment (for a blue-green
-// slot, `<name>-green`).
+// present a timeout. `deployName` is the concrete Deployment name.
 func (c *Client) WaitReady(ctx context.Context, deployName string, timeout time.Duration) (WaitResult, error) {
 	if timeout <= 0 {
 		timeout = 60 * time.Second
