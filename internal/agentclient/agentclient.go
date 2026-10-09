@@ -78,12 +78,51 @@ func New(cfg Config) *Client {
 	}
 	hc := &http.Client{Transport: rt}
 	client := &Client{
-		c:        agentv1connect.NewAgentServiceClient(connect.NewClient(connecthttp.NewTransport(hc, trimSlash(cfg.URL), connecthttp.WithReadMaxBytes(0)))),
+		c: agentv1connect.NewAgentServiceClient(connect.NewClient(connecthttp.NewTransport(hc, trimSlash(cfg.URL), connecthttp.WithReadMaxBytes(0)), forwardHeaders())),
+		// The admin client must NOT forward inbound headers: the broker sets the
+		// admin token explicitly on its own client context.
 		admin:    agentv1connect.NewAdminServiceClient(connect.NewClient(connecthttp.NewTransport(hc, trimSlash(cfg.URL), connecthttp.WithReadMaxBytes(0)))),
 		svcToken: cfg.ServiceToken,
 	}
 	rt.broker.admin = client.admin
 	return client
+}
+
+// forwardedHeaders are the inbound (server-side) request headers copied onto
+// every outbound agent call, so the agent authenticates the REAL caller
+// (connect v2 keeps request metadata on the context's CallInfo, NOT on the
+// message — a per-message header copy is a no-op under v2).
+var forwardedHeaders = []string{"Authorization", "X-Abc-Tenant", "X-Session-Name", "X-Forwarded-Host", "Host"}
+
+// forwardHeaders is a connect v2 CLIENT interceptor: for each outbound call it
+// rebuilds the client context from the inbound SERVER CallInfo and copies the
+// forwarded headers. Single choke point so EVERY agent call (unary + streaming,
+// from any handler) carries the caller's Authorization — the business methods
+// call s.agent.X(ctx, …) with the raw server ctx, so without this they reach
+// the agent unauthenticated (401 → gateway 500).
+func forwardHeaders() connect.ClientInterceptor {
+	return func(next connect.ClientFunc) connect.ClientFunc {
+		return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
+			return next(withForwardedHeaders(ctx), spec)
+		}
+	}
+}
+
+// withForwardedHeaders rebuilds a client context from the inbound server
+// CallInfo and copies the forwarded headers. No inbound server CallInfo (e.g. a
+// boot-time call) → unchanged context.
+func withForwardedHeaders(ctx context.Context) context.Context {
+	src, ok := connect.CallInfoForServerContext(ctx)
+	if !ok {
+		return ctx
+	}
+	out, dst := connect.NewClientContext(ctx)
+	for _, name := range forwardedHeaders {
+		if v := src.RequestHeader().Get(name); v != "" {
+			dst.RequestHeader().Set(name, v)
+		}
+	}
+	return out
 }
 
 // Raw exposes the generated agent client (the workspace service forwards with it).
