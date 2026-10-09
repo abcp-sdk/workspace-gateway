@@ -1900,12 +1900,25 @@ func (s *Service) CreateSandbox(ctx context.Context, req *wsv1.CreateSandboxRequ
 		return nil, connect.Errorf(connect.CodeAlreadyExists,
 			"sandbox %q already exists; delete it before reusing the name", name)
 	}
+	vols := make([]sandboxmgr.VolumeMount, 0, len(req.GetVolumes()))
+	// Reuse the SAME authorization the service path uses (resolveVolumes): every
+	// requested PVC must exist and belong to the caller's tenant/org. Without
+	// this a session could mount (and write) another tenant's volume, which the
+	// kubelet honors regardless of the gateway's ownership model.
+	svcVols, err := s.resolveVolumes(ctx, tenant, req.GetVolumes())
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range svcVols {
+		vols = append(vols, sandboxmgr.VolumeMount{PVC: v.PVC, MountPath: v.MountPath, ReadOnly: v.ReadOnly, SubPath: v.SubPath})
+	}
 	sb, _, err := s.sbx.Create(ctx, sandboxmgr.Spec{
 		Name: name, Image: image, CPU: req.GetCpu(), Memory: memory,
 		Env: s.sandboxEnv(withEnv(req.GetEnv(), extraEnv)), Creator: tenant, Session: bindSession,
 		Runtime:       s.renderRuntime(kvm, req.GetGpuCount()),
 		Bootstrap:     s.bootstrap,
 		GoldenDiskPVC: goldenPVC,
+		Volumes:       vols,
 	})
 	if err != nil {
 		if errors.Is(err, sandboxmgr.ErrExists) {

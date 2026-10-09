@@ -382,6 +382,45 @@ func TestCreateSandboxRefusesExisting(t *testing.T) {
 	}
 }
 
+// CreateSandbox must authorize mounted PVCs the SAME way the service path does:
+// a claim the caller's tenant does not own (or that does not exist) is refused
+// BEFORE any pod is created, so a session can never mount another tenant's
+// volume. (The owning-tenant success path is covered by
+// TestResolveVolumesOwnership, which exercises the same resolveVolumes call.)
+func TestCreateSandboxAuthorizesPVCs(t *testing.T) {
+	fc := fake.NewSimpleClientset()
+	sm := servicesmgr.NewWithClientset(fc, servicesmgr.Config{Namespace: "worker"})
+	sbx := sandboxmgr.NewWithClientset(fc, sandboxmgr.Config{Namespace: "worker"})
+	s := &Service{
+		services: sm, sbx: sbx,
+		sandboxOrg: "sandbox", defaultSandboxImage: "sandbox/sandbox-base",
+		svcToken: "tok", svcTenant: "myuser",
+	}
+	ctx := WithTestHeaders(context.Background(), testHdr("Authorization", "Bearer tok"))
+
+	// A claim owned by another tenant is refused (never leaks it).
+	if _, err := sm.CreatePVC(ctx, "foreign", "1Gi", "workspace-local", "other"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateSandbox(ctx, &wsv1.CreateSandboxRequest{
+		Name: "nope", Volumes: []*wsv1.VolumeMountSpec{{Pvc: "foreign", MountPath: "/data"}},
+	}); err == nil {
+		t.Fatal("expected foreign-PVC refusal")
+	} else if connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("foreign-PVC refusal code = %v, want NotFound", connect.CodeOf(err))
+	}
+	if _, ok, _ := sbx.Get(ctx, "nope"); ok {
+		t.Fatal("a foreign-PVC create must not leave a sandbox behind")
+	}
+
+	// An unknown claim is refused too.
+	if _, err := s.CreateSandbox(ctx, &wsv1.CreateSandboxRequest{
+		Name: "missing", Volumes: []*wsv1.VolumeMountSpec{{Pvc: "ghost", MountPath: "/data"}},
+	}); err == nil {
+		t.Fatal("expected unknown-PVC refusal")
+	}
+}
+
 func TestSortByCreatedAtDesc(t *testing.T) {
 	items := []*wsv1.SandboxInfo{
 		{Name: "a", CreatedAt: 100},

@@ -749,6 +749,9 @@ message CreateSandboxRequest {
   // disk is the golden-disk download URL, used ONLY when os != linux. Empty =
   // the per-OS default (macOS → the xcode disk, Windows → the devtools disk).
   string disk = 10;
+  // PVCs to mount into the sandbox container. Each must be a tenant-owned
+  // PVC in the managed namespace; `read_only` selects a read-only mount.
+  repeated VolumeMountSpec volumes = 11;
 }
 message CreateSandboxResponse { SandboxInfo sandbox = 1; }
 
