@@ -202,7 +202,9 @@
       "sandbox-computer-scroll",
       "sandbox-computer-drag",
       "sandbox-computer-screenshot",
-      "pvc-list"
+      "pvc-create",
+      "pvc-list",
+      "pvc-delete"
     ],
     "max_turns": 0
   },
@@ -286,7 +288,9 @@
       "sandbox-computer-screenshot",
       "service-list",
       "service-logs",
-      "pvc-list"
+      "pvc-create",
+      "pvc-list",
+      "pvc-delete"
     ],
     "max_turns": 0
   }

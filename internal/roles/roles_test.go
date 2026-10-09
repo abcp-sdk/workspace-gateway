@@ -146,18 +146,13 @@ func TestOnlyAdminManagesPushMirrors(t *testing.T) {
 	}
 }
 
-func TestEveryRoleListsPVCsButOnlyAdminMutates(t *testing.T) {
-	// pvc-list is read-only observability: every role may see the tenant's
-	// volumes. pvc-create/pvc-delete stay admin-only.
+func TestEveryRoleOwnsTenantPVCs(t *testing.T) {
+	// PVCs are tenant-owned and namespace-scoped: every role may create/list/
+	// delete them (a session always manages its own tenant's volumes).
 	for _, r := range []Role{Admin, Developer, Explorer} {
-		if !has(ToolsFor(r), "pvc-list") {
-			t.Fatalf("%s must have pvc-list", r)
-		}
-	}
-	for _, r := range []Role{Developer, Explorer} {
-		for _, forbidden := range []string{"pvc-create", "pvc-delete"} {
-			if has(ToolsFor(r), forbidden) {
-				t.Fatalf("%s must not have %q (admin-only)", r, forbidden)
+		for _, want := range []string{"pvc-create", "pvc-list", "pvc-delete"} {
+			if !has(ToolsFor(r), want) {
+				t.Fatalf("%s must have %q", r, want)
 			}
 		}
 	}

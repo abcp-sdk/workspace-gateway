@@ -160,12 +160,12 @@ func ToolsFor(r Role) []string {
 		// The single repo-bound role: sandbox-only edits, submit/merge/close
 		// MRs (merge/close only when base == its own branch), releases, images,
 		// services. NOT sandbox-port and NOT any direct branch write.
-		return concat(generalTools, repoReadTools, repoDevTools, sandboxBase, browserTools, computerTools, []string{"pvc-list"})
+		return concat(generalTools, repoReadTools, repoDevTools, sandboxBase, browserTools, computerTools, []string{"pvc-create", "pvc-list", "pvc-delete"})
 	case Explorer:
 		// Read every visible repo; may run a sandbox for analysis, but has NO
 		// tool that writes back to a repo (no sandbox-port, no submit-mr). May
 		// read services + their logs (observability only).
-		return concat(generalTools, repoReadTools, sandboxBase, browserTools, computerTools, []string{"service-list", "service-logs", "pvc-list"})
+		return concat(generalTools, repoReadTools, sandboxBase, browserTools, computerTools, []string{"service-list", "service-logs", "pvc-create", "pvc-list", "pvc-delete"})
 	}
 	return concat(generalTools, repoReadTools)
 }
