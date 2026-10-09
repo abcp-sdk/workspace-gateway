@@ -35,6 +35,9 @@ const (
 	// AnnoSession binds a service to the session that deployed it, so the webui
 	// can show which session owns it (services stay tenant-visible).
 	AnnoSession = "workspace/service-session"
+	// AnnoNamespace records the tenant-internal namespace (org segment of the
+	// creating session).
+	AnnoNamespace = "workspace/service-namespace"
 	// AnnoReplicasBeforePause remembers the replica count in effect when a
 	// service was paused (scaled to 0), so Resume can restore it. Presence of
 	// this annotation is what marks a service as PAUSED.
@@ -43,6 +46,8 @@ const (
 	LabelPVC       = "workspace/pvc"
 	LabelPVCName   = "workspace/pvc-name"
 	AnnoPVCCreator = "workspace/pvc-creator"
+	// AnnoPVCNamespace records the tenant-internal namespace of a claim.
+	AnnoPVCNamespace = "workspace/pvc-namespace"
 )
 
 // VolumeMount binds a named PVC into a service container.
@@ -60,7 +65,9 @@ type PVC struct {
 	StorageClass string
 	Phase        string
 	Creator      string
-	CreatedAt    int64
+	// Namespace is the tenant-internal namespace (org segment of the session).
+	Namespace string
+	CreatedAt int64
 	// MountedBy lists the managed Deployments in the namespace that mount this
 	// claim (best effort).
 	MountedBy []string
@@ -68,14 +75,16 @@ type PVC struct {
 
 // Service is a live service view.
 type Service struct {
-	Name      string
-	Image     string
-	Phase     string
-	Ready     bool
-	Replicas  int32
-	URL       string
-	Creator   string
-	Session   string
+	Name     string
+	Image    string
+	Phase    string
+	Ready    bool
+	Replicas int32
+	URL      string
+	Creator  string
+	Session  string
+	// Namespace is the tenant-internal namespace (org segment of the session).
+	Namespace string
 	CreatedAt int64
 	// Ports is every port this service exposes (across its primary Service and
 	// any sibling `<name>-<suffix>` Services).
@@ -260,6 +269,8 @@ type Spec struct {
 	Creator       string
 	// Session is the session that deployed the service (empty = unbound).
 	Session string
+	// Namespace is the tenant-internal namespace (org segment of the session).
+	Namespace string
 	// Ports are the resolved ports to expose. Empty = the default single public
 	// port (tcp80 -> ContainerPort). Entries sharing a Suffix form one Service.
 	Ports []Port
@@ -418,7 +429,7 @@ func (c *Client) Deploy(ctx context.Context, s Spec) (Service, error) {
 	}
 	labels := map[string]string{LabelManaged: "1", LabelName: s.Name, "app": s.Name}
 	annotations := map[string]string{
-		AnnoImage: s.Image, AnnoCreator: s.Creator, AnnoSession: s.Session,
+		AnnoImage: s.Image, AnnoCreator: s.Creator, AnnoSession: s.Session, AnnoNamespace: s.Namespace,
 	}
 
 	env := []corev1.EnvVar{}
@@ -657,7 +668,7 @@ func (c *Client) Deploy(ctx context.Context, s Spec) (Service, error) {
 		svcName := siblingName(s.Name, suffix)
 		svcLabels := map[string]string{LabelManaged: "1", LabelName: s.Name, "app": s.Name}
 		svcAnnotations := map[string]string{
-			AnnoImage: s.Image, AnnoCreator: s.Creator, AnnoSession: s.Session,
+			AnnoImage: s.Image, AnnoCreator: s.Creator, AnnoSession: s.Session, AnnoNamespace: s.Namespace,
 			AnnoPrimary: s.Name,
 		}
 		svc := &corev1.Service{
@@ -815,7 +826,7 @@ func (c *Client) List(ctx context.Context) ([]Service, error) {
 // CreatePVC creates a named claim in the managed namespace with the given
 // storage class (idempotent: an existing claim of the same name is returned
 // unchanged, and its creator must match).
-func (c *Client) CreatePVC(ctx context.Context, name, size, storageClass, creator string) (PVC, error) {
+func (c *Client) CreatePVC(ctx context.Context, name, size, storageClass, creator, namespace string) (PVC, error) {
 	if name == "" {
 		return PVC{}, fmt.Errorf("name required")
 	}
@@ -839,7 +850,7 @@ func (c *Client) CreatePVC(ctx context.Context, name, size, storageClass, creato
 			Name:        name,
 			Namespace:   c.namespace,
 			Labels:      map[string]string{LabelPVC: "1", LabelPVCName: name},
-			Annotations: map[string]string{AnnoPVCCreator: creator},
+			Annotations: map[string]string{AnnoPVCCreator: creator, AnnoPVCNamespace: namespace},
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -930,7 +941,8 @@ func toPVC(p *corev1.PersistentVolumeClaim, mountedBy []string) PVC {
 	}
 	return PVC{
 		Name: p.Name, Size: size, StorageClass: sc, Phase: string(p.Status.Phase),
-		Creator: p.Annotations[AnnoPVCCreator], CreatedAt: p.CreationTimestamp.UnixMilli(),
+		Creator: p.Annotations[AnnoPVCCreator], Namespace: p.Annotations[AnnoPVCNamespace],
+		CreatedAt: p.CreationTimestamp.UnixMilli(),
 		MountedBy: mountedBy,
 	}
 }

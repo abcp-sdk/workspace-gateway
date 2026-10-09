@@ -146,6 +146,9 @@ type Release struct {
 	Namespace string `json:"namespace"`
 	Creator   string `json:"creator"`
 	Session   string `json:"session"`
+	// OrgNS is the tenant-internal namespace (org segment of the creating
+	// session); distinct from the K8s Namespace above.
+	OrgNS     string `json:"orgNs,omitempty"`
 	Ref       string `json:"ref"`
 	ChartPath string `json:"chartPath"`
 	// ChartVersion/AppVersion are the CURRENT revision's chart metadata
@@ -192,6 +195,8 @@ type RenderOptions struct {
 	ValuesYAML string
 	// Ref is the git ref the chart came from (recorded for history).
 	Ref string
+	// OrgNS is the tenant-internal namespace (org segment of the session).
+	OrgNS string
 }
 
 // Template renders the chart at chartDir (an extracted repo root + ChartPath)
@@ -663,7 +668,7 @@ func (c *Client) Apply(ctx context.Context, chartDir string, o RenderOptions, cr
 		return Release{}, err
 	}
 	if !ok {
-		cur = Release{Name: o.Release, Namespace: c.namespace, Creator: creator, Session: session}
+		cur = Release{Name: o.Release, Namespace: c.namespace, Creator: creator, Session: session, OrgNS: o.OrgNS}
 	}
 	cur.Ref = o.Ref
 	cur.ChartPath = o.ChartPath

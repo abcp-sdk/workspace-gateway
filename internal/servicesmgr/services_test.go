@@ -171,7 +171,7 @@ func TestPVCreateListDelete(t *testing.T) {
 	c := newTestClient()
 	ctx := context.Background()
 
-	p, err := c.CreatePVC(ctx, "data", "2Gi", "workspace-local", "t/s")
+	p, err := c.CreatePVC(ctx, "data", "2Gi", "workspace-local", "t/s", "")
 	if err != nil {
 		t.Fatalf("create pvc: %v", err)
 	}
@@ -179,14 +179,14 @@ func TestPVCreateListDelete(t *testing.T) {
 		t.Fatalf("bad pvc: %+v", p)
 	}
 	// Idempotent re-create (same creator) returns the existing claim.
-	if _, err := c.CreatePVC(ctx, "data", "9Gi", "workspace-local", "t/s"); err != nil {
+	if _, err := c.CreatePVC(ctx, "data", "9Gi", "workspace-local", "t/s", ""); err != nil {
 		t.Fatalf("recreate: %v", err)
 	}
 	if got, _ := c.GetPVC(ctx, "data"); got.Size != "2Gi" {
 		t.Fatalf("size changed on recreate: %+v", got)
 	}
 	// A different creator is refused.
-	if _, err := c.CreatePVC(ctx, "data", "1Gi", "workspace-local", "other"); err == nil {
+	if _, err := c.CreatePVC(ctx, "data", "1Gi", "workspace-local", "other", ""); err == nil {
 		t.Fatal("expected foreign-creator refusal")
 	}
 	if list, _ := c.ListPVCs(ctx); len(list) != 1 {
@@ -200,7 +200,7 @@ func TestPVCreateListDelete(t *testing.T) {
 func TestDeletePVCRefusedWhileMounted(t *testing.T) {
 	c := newTestClient()
 	ctx := context.Background()
-	if _, err := c.CreatePVC(ctx, "data", "1Gi", "workspace-local", "t"); err != nil {
+	if _, err := c.CreatePVC(ctx, "data", "1Gi", "workspace-local", "t", ""); err != nil {
 		t.Fatal(err)
 	}
 	// A service mounting the claim.

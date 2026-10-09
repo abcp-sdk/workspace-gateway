@@ -8573,7 +8573,10 @@ type ServiceInfo struct {
 	// Current rollout revision of the service's Deployment (RollbackService).
 	Revision int64 `protobuf:"varint,33,opt,name=revision,proto3" json:"revision,omitempty"`
 	// True when the CALLER's tenant owns this service (read-only UI signal).
-	Operable      bool `protobuf:"varint,34,opt,name=operable,proto3" json:"operable,omitempty"`
+	Operable bool `protobuf:"varint,34,opt,name=operable,proto3" json:"operable,omitempty"`
+	// namespace is the tenant-internal namespace (org segment of the creating
+	// session) for the tenant-internal read/write split. "" for legacy rows.
+	Namespace     string `protobuf:"bytes,35,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8816,6 +8819,13 @@ func (x *ServiceInfo) GetOperable() bool {
 		return x.Operable
 	}
 	return false
+}
+
+func (x *ServiceInfo) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
 }
 
 // VolumeMountInfo is one PVC mounted into a service container.
@@ -9883,8 +9893,10 @@ type DeployServiceRequest struct {
 	// Extra containers (init when `init` is set).
 	Sidecars []*SidecarSpec `protobuf:"bytes,22,rep,name=sidecars,proto3" json:"sidecars,omitempty"`
 	// Scheduling.
-	NodeSelector  map[string]string `protobuf:"bytes,23,rep,name=node_selector,json=nodeSelector,proto3" json:"node_selector,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Tolerations   []*TolerationSpec `protobuf:"bytes,24,rep,name=tolerations,proto3" json:"tolerations,omitempty"`
+	NodeSelector map[string]string `protobuf:"bytes,23,rep,name=node_selector,json=nodeSelector,proto3" json:"node_selector,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Tolerations  []*TolerationSpec `protobuf:"bytes,24,rep,name=tolerations,proto3" json:"tolerations,omitempty"`
+	// namespace is the tenant-internal namespace to record (see ServiceInfo).
+	Namespace     string `protobuf:"bytes,26,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -10085,6 +10097,13 @@ func (x *DeployServiceRequest) GetTolerations() []*TolerationSpec {
 		return x.Tolerations
 	}
 	return nil
+}
+
+func (x *DeployServiceRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
 }
 
 type DeployServiceResponse struct {
@@ -10410,7 +10429,9 @@ type PVCInfo struct {
 	// Names of the tenant's services currently mounting this PVC.
 	MountedBy []string `protobuf:"bytes,7,rep,name=mounted_by,json=mountedBy,proto3" json:"mounted_by,omitempty"`
 	// True when the CALLER's tenant owns this claim (read-only UI signal).
-	Operable      bool `protobuf:"varint,8,opt,name=operable,proto3" json:"operable,omitempty"`
+	Operable bool `protobuf:"varint,8,opt,name=operable,proto3" json:"operable,omitempty"`
+	// namespace is the tenant-internal namespace (see ServiceInfo.namespace).
+	Namespace     string `protobuf:"bytes,9,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -10501,6 +10522,13 @@ func (x *PVCInfo) GetOperable() bool {
 	return false
 }
 
+func (x *PVCInfo) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
 type CreatePVCRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// DNS-1123 label (the claim name).
@@ -10510,7 +10538,9 @@ type CreatePVCRequest struct {
 	Size string `protobuf:"bytes,2,opt,name=size,proto3" json:"size,omitempty"`
 	// StorageClass. Empty = the deployment's configured class; a non-empty value
 	// must equal that class (only the self-hosted local-path is supported).
-	StorageClass  string `protobuf:"bytes,3,opt,name=storage_class,json=storageClass,proto3" json:"storage_class,omitempty"`
+	StorageClass string `protobuf:"bytes,3,opt,name=storage_class,json=storageClass,proto3" json:"storage_class,omitempty"`
+	// namespace is the tenant-internal namespace to record.
+	Namespace     string `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -10562,6 +10592,13 @@ func (x *CreatePVCRequest) GetSize() string {
 func (x *CreatePVCRequest) GetStorageClass() string {
 	if x != nil {
 		return x.StorageClass
+	}
+	return ""
+}
+
+func (x *CreatePVCRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -11287,7 +11324,9 @@ type HelmReleaseInfo struct {
 	// show "N objects" without a second HelmHistory round-trip.
 	Objects []string `protobuf:"bytes,16,rep,name=objects,proto3" json:"objects,omitempty"`
 	// True when the CALLER's tenant owns this release (read-only UI signal).
-	Operable      bool `protobuf:"varint,17,opt,name=operable,proto3" json:"operable,omitempty"`
+	Operable bool `protobuf:"varint,17,opt,name=operable,proto3" json:"operable,omitempty"`
+	// org_namespace is the tenant-internal namespace (see ServiceInfo.namespace).
+	OrgNamespace  string `protobuf:"bytes,18,opt,name=org_namespace,json=orgNamespace,proto3" json:"org_namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -11413,6 +11452,13 @@ func (x *HelmReleaseInfo) GetOperable() bool {
 	return false
 }
 
+func (x *HelmReleaseInfo) GetOrgNamespace() string {
+	if x != nil {
+		return x.OrgNamespace
+	}
+	return ""
+}
+
 type HelmRevisionInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Revision      int32                  `protobuf:"varint,1,opt,name=revision,proto3" json:"revision,omitempty"`
@@ -11510,7 +11556,9 @@ type HelmDeployRequest struct {
 	// values.yaml content.
 	Values string `protobuf:"bytes,6,opt,name=values,proto3" json:"values,omitempty"`
 	// Dry-run: render + validate only (no apply, no release record).
-	DryRun        bool `protobuf:"varint,7,opt,name=dry_run,json=dryRun,proto3" json:"dry_run,omitempty"`
+	DryRun bool `protobuf:"varint,7,opt,name=dry_run,json=dryRun,proto3" json:"dry_run,omitempty"`
+	// namespace is the tenant-internal namespace to record.
+	Namespace     string `protobuf:"bytes,9,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -11592,6 +11640,13 @@ func (x *HelmDeployRequest) GetDryRun() bool {
 		return x.DryRun
 	}
 	return false
+}
+
+func (x *HelmDeployRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
 }
 
 type HelmDeployResponse struct {
@@ -13673,7 +13728,7 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"totalLines\x12\x1d\n" +
 	"\n" +
 	"start_line\x18\x03 \x01(\x05R\tstartLine\x12\x19\n" +
-	"\bend_line\x18\x04 \x01(\x05R\aendLine\"\x9d\t\n" +
+	"\bend_line\x18\x04 \x01(\x05R\aendLine\"\xbb\t\n" +
 	"\vServiceInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05image\x18\x02 \x01(\tR\x05image\x12\x14\n" +
@@ -13707,7 +13762,8 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\arollout\x18\x1d \x01(\v2\x19.workspace.v1.RolloutSpecR\arollout\x12#\n" +
 	"\rsidecar_count\x18\x1e \x01(\x05R\fsidecarCount\x12\x1a\n" +
 	"\brevision\x18! \x01(\x03R\brevision\x12\x1a\n" +
-	"\boperable\x18\" \x01(\bR\boperable\x1a6\n" +
+	"\boperable\x18\" \x01(\bR\boperable\x12\x1c\n" +
+	"\tnamespace\x18# \x01(\tR\tnamespace\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\v\x10\fJ\x04\b\x0f\x10\x10J\x04\b\x1f\x10 J\x04\b \x10!\"z\n" +
@@ -13800,7 +13856,8 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\n" +
 	"mount_path\x18\x02 \x01(\tR\tmountPath\x12\x1b\n" +
 	"\tread_only\x18\x03 \x01(\bR\breadOnly\x12\x19\n" +
-	"\bsub_path\x18\x04 \x01(\tR\asubPath\"\xfb\t\n" +
+	"\bsub_path\x18\x04 \x01(\tR\asubPath\"\x99\n" +
+	"\n" +
 	"\x14DeployServiceRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05image\x18\x02 \x01(\tR\x05image\x12%\n" +
@@ -13826,7 +13883,8 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\rconfig_mounts\x18\x15 \x03(\v2\x1d.workspace.v1.ConfigMountSpecR\fconfigMounts\x125\n" +
 	"\bsidecars\x18\x16 \x03(\v2\x19.workspace.v1.SidecarSpecR\bsidecars\x12Y\n" +
 	"\rnode_selector\x18\x17 \x03(\v24.workspace.v1.DeployServiceRequest.NodeSelectorEntryR\fnodeSelector\x12>\n" +
-	"\vtolerations\x18\x18 \x03(\v2\x1c.workspace.v1.TolerationSpecR\vtolerations\x1a6\n" +
+	"\vtolerations\x18\x18 \x03(\v2\x1c.workspace.v1.TolerationSpecR\vtolerations\x12\x1c\n" +
+	"\tnamespace\x18\x1a \x01(\tR\tnamespace\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a?\n" +
@@ -13846,7 +13904,7 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\x14DeleteServiceRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"'\n" +
 	"\x15DeleteServiceResponse\x12\x0e\n" +
-	"\x02ok\x18\x01 \x01(\bR\x02ok\"\xe0\x01\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\"\xfe\x01\n" +
 	"\aPVCInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04size\x18\x02 \x01(\tR\x04size\x12#\n" +
@@ -13857,11 +13915,13 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"created_at\x18\x06 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
 	"mounted_by\x18\a \x03(\tR\tmountedBy\x12\x1a\n" +
-	"\boperable\x18\b \x01(\bR\boperable\"_\n" +
+	"\boperable\x18\b \x01(\bR\boperable\x12\x1c\n" +
+	"\tnamespace\x18\t \x01(\tR\tnamespace\"}\n" +
 	"\x10CreatePVCRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04size\x18\x02 \x01(\tR\x04size\x12#\n" +
-	"\rstorage_class\x18\x03 \x01(\tR\fstorageClass\"<\n" +
+	"\rstorage_class\x18\x03 \x01(\tR\fstorageClass\x12\x1c\n" +
+	"\tnamespace\x18\x04 \x01(\tR\tnamespace\"<\n" +
 	"\x11CreatePVCResponse\x12'\n" +
 	"\x03pvc\x18\x01 \x01(\v2\x15.workspace.v1.PVCInfoR\x03pvc\"\x11\n" +
 	"\x0fListPVCsRequest\"=\n" +
@@ -13894,7 +13954,7 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\adry_run\x18\x03 \x01(\bR\x06dryRun\"g\n" +
 	"\x1cApplyServiceManifestResponse\x123\n" +
 	"\aservice\x18\x01 \x01(\v2\x19.workspace.v1.ServiceInfoR\aservice\x12\x12\n" +
-	"\x04yaml\x18\x02 \x01(\tR\x04yaml\"\x8f\x03\n" +
+	"\x04yaml\x18\x02 \x01(\tR\x04yaml\"\xb4\x03\n" +
 	"\x0fHelmReleaseInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x18\n" +
@@ -13911,7 +13971,8 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\vapp_version\x18\x0f \x01(\tR\n" +
 	"appVersion\x12\x18\n" +
 	"\aobjects\x18\x10 \x03(\tR\aobjects\x12\x1a\n" +
-	"\boperable\x18\x11 \x01(\bR\boperableJ\x04\b\n" +
+	"\boperable\x18\x11 \x01(\bR\boperable\x12#\n" +
+	"\rorg_namespace\x18\x12 \x01(\tR\forgNamespaceJ\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0e\"\xb0\x01\n" +
 	"\x10HelmRevisionInfo\x12\x1a\n" +
 	"\brevision\x18\x01 \x01(\x05R\brevision\x12\x10\n" +
@@ -13921,7 +13982,7 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\x06values\x18\x04 \x01(\tR\x06values\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x05 \x01(\x03R\tcreatedAt\x12\x18\n" +
-	"\aobjects\x18\x06 \x03(\tR\aobjects\"\xbb\x01\n" +
+	"\aobjects\x18\x06 \x03(\tR\aobjects\"\xd9\x01\n" +
 	"\x11HelmDeployRequest\x12\x18\n" +
 	"\arelease\x18\x01 \x01(\tR\arelease\x12\x10\n" +
 	"\x03org\x18\x02 \x01(\tR\x03org\x12\x12\n" +
@@ -13930,7 +13991,8 @@ const file_workspace_v1_workspace_proto_rawDesc = "" +
 	"\n" +
 	"chart_path\x18\x05 \x01(\tR\tchartPath\x12\x16\n" +
 	"\x06values\x18\x06 \x01(\tR\x06values\x12\x17\n" +
-	"\adry_run\x18\a \x01(\bR\x06dryRunJ\x04\b\b\x10\t\"\x83\x01\n" +
+	"\adry_run\x18\a \x01(\bR\x06dryRun\x12\x1c\n" +
+	"\tnamespace\x18\t \x01(\tR\tnamespaceJ\x04\b\b\x10\t\"\x83\x01\n" +
 	"\x12HelmDeployResponse\x127\n" +
 	"\arelease\x18\x01 \x01(\v2\x1d.workspace.v1.HelmReleaseInfoR\arelease\x12\x1a\n" +
 	"\bmanifest\x18\x02 \x01(\tR\bmanifest\x12\x18\n" +
