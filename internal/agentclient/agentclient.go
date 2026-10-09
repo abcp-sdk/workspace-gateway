@@ -25,7 +25,8 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	agentv1 "github.com/abcp-sdk/workspace-gateway/gen/agent/v1"
 	agentv1connect "github.com/abcp-sdk/workspace-gateway/gen/agent/v1/agentv1connect"
@@ -77,8 +78,8 @@ func New(cfg Config) *Client {
 	}
 	hc := &http.Client{Transport: rt}
 	client := &Client{
-		c:        agentv1connect.NewAgentServiceClient(hc, trimSlash(cfg.URL)),
-		admin:    agentv1connect.NewAdminServiceClient(hc, trimSlash(cfg.URL)),
+		c:        agentv1connect.NewAgentServiceClient(connect.NewClient(connecthttp.NewTransport(hc, trimSlash(cfg.URL), connecthttp.WithReadMaxBytes(0)))),
+		admin:    agentv1connect.NewAdminServiceClient(connect.NewClient(connecthttp.NewTransport(hc, trimSlash(cfg.URL), connecthttp.WithReadMaxBytes(0)))),
 		svcToken: cfg.ServiceToken,
 	}
 	rt.broker.admin = client.admin
@@ -219,16 +220,17 @@ func (b *broker) token(ctx context.Context, tenant string) (string, error) {
 	}
 	b.mu.Unlock()
 
-	req := connect.NewRequest(&agentv1.IssueTenantTokenRequest{
+	req := &agentv1.IssueTenantTokenRequest{
 		TenantId: tenant,
 		Label:    "workspace-gateway",
-	})
-	req.Header().Set("Authorization", "Bearer "+b.adminToken)
+	}
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("Authorization", "Bearer "+b.adminToken)
 	res, err := b.admin.IssueTenantToken(ctx, req)
 	if err != nil {
 		return "", err
 	}
-	tok := res.Msg.GetPlaintext()
+	tok := res.GetPlaintext()
 	if tok == "" {
 		return "", errors.New("agentclient: agent returned an empty tenant token")
 	}

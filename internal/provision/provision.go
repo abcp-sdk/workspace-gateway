@@ -31,7 +31,8 @@ import (
 	"net/http"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	agentv1 "github.com/abcp-sdk/workspace-gateway/gen/agent/v1"
@@ -188,15 +189,16 @@ func Run(ctx context.Context, cfg Config) (Result, error) {
 	defer cancel()
 
 	c := newClient(cfg.AgentURL)
-	adminReq := connect.NewRequest(&agentv1.ListTenantsRequest{})
-	adminReq.Header().Set("Authorization", "Bearer "+cfg.AdminToken)
+	adminReq := &agentv1.ListTenantsRequest{}
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("Authorization", "Bearer "+cfg.AdminToken)
 	tenants, err := c.admin.ListTenants(ctx, adminReq)
 	if err != nil {
 		return Result{}, fmt.Errorf("ListTenants: %w", err)
 	}
 
 	res := Result{}
-	for _, t := range tenants.Msg.GetTenants() {
+	for _, t := range tenants.GetTenants() {
 		tenant := t.GetId()
 		if tenant == "" || t.GetDisabled() {
 			continue
@@ -278,16 +280,17 @@ func resolveTenants(tenant string, known []string) []string {
 }
 
 func mintToken(ctx context.Context, c *client, adminToken, tenant string) (string, error) {
-	req := connect.NewRequest(&agentv1.IssueTenantTokenRequest{TenantId: tenant, Label: "provision"})
-	req.Header().Set("Authorization", "Bearer "+adminToken)
+	req := &agentv1.IssueTenantTokenRequest{TenantId: tenant, Label: "provision"}
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("Authorization", "Bearer "+adminToken)
 	res, err := c.admin.IssueTenantToken(ctx, req)
 	if err != nil {
 		return "", err
 	}
-	if res.Msg.GetPlaintext() == "" {
+	if res.GetPlaintext() == "" {
 		return "", errors.New("empty tenant token")
 	}
-	return res.Msg.GetPlaintext(), nil
+	return res.GetPlaintext(), nil
 }
 
 func registerProvider(ctx context.Context, c *client, token string, profile Profile, p Provider) error {
@@ -297,15 +300,16 @@ func registerProvider(ctx context.Context, c *client, token string, profile Prof
 			Id: m.ID, Name: m.Name, ContextLimit: m.ContextLimit, ModelType: p.Capability,
 		})
 	}
-	req := connect.NewRequest(&agentv1.RegisterProviderRequest{Provider: &agentv1.Provider{
+	req := &agentv1.RegisterProviderRequest{Provider: &agentv1.Provider{
 		ProviderId: p.ID,
 		ApiType:    apiType,
 		BaseUrl:    profile.BaseURL,
 		ApiKey:     profile.APIKey,
 		Models:     models,
 		Capability: p.Capability,
-	}})
-	req.Header().Set("Authorization", "Bearer "+token)
+	}}
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("Authorization", "Bearer "+token)
 	_, err := c.agent.RegisterProvider(ctx, req)
 	return err
 }
@@ -313,8 +317,9 @@ func registerProvider(ctx context.Context, c *client, token string, profile Prof
 // deleteProvider removes a provider row by id. A missing provider is fine
 // (idempotent re-runs): the agent returns success either way.
 func deleteProvider(ctx context.Context, c *client, token, providerID string) error {
-	req := connect.NewRequest(&agentv1.DeleteProviderRequest{ProviderId: providerID})
-	req.Header().Set("Authorization", "Bearer "+token)
+	req := &agentv1.DeleteProviderRequest{ProviderId: providerID}
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("Authorization", "Bearer "+token)
 	_, err := c.agent.DeleteProvider(ctx, req)
 	return err
 }
@@ -324,12 +329,13 @@ func setConfig(ctx context.Context, c *client, token string, cal Calibration) er
 	if err != nil {
 		return err
 	}
-	req := connect.NewRequest(&agentv1.SetExtensionConfigRequest{
+	req := &agentv1.SetExtensionConfigRequest{
 		ExtId: cal.ExtID,
 		Name:  cal.Name,
 		Value: value,
-	})
-	req.Header().Set("Authorization", "Bearer "+token)
+	}
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("Authorization", "Bearer "+token)
 	_, err = c.agent.SetExtensionConfig(ctx, req)
 	return err
 }
@@ -348,10 +354,10 @@ func newClient(url string) *client {
 	base := trimSlash(url)
 	// JSON codec: the agent serves it, and it keeps this tool's wire format
 	// inspectable (it is an operational tool, not a hot path).
-	opts := []connect.ClientOption{connect.WithProtoJSON()}
+	transportOpts := []connecthttp.Option{connecthttp.WithReadMaxBytes(0), connecthttp.WithProtoJSON()}
 	return &client{
-		agent: agentv1connect.NewAgentServiceClient(hc, base, opts...),
-		admin: agentv1connect.NewAdminServiceClient(hc, base, opts...),
+		agent: agentv1connect.NewAgentServiceClient(connect.NewClient(connecthttp.NewTransport(hc, base, transportOpts...))),
+		admin: agentv1connect.NewAdminServiceClient(connect.NewClient(connecthttp.NewTransport(hc, base, transportOpts...))),
 	}
 }
 

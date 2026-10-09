@@ -26,7 +26,8 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	wsv1 "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1"
 	wsv1connect "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1/wsv1connect"
@@ -54,36 +55,38 @@ func main() {
 	p.SetUnencryptedHTTP2(true)
 	hc := &http.Client{Transport: &http.Transport{Protocols: p}}
 
-	interceptor := connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			req.Header().Set("Authorization", "Bearer "+token)
-			return next(ctx, req)
+	interceptor := func(next connect.ClientFunc) connect.ClientFunc {
+		return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
+			var info *connect.CallInfo
+			ctx, info = connect.NewClientContext(ctx)
+			info.RequestHeader().Set("Authorization", "Bearer "+token)
+			return next(ctx, spec)
 		}
-	})
-	c := wsv1connect.NewBranchSessionServiceClient(hc, base, connect.WithInterceptors(interceptor))
+	}
+	c := wsv1connect.NewBranchSessionServiceClient(connect.NewClient(connecthttp.NewTransport(hc, base, connecthttp.WithReadMaxBytes(0)), interceptor))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	repos, err := c.ListRepos(ctx, connect.NewRequest(&wsv1.ListReposRequest{}))
+	repos, err := c.ListRepos(ctx, &wsv1.ListReposRequest{})
 	if err != nil {
 		log.Fatalf("ListRepos: %v", err)
 	}
 
 	var created, existing, failed int
-	for _, r := range repos.Msg.GetRepos() {
-		br, err := c.Branches(ctx, connect.NewRequest(&wsv1.BranchesRequest{Org: r.GetOrg(), Repo: r.GetRepo()}))
+	for _, r := range repos.GetRepos() {
+		br, err := c.Branches(ctx, &wsv1.BranchesRequest{Org: r.GetOrg(), Repo: r.GetRepo()})
 		if err != nil {
 			log.Printf("warn: branches %s/%s: %v", r.GetOrg(), r.GetRepo(), err)
 			failed++
 			continue
 		}
-		for _, b := range br.Msg.GetBranches() {
-			res, err := c.EnsureBranchSession(ctx, connect.NewRequest(&wsv1.EnsureBranchSessionRequest{
+		for _, b := range br.GetBranches() {
+			res, err := c.EnsureBranchSession(ctx, &wsv1.EnsureBranchSessionRequest{
 				Org:    r.GetOrg(),
 				Repo:   r.GetRepo(),
 				Branch: b.GetName(),
-			}))
+			})
 			if err != nil {
 				log.Printf("warn: ensure %s/%s:%s: %v", r.GetOrg(), r.GetRepo(), b.GetName(), err)
 				failed++
@@ -96,7 +99,7 @@ func main() {
 		}
 	}
 	fmt.Printf("reconcile-sessions: repos=%d ensured=%d failed=%d (idempotent)\n",
-		len(repos.Msg.GetRepos()), created, failed)
+		len(repos.GetRepos()), created, failed)
 	if failed > 0 {
 		os.Exit(1)
 	}

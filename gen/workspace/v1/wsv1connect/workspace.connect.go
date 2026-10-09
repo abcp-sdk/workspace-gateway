@@ -17,3573 +17,4714 @@
 package wsv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v11 "github.com/abcp-sdk/workspace-gateway/gen/agent/v1"
 	v1 "github.com/abcp-sdk/workspace-gateway/gen/workspace/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// BranchSessionServiceName is the fully-qualified name of the BranchSessionService service.
 	BranchSessionServiceName = "workspace.v1.BranchSessionService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// BranchSessionServiceEnsureBranchSessionProcedure is the fully-qualified name of the
+	// BranchSessionServiceEnsureBranchSessionProcedure is the procedure name of the
 	// BranchSessionService's EnsureBranchSession RPC.
 	BranchSessionServiceEnsureBranchSessionProcedure = "/workspace.v1.BranchSessionService/EnsureBranchSession"
-	// BranchSessionServiceForkBranchSessionProcedure is the fully-qualified name of the
+	// BranchSessionServiceForkBranchSessionProcedure is the procedure name of the
 	// BranchSessionService's ForkBranchSession RPC.
 	BranchSessionServiceForkBranchSessionProcedure = "/workspace.v1.BranchSessionService/ForkBranchSession"
-	// BranchSessionServiceListBranchSessionsProcedure is the fully-qualified name of the
+	// BranchSessionServiceListBranchSessionsProcedure is the procedure name of the
 	// BranchSessionService's ListBranchSessions RPC.
 	BranchSessionServiceListBranchSessionsProcedure = "/workspace.v1.BranchSessionService/ListBranchSessions"
-	// BranchSessionServiceGetBranchSessionProcedure is the fully-qualified name of the
-	// BranchSessionService's GetBranchSession RPC.
+	// BranchSessionServiceGetBranchSessionProcedure is the procedure name of the BranchSessionService's
+	// GetBranchSession RPC.
 	BranchSessionServiceGetBranchSessionProcedure = "/workspace.v1.BranchSessionService/GetBranchSession"
-	// BranchSessionServiceDeleteBranchSessionProcedure is the fully-qualified name of the
+	// BranchSessionServiceDeleteBranchSessionProcedure is the procedure name of the
 	// BranchSessionService's DeleteBranchSession RPC.
 	BranchSessionServiceDeleteBranchSessionProcedure = "/workspace.v1.BranchSessionService/DeleteBranchSession"
-	// BranchSessionServiceDeleteBranchProcedure is the fully-qualified name of the
-	// BranchSessionService's DeleteBranch RPC.
+	// BranchSessionServiceDeleteBranchProcedure is the procedure name of the BranchSessionService's
+	// DeleteBranch RPC.
 	BranchSessionServiceDeleteBranchProcedure = "/workspace.v1.BranchSessionService/DeleteBranch"
-	// BranchSessionServiceDeleteRepoProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceDeleteRepoProcedure is the procedure name of the BranchSessionService's
 	// DeleteRepo RPC.
 	BranchSessionServiceDeleteRepoProcedure = "/workspace.v1.BranchSessionService/DeleteRepo"
-	// BranchSessionServiceCreateFreeSessionProcedure is the fully-qualified name of the
+	// BranchSessionServiceCreateFreeSessionProcedure is the procedure name of the
 	// BranchSessionService's CreateFreeSession RPC.
 	BranchSessionServiceCreateFreeSessionProcedure = "/workspace.v1.BranchSessionService/CreateFreeSession"
-	// BranchSessionServiceListReposProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceListReposProcedure is the procedure name of the BranchSessionService's
 	// ListRepos RPC.
 	BranchSessionServiceListReposProcedure = "/workspace.v1.BranchSessionService/ListRepos"
-	// BranchSessionServiceTreeProcedure is the fully-qualified name of the BranchSessionService's Tree
-	// RPC.
+	// BranchSessionServiceTreeProcedure is the procedure name of the BranchSessionService's Tree RPC.
 	BranchSessionServiceTreeProcedure = "/workspace.v1.BranchSessionService/Tree"
-	// BranchSessionServiceReadBlobProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceReadBlobProcedure is the procedure name of the BranchSessionService's
 	// ReadBlob RPC.
 	BranchSessionServiceReadBlobProcedure = "/workspace.v1.BranchSessionService/ReadBlob"
-	// BranchSessionServiceReadRawProcedure is the fully-qualified name of the BranchSessionService's
-	// ReadRaw RPC.
-	BranchSessionServiceReadRawProcedure = "/workspace.v1.BranchSessionService/ReadRaw"
-	// BranchSessionServiceLogProcedure is the fully-qualified name of the BranchSessionService's Log
+	// BranchSessionServiceReadRawProcedure is the procedure name of the BranchSessionService's ReadRaw
 	// RPC.
+	BranchSessionServiceReadRawProcedure = "/workspace.v1.BranchSessionService/ReadRaw"
+	// BranchSessionServiceLogProcedure is the procedure name of the BranchSessionService's Log RPC.
 	BranchSessionServiceLogProcedure = "/workspace.v1.BranchSessionService/Log"
-	// BranchSessionServiceBranchesProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceBranchesProcedure is the procedure name of the BranchSessionService's
 	// Branches RPC.
 	BranchSessionServiceBranchesProcedure = "/workspace.v1.BranchSessionService/Branches"
-	// BranchSessionServiceTagsProcedure is the fully-qualified name of the BranchSessionService's Tags
-	// RPC.
+	// BranchSessionServiceTagsProcedure is the procedure name of the BranchSessionService's Tags RPC.
 	BranchSessionServiceTagsProcedure = "/workspace.v1.BranchSessionService/Tags"
-	// BranchSessionServiceListReleasesProcedure is the fully-qualified name of the
-	// BranchSessionService's ListReleases RPC.
+	// BranchSessionServiceListReleasesProcedure is the procedure name of the BranchSessionService's
+	// ListReleases RPC.
 	BranchSessionServiceListReleasesProcedure = "/workspace.v1.BranchSessionService/ListReleases"
-	// BranchSessionServiceGetReleaseAssetProcedure is the fully-qualified name of the
-	// BranchSessionService's GetReleaseAsset RPC.
+	// BranchSessionServiceGetReleaseAssetProcedure is the procedure name of the BranchSessionService's
+	// GetReleaseAsset RPC.
 	BranchSessionServiceGetReleaseAssetProcedure = "/workspace.v1.BranchSessionService/GetReleaseAsset"
-	// BranchSessionServiceGetCommitProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceGetCommitProcedure is the procedure name of the BranchSessionService's
 	// GetCommit RPC.
 	BranchSessionServiceGetCommitProcedure = "/workspace.v1.BranchSessionService/GetCommit"
-	// BranchSessionServiceCommitDiffProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceCommitDiffProcedure is the procedure name of the BranchSessionService's
 	// CommitDiff RPC.
 	BranchSessionServiceCommitDiffProcedure = "/workspace.v1.BranchSessionService/CommitDiff"
-	// BranchSessionServiceEnsureRepoProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceEnsureRepoProcedure is the procedure name of the BranchSessionService's
 	// EnsureRepo RPC.
 	BranchSessionServiceEnsureRepoProcedure = "/workspace.v1.BranchSessionService/EnsureRepo"
-	// BranchSessionServiceCreateOrgProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceCreateOrgProcedure is the procedure name of the BranchSessionService's
 	// CreateOrg RPC.
 	BranchSessionServiceCreateOrgProcedure = "/workspace.v1.BranchSessionService/CreateOrg"
-	// BranchSessionServiceListOrgsProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceListOrgsProcedure is the procedure name of the BranchSessionService's
 	// ListOrgs RPC.
 	BranchSessionServiceListOrgsProcedure = "/workspace.v1.BranchSessionService/ListOrgs"
-	// BranchSessionServiceRepoMetaProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceRepoMetaProcedure is the procedure name of the BranchSessionService's
 	// RepoMeta RPC.
 	BranchSessionServiceRepoMetaProcedure = "/workspace.v1.BranchSessionService/RepoMeta"
-	// BranchSessionServiceContentsProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceContentsProcedure is the procedure name of the BranchSessionService's
 	// Contents RPC.
 	BranchSessionServiceContentsProcedure = "/workspace.v1.BranchSessionService/Contents"
-	// BranchSessionServiceCompareProcedure is the fully-qualified name of the BranchSessionService's
-	// Compare RPC.
+	// BranchSessionServiceCompareProcedure is the procedure name of the BranchSessionService's Compare
+	// RPC.
 	BranchSessionServiceCompareProcedure = "/workspace.v1.BranchSessionService/Compare"
-	// BranchSessionServiceBlameProcedure is the fully-qualified name of the BranchSessionService's
-	// Blame RPC.
+	// BranchSessionServiceBlameProcedure is the procedure name of the BranchSessionService's Blame RPC.
 	BranchSessionServiceBlameProcedure = "/workspace.v1.BranchSessionService/Blame"
-	// BranchSessionServiceFileDiffProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceFileDiffProcedure is the procedure name of the BranchSessionService's
 	// FileDiff RPC.
 	BranchSessionServiceFileDiffProcedure = "/workspace.v1.BranchSessionService/FileDiff"
-	// BranchSessionServiceCreateTagProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceCreateTagProcedure is the procedure name of the BranchSessionService's
 	// CreateTag RPC.
 	BranchSessionServiceCreateTagProcedure = "/workspace.v1.BranchSessionService/CreateTag"
-	// BranchSessionServiceCreateBranchProcedure is the fully-qualified name of the
-	// BranchSessionService's CreateBranch RPC.
+	// BranchSessionServiceCreateBranchProcedure is the procedure name of the BranchSessionService's
+	// CreateBranch RPC.
 	BranchSessionServiceCreateBranchProcedure = "/workspace.v1.BranchSessionService/CreateBranch"
-	// BranchSessionServiceArchiveProcedure is the fully-qualified name of the BranchSessionService's
-	// Archive RPC.
+	// BranchSessionServiceArchiveProcedure is the procedure name of the BranchSessionService's Archive
+	// RPC.
 	BranchSessionServiceArchiveProcedure = "/workspace.v1.BranchSessionService/Archive"
-	// BranchSessionServiceImportRepoProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceImportRepoProcedure is the procedure name of the BranchSessionService's
 	// ImportRepo RPC.
 	BranchSessionServiceImportRepoProcedure = "/workspace.v1.BranchSessionService/ImportRepo"
-	// BranchSessionServiceSetPushMirrorProcedure is the fully-qualified name of the
-	// BranchSessionService's SetPushMirror RPC.
+	// BranchSessionServiceSetPushMirrorProcedure is the procedure name of the BranchSessionService's
+	// SetPushMirror RPC.
 	BranchSessionServiceSetPushMirrorProcedure = "/workspace.v1.BranchSessionService/SetPushMirror"
-	// BranchSessionServiceListPushMirrorsProcedure is the fully-qualified name of the
-	// BranchSessionService's ListPushMirrors RPC.
+	// BranchSessionServiceListPushMirrorsProcedure is the procedure name of the BranchSessionService's
+	// ListPushMirrors RPC.
 	BranchSessionServiceListPushMirrorsProcedure = "/workspace.v1.BranchSessionService/ListPushMirrors"
-	// BranchSessionServiceDeletePushMirrorProcedure is the fully-qualified name of the
-	// BranchSessionService's DeletePushMirror RPC.
+	// BranchSessionServiceDeletePushMirrorProcedure is the procedure name of the BranchSessionService's
+	// DeletePushMirror RPC.
 	BranchSessionServiceDeletePushMirrorProcedure = "/workspace.v1.BranchSessionService/DeletePushMirror"
-	// BranchSessionServiceListMRsProcedure is the fully-qualified name of the BranchSessionService's
-	// ListMRs RPC.
+	// BranchSessionServiceListMRsProcedure is the procedure name of the BranchSessionService's ListMRs
+	// RPC.
 	BranchSessionServiceListMRsProcedure = "/workspace.v1.BranchSessionService/ListMRs"
-	// BranchSessionServiceGetMRProcedure is the fully-qualified name of the BranchSessionService's
-	// GetMR RPC.
+	// BranchSessionServiceGetMRProcedure is the procedure name of the BranchSessionService's GetMR RPC.
 	BranchSessionServiceGetMRProcedure = "/workspace.v1.BranchSessionService/GetMR"
-	// BranchSessionServiceMRDiffProcedure is the fully-qualified name of the BranchSessionService's
-	// MRDiff RPC.
+	// BranchSessionServiceMRDiffProcedure is the procedure name of the BranchSessionService's MRDiff
+	// RPC.
 	BranchSessionServiceMRDiffProcedure = "/workspace.v1.BranchSessionService/MRDiff"
-	// BranchSessionServiceListMRCommentsProcedure is the fully-qualified name of the
-	// BranchSessionService's ListMRComments RPC.
+	// BranchSessionServiceListMRCommentsProcedure is the procedure name of the BranchSessionService's
+	// ListMRComments RPC.
 	BranchSessionServiceListMRCommentsProcedure = "/workspace.v1.BranchSessionService/ListMRComments"
-	// BranchSessionServiceSubmitMRProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceSubmitMRProcedure is the procedure name of the BranchSessionService's
 	// SubmitMR RPC.
 	BranchSessionServiceSubmitMRProcedure = "/workspace.v1.BranchSessionService/SubmitMR"
-	// BranchSessionServiceCommentMRProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceCommentMRProcedure is the procedure name of the BranchSessionService's
 	// CommentMR RPC.
 	BranchSessionServiceCommentMRProcedure = "/workspace.v1.BranchSessionService/CommentMR"
-	// BranchSessionServiceMergeMRProcedure is the fully-qualified name of the BranchSessionService's
-	// MergeMR RPC.
+	// BranchSessionServiceMergeMRProcedure is the procedure name of the BranchSessionService's MergeMR
+	// RPC.
 	BranchSessionServiceMergeMRProcedure = "/workspace.v1.BranchSessionService/MergeMR"
-	// BranchSessionServiceCloseMRProcedure is the fully-qualified name of the BranchSessionService's
-	// CloseMR RPC.
+	// BranchSessionServiceCloseMRProcedure is the procedure name of the BranchSessionService's CloseMR
+	// RPC.
 	BranchSessionServiceCloseMRProcedure = "/workspace.v1.BranchSessionService/CloseMR"
-	// BranchSessionServiceListOCIImagesProcedure is the fully-qualified name of the
-	// BranchSessionService's ListOCIImages RPC.
+	// BranchSessionServiceListOCIImagesProcedure is the procedure name of the BranchSessionService's
+	// ListOCIImages RPC.
 	BranchSessionServiceListOCIImagesProcedure = "/workspace.v1.BranchSessionService/ListOCIImages"
-	// BranchSessionServiceBuildSandboxImageProcedure is the fully-qualified name of the
+	// BranchSessionServiceBuildSandboxImageProcedure is the procedure name of the
 	// BranchSessionService's BuildSandboxImage RPC.
 	BranchSessionServiceBuildSandboxImageProcedure = "/workspace.v1.BranchSessionService/BuildSandboxImage"
-	// BranchSessionServiceGetBuildStatusProcedure is the fully-qualified name of the
-	// BranchSessionService's GetBuildStatus RPC.
+	// BranchSessionServiceGetBuildStatusProcedure is the procedure name of the BranchSessionService's
+	// GetBuildStatus RPC.
 	BranchSessionServiceGetBuildStatusProcedure = "/workspace.v1.BranchSessionService/GetBuildStatus"
-	// BranchSessionServiceListBuildsProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceListBuildsProcedure is the procedure name of the BranchSessionService's
 	// ListBuilds RPC.
 	BranchSessionServiceListBuildsProcedure = "/workspace.v1.BranchSessionService/ListBuilds"
-	// BranchSessionServiceImportImageProcedure is the fully-qualified name of the
-	// BranchSessionService's ImportImage RPC.
+	// BranchSessionServiceImportImageProcedure is the procedure name of the BranchSessionService's
+	// ImportImage RPC.
 	BranchSessionServiceImportImageProcedure = "/workspace.v1.BranchSessionService/ImportImage"
-	// BranchSessionServiceListSandboxesProcedure is the fully-qualified name of the
-	// BranchSessionService's ListSandboxes RPC.
+	// BranchSessionServiceListSandboxesProcedure is the procedure name of the BranchSessionService's
+	// ListSandboxes RPC.
 	BranchSessionServiceListSandboxesProcedure = "/workspace.v1.BranchSessionService/ListSandboxes"
-	// BranchSessionServiceCreateSandboxProcedure is the fully-qualified name of the
-	// BranchSessionService's CreateSandbox RPC.
+	// BranchSessionServiceCreateSandboxProcedure is the procedure name of the BranchSessionService's
+	// CreateSandbox RPC.
 	BranchSessionServiceCreateSandboxProcedure = "/workspace.v1.BranchSessionService/CreateSandbox"
-	// BranchSessionServiceGetSandboxProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceGetSandboxProcedure is the procedure name of the BranchSessionService's
 	// GetSandbox RPC.
 	BranchSessionServiceGetSandboxProcedure = "/workspace.v1.BranchSessionService/GetSandbox"
-	// BranchSessionServiceDeleteSandboxProcedure is the fully-qualified name of the
-	// BranchSessionService's DeleteSandbox RPC.
+	// BranchSessionServiceDeleteSandboxProcedure is the procedure name of the BranchSessionService's
+	// DeleteSandbox RPC.
 	BranchSessionServiceDeleteSandboxProcedure = "/workspace.v1.BranchSessionService/DeleteSandbox"
-	// BranchSessionServiceResolveSandboxProcedure is the fully-qualified name of the
-	// BranchSessionService's ResolveSandbox RPC.
+	// BranchSessionServiceResolveSandboxProcedure is the procedure name of the BranchSessionService's
+	// ResolveSandbox RPC.
 	BranchSessionServiceResolveSandboxProcedure = "/workspace.v1.BranchSessionService/ResolveSandbox"
-	// BranchSessionServiceListSandboxJobsProcedure is the fully-qualified name of the
-	// BranchSessionService's ListSandboxJobs RPC.
+	// BranchSessionServiceListSandboxJobsProcedure is the procedure name of the BranchSessionService's
+	// ListSandboxJobs RPC.
 	BranchSessionServiceListSandboxJobsProcedure = "/workspace.v1.BranchSessionService/ListSandboxJobs"
-	// BranchSessionServiceGetSandboxJobOutputProcedure is the fully-qualified name of the
+	// BranchSessionServiceGetSandboxJobOutputProcedure is the procedure name of the
 	// BranchSessionService's GetSandboxJobOutput RPC.
 	BranchSessionServiceGetSandboxJobOutputProcedure = "/workspace.v1.BranchSessionService/GetSandboxJobOutput"
-	// BranchSessionServiceWatchSandboxJobProcedure is the fully-qualified name of the
-	// BranchSessionService's WatchSandboxJob RPC.
+	// BranchSessionServiceWatchSandboxJobProcedure is the procedure name of the BranchSessionService's
+	// WatchSandboxJob RPC.
 	BranchSessionServiceWatchSandboxJobProcedure = "/workspace.v1.BranchSessionService/WatchSandboxJob"
-	// BranchSessionServiceListSandboxFilesProcedure is the fully-qualified name of the
-	// BranchSessionService's ListSandboxFiles RPC.
+	// BranchSessionServiceListSandboxFilesProcedure is the procedure name of the BranchSessionService's
+	// ListSandboxFiles RPC.
 	BranchSessionServiceListSandboxFilesProcedure = "/workspace.v1.BranchSessionService/ListSandboxFiles"
-	// BranchSessionServiceReadSandboxFileProcedure is the fully-qualified name of the
-	// BranchSessionService's ReadSandboxFile RPC.
+	// BranchSessionServiceReadSandboxFileProcedure is the procedure name of the BranchSessionService's
+	// ReadSandboxFile RPC.
 	BranchSessionServiceReadSandboxFileProcedure = "/workspace.v1.BranchSessionService/ReadSandboxFile"
-	// BranchSessionServiceDeployServiceProcedure is the fully-qualified name of the
-	// BranchSessionService's DeployService RPC.
+	// BranchSessionServiceDeployServiceProcedure is the procedure name of the BranchSessionService's
+	// DeployService RPC.
 	BranchSessionServiceDeployServiceProcedure = "/workspace.v1.BranchSessionService/DeployService"
-	// BranchSessionServiceListServicesProcedure is the fully-qualified name of the
-	// BranchSessionService's ListServices RPC.
+	// BranchSessionServiceListServicesProcedure is the procedure name of the BranchSessionService's
+	// ListServices RPC.
 	BranchSessionServiceListServicesProcedure = "/workspace.v1.BranchSessionService/ListServices"
-	// BranchSessionServiceDeleteServiceProcedure is the fully-qualified name of the
-	// BranchSessionService's DeleteService RPC.
+	// BranchSessionServiceDeleteServiceProcedure is the procedure name of the BranchSessionService's
+	// DeleteService RPC.
 	BranchSessionServiceDeleteServiceProcedure = "/workspace.v1.BranchSessionService/DeleteService"
-	// BranchSessionServicePauseServiceProcedure is the fully-qualified name of the
-	// BranchSessionService's PauseService RPC.
+	// BranchSessionServicePauseServiceProcedure is the procedure name of the BranchSessionService's
+	// PauseService RPC.
 	BranchSessionServicePauseServiceProcedure = "/workspace.v1.BranchSessionService/PauseService"
-	// BranchSessionServiceResumeServiceProcedure is the fully-qualified name of the
-	// BranchSessionService's ResumeService RPC.
+	// BranchSessionServiceResumeServiceProcedure is the procedure name of the BranchSessionService's
+	// ResumeService RPC.
 	BranchSessionServiceResumeServiceProcedure = "/workspace.v1.BranchSessionService/ResumeService"
-	// BranchSessionServiceScaleServiceProcedure is the fully-qualified name of the
-	// BranchSessionService's ScaleService RPC.
+	// BranchSessionServiceScaleServiceProcedure is the procedure name of the BranchSessionService's
+	// ScaleService RPC.
 	BranchSessionServiceScaleServiceProcedure = "/workspace.v1.BranchSessionService/ScaleService"
-	// BranchSessionServicePromoteServiceProcedure is the fully-qualified name of the
-	// BranchSessionService's PromoteService RPC.
+	// BranchSessionServicePromoteServiceProcedure is the procedure name of the BranchSessionService's
+	// PromoteService RPC.
 	BranchSessionServicePromoteServiceProcedure = "/workspace.v1.BranchSessionService/PromoteService"
-	// BranchSessionServiceRollbackServiceProcedure is the fully-qualified name of the
-	// BranchSessionService's RollbackService RPC.
+	// BranchSessionServiceRollbackServiceProcedure is the procedure name of the BranchSessionService's
+	// RollbackService RPC.
 	BranchSessionServiceRollbackServiceProcedure = "/workspace.v1.BranchSessionService/RollbackService"
-	// BranchSessionServiceGetServiceManifestProcedure is the fully-qualified name of the
+	// BranchSessionServiceGetServiceManifestProcedure is the procedure name of the
 	// BranchSessionService's GetServiceManifest RPC.
 	BranchSessionServiceGetServiceManifestProcedure = "/workspace.v1.BranchSessionService/GetServiceManifest"
-	// BranchSessionServiceApplyServiceManifestProcedure is the fully-qualified name of the
+	// BranchSessionServiceApplyServiceManifestProcedure is the procedure name of the
 	// BranchSessionService's ApplyServiceManifest RPC.
 	BranchSessionServiceApplyServiceManifestProcedure = "/workspace.v1.BranchSessionService/ApplyServiceManifest"
-	// BranchSessionServiceCreatePVCProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceCreatePVCProcedure is the procedure name of the BranchSessionService's
 	// CreatePVC RPC.
 	BranchSessionServiceCreatePVCProcedure = "/workspace.v1.BranchSessionService/CreatePVC"
-	// BranchSessionServiceListPVCsProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceListPVCsProcedure is the procedure name of the BranchSessionService's
 	// ListPVCs RPC.
 	BranchSessionServiceListPVCsProcedure = "/workspace.v1.BranchSessionService/ListPVCs"
-	// BranchSessionServiceDeletePVCProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceDeletePVCProcedure is the procedure name of the BranchSessionService's
 	// DeletePVC RPC.
 	BranchSessionServiceDeletePVCProcedure = "/workspace.v1.BranchSessionService/DeletePVC"
-	// BranchSessionServiceServiceLogsProcedure is the fully-qualified name of the
-	// BranchSessionService's ServiceLogs RPC.
+	// BranchSessionServiceServiceLogsProcedure is the procedure name of the BranchSessionService's
+	// ServiceLogs RPC.
 	BranchSessionServiceServiceLogsProcedure = "/workspace.v1.BranchSessionService/ServiceLogs"
-	// BranchSessionServiceWatchServiceLogsProcedure is the fully-qualified name of the
-	// BranchSessionService's WatchServiceLogs RPC.
+	// BranchSessionServiceWatchServiceLogsProcedure is the procedure name of the BranchSessionService's
+	// WatchServiceLogs RPC.
 	BranchSessionServiceWatchServiceLogsProcedure = "/workspace.v1.BranchSessionService/WatchServiceLogs"
-	// BranchSessionServiceSandboxLogsProcedure is the fully-qualified name of the
-	// BranchSessionService's SandboxLogs RPC.
+	// BranchSessionServiceSandboxLogsProcedure is the procedure name of the BranchSessionService's
+	// SandboxLogs RPC.
 	BranchSessionServiceSandboxLogsProcedure = "/workspace.v1.BranchSessionService/SandboxLogs"
-	// BranchSessionServiceWatchWorkspaceProcedure is the fully-qualified name of the
-	// BranchSessionService's WatchWorkspace RPC.
+	// BranchSessionServiceWatchWorkspaceProcedure is the procedure name of the BranchSessionService's
+	// WatchWorkspace RPC.
 	BranchSessionServiceWatchWorkspaceProcedure = "/workspace.v1.BranchSessionService/WatchWorkspace"
-	// BranchSessionServiceHelmDeployProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceHelmDeployProcedure is the procedure name of the BranchSessionService's
 	// HelmDeploy RPC.
 	BranchSessionServiceHelmDeployProcedure = "/workspace.v1.BranchSessionService/HelmDeploy"
-	// BranchSessionServiceHelmListProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceHelmListProcedure is the procedure name of the BranchSessionService's
 	// HelmList RPC.
 	BranchSessionServiceHelmListProcedure = "/workspace.v1.BranchSessionService/HelmList"
-	// BranchSessionServiceHelmHistoryProcedure is the fully-qualified name of the
-	// BranchSessionService's HelmHistory RPC.
+	// BranchSessionServiceHelmHistoryProcedure is the procedure name of the BranchSessionService's
+	// HelmHistory RPC.
 	BranchSessionServiceHelmHistoryProcedure = "/workspace.v1.BranchSessionService/HelmHistory"
-	// BranchSessionServiceHelmRollbackProcedure is the fully-qualified name of the
-	// BranchSessionService's HelmRollback RPC.
+	// BranchSessionServiceHelmRollbackProcedure is the procedure name of the BranchSessionService's
+	// HelmRollback RPC.
 	BranchSessionServiceHelmRollbackProcedure = "/workspace.v1.BranchSessionService/HelmRollback"
-	// BranchSessionServiceHelmUninstallProcedure is the fully-qualified name of the
-	// BranchSessionService's HelmUninstall RPC.
+	// BranchSessionServiceHelmUninstallProcedure is the procedure name of the BranchSessionService's
+	// HelmUninstall RPC.
 	BranchSessionServiceHelmUninstallProcedure = "/workspace.v1.BranchSessionService/HelmUninstall"
-	// BranchSessionServiceHelmPromoteProcedure is the fully-qualified name of the
-	// BranchSessionService's HelmPromote RPC.
+	// BranchSessionServiceHelmPromoteProcedure is the procedure name of the BranchSessionService's
+	// HelmPromote RPC.
 	BranchSessionServiceHelmPromoteProcedure = "/workspace.v1.BranchSessionService/HelmPromote"
-	// BranchSessionServiceHelmRollbackReleaseProcedure is the fully-qualified name of the
+	// BranchSessionServiceHelmRollbackReleaseProcedure is the procedure name of the
 	// BranchSessionService's HelmRollbackRelease RPC.
 	BranchSessionServiceHelmRollbackReleaseProcedure = "/workspace.v1.BranchSessionService/HelmRollbackRelease"
-	// BranchSessionServiceHelmObjectsProcedure is the fully-qualified name of the
-	// BranchSessionService's HelmObjects RPC.
+	// BranchSessionServiceHelmObjectsProcedure is the procedure name of the BranchSessionService's
+	// HelmObjects RPC.
 	BranchSessionServiceHelmObjectsProcedure = "/workspace.v1.BranchSessionService/HelmObjects"
-	// BranchSessionServiceHelmObjectLogsProcedure is the fully-qualified name of the
-	// BranchSessionService's HelmObjectLogs RPC.
+	// BranchSessionServiceHelmObjectLogsProcedure is the procedure name of the BranchSessionService's
+	// HelmObjectLogs RPC.
 	BranchSessionServiceHelmObjectLogsProcedure = "/workspace.v1.BranchSessionService/HelmObjectLogs"
-	// BranchSessionServiceHealthProcedure is the fully-qualified name of the BranchSessionService's
-	// Health RPC.
+	// BranchSessionServiceHealthProcedure is the procedure name of the BranchSessionService's Health
+	// RPC.
 	BranchSessionServiceHealthProcedure = "/workspace.v1.BranchSessionService/Health"
-	// BranchSessionServiceGetIdentityProcedure is the fully-qualified name of the
-	// BranchSessionService's GetIdentity RPC.
+	// BranchSessionServiceGetIdentityProcedure is the procedure name of the BranchSessionService's
+	// GetIdentity RPC.
 	BranchSessionServiceGetIdentityProcedure = "/workspace.v1.BranchSessionService/GetIdentity"
-	// BranchSessionServiceListSessionsProcedure is the fully-qualified name of the
-	// BranchSessionService's ListSessions RPC.
+	// BranchSessionServiceListSessionsProcedure is the procedure name of the BranchSessionService's
+	// ListSessions RPC.
 	BranchSessionServiceListSessionsProcedure = "/workspace.v1.BranchSessionService/ListSessions"
-	// BranchSessionServiceGetSessionProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceGetSessionProcedure is the procedure name of the BranchSessionService's
 	// GetSession RPC.
 	BranchSessionServiceGetSessionProcedure = "/workspace.v1.BranchSessionService/GetSession"
-	// BranchSessionServiceListMessagesProcedure is the fully-qualified name of the
-	// BranchSessionService's ListMessages RPC.
+	// BranchSessionServiceListMessagesProcedure is the procedure name of the BranchSessionService's
+	// ListMessages RPC.
 	BranchSessionServiceListMessagesProcedure = "/workspace.v1.BranchSessionService/ListMessages"
-	// BranchSessionServicePromptProcedure is the fully-qualified name of the BranchSessionService's
-	// Prompt RPC.
+	// BranchSessionServicePromptProcedure is the procedure name of the BranchSessionService's Prompt
+	// RPC.
 	BranchSessionServicePromptProcedure = "/workspace.v1.BranchSessionService/Prompt"
-	// BranchSessionServiceWatchSessionProcedure is the fully-qualified name of the
-	// BranchSessionService's WatchSession RPC.
+	// BranchSessionServiceWatchSessionProcedure is the procedure name of the BranchSessionService's
+	// WatchSession RPC.
 	BranchSessionServiceWatchSessionProcedure = "/workspace.v1.BranchSessionService/WatchSession"
-	// BranchSessionServiceWatchSessionsProcedure is the fully-qualified name of the
-	// BranchSessionService's WatchSessions RPC.
+	// BranchSessionServiceWatchSessionsProcedure is the procedure name of the BranchSessionService's
+	// WatchSessions RPC.
 	BranchSessionServiceWatchSessionsProcedure = "/workspace.v1.BranchSessionService/WatchSessions"
-	// BranchSessionServiceSetModelProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceSetModelProcedure is the procedure name of the BranchSessionService's
 	// SetModel RPC.
 	BranchSessionServiceSetModelProcedure = "/workspace.v1.BranchSessionService/SetModel"
-	// BranchSessionServiceUndoProcedure is the fully-qualified name of the BranchSessionService's Undo
-	// RPC.
+	// BranchSessionServiceUndoProcedure is the procedure name of the BranchSessionService's Undo RPC.
 	BranchSessionServiceUndoProcedure = "/workspace.v1.BranchSessionService/Undo"
-	// BranchSessionServiceMarkReadProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceMarkReadProcedure is the procedure name of the BranchSessionService's
 	// MarkRead RPC.
 	BranchSessionServiceMarkReadProcedure = "/workspace.v1.BranchSessionService/MarkRead"
-	// BranchSessionServiceStateProcedure is the fully-qualified name of the BranchSessionService's
-	// State RPC.
+	// BranchSessionServiceStateProcedure is the procedure name of the BranchSessionService's State RPC.
 	BranchSessionServiceStateProcedure = "/workspace.v1.BranchSessionService/State"
-	// BranchSessionServiceMailboxProcedure is the fully-qualified name of the BranchSessionService's
-	// Mailbox RPC.
+	// BranchSessionServiceMailboxProcedure is the procedure name of the BranchSessionService's Mailbox
+	// RPC.
 	BranchSessionServiceMailboxProcedure = "/workspace.v1.BranchSessionService/Mailbox"
-	// BranchSessionServiceInterruptProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceInterruptProcedure is the procedure name of the BranchSessionService's
 	// Interrupt RPC.
 	BranchSessionServiceInterruptProcedure = "/workspace.v1.BranchSessionService/Interrupt"
-	// BranchSessionServiceCompactProcedure is the fully-qualified name of the BranchSessionService's
-	// Compact RPC.
+	// BranchSessionServiceCompactProcedure is the procedure name of the BranchSessionService's Compact
+	// RPC.
 	BranchSessionServiceCompactProcedure = "/workspace.v1.BranchSessionService/Compact"
-	// BranchSessionServiceUpdateSettingsProcedure is the fully-qualified name of the
-	// BranchSessionService's UpdateSettings RPC.
+	// BranchSessionServiceUpdateSettingsProcedure is the procedure name of the BranchSessionService's
+	// UpdateSettings RPC.
 	BranchSessionServiceUpdateSettingsProcedure = "/workspace.v1.BranchSessionService/UpdateSettings"
-	// BranchSessionServiceListProvidersProcedure is the fully-qualified name of the
-	// BranchSessionService's ListProviders RPC.
+	// BranchSessionServiceListProvidersProcedure is the procedure name of the BranchSessionService's
+	// ListProviders RPC.
 	BranchSessionServiceListProvidersProcedure = "/workspace.v1.BranchSessionService/ListProviders"
-	// BranchSessionServiceListProvidersCatalogProcedure is the fully-qualified name of the
+	// BranchSessionServiceListProvidersCatalogProcedure is the procedure name of the
 	// BranchSessionService's ListProvidersCatalog RPC.
 	BranchSessionServiceListProvidersCatalogProcedure = "/workspace.v1.BranchSessionService/ListProvidersCatalog"
-	// BranchSessionServiceRegisterProviderProcedure is the fully-qualified name of the
-	// BranchSessionService's RegisterProvider RPC.
+	// BranchSessionServiceRegisterProviderProcedure is the procedure name of the BranchSessionService's
+	// RegisterProvider RPC.
 	BranchSessionServiceRegisterProviderProcedure = "/workspace.v1.BranchSessionService/RegisterProvider"
-	// BranchSessionServiceDeleteProviderProcedure is the fully-qualified name of the
-	// BranchSessionService's DeleteProvider RPC.
+	// BranchSessionServiceDeleteProviderProcedure is the procedure name of the BranchSessionService's
+	// DeleteProvider RPC.
 	BranchSessionServiceDeleteProviderProcedure = "/workspace.v1.BranchSessionService/DeleteProvider"
-	// BranchSessionServiceTestProviderProcedure is the fully-qualified name of the
-	// BranchSessionService's TestProvider RPC.
+	// BranchSessionServiceTestProviderProcedure is the procedure name of the BranchSessionService's
+	// TestProvider RPC.
 	BranchSessionServiceTestProviderProcedure = "/workspace.v1.BranchSessionService/TestProvider"
-	// BranchSessionServiceListModelsProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceListModelsProcedure is the procedure name of the BranchSessionService's
 	// ListModels RPC.
 	BranchSessionServiceListModelsProcedure = "/workspace.v1.BranchSessionService/ListModels"
-	// BranchSessionServiceListPresetsProcedure is the fully-qualified name of the
-	// BranchSessionService's ListPresets RPC.
+	// BranchSessionServiceListPresetsProcedure is the procedure name of the BranchSessionService's
+	// ListPresets RPC.
 	BranchSessionServiceListPresetsProcedure = "/workspace.v1.BranchSessionService/ListPresets"
-	// BranchSessionServiceGetConfigProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceGetConfigProcedure is the procedure name of the BranchSessionService's
 	// GetConfig RPC.
 	BranchSessionServiceGetConfigProcedure = "/workspace.v1.BranchSessionService/GetConfig"
-	// BranchSessionServiceSetConfigProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceSetConfigProcedure is the procedure name of the BranchSessionService's
 	// SetConfig RPC.
 	BranchSessionServiceSetConfigProcedure = "/workspace.v1.BranchSessionService/SetConfig"
-	// BranchSessionServiceListToolsProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceListToolsProcedure is the procedure name of the BranchSessionService's
 	// ListTools RPC.
 	BranchSessionServiceListToolsProcedure = "/workspace.v1.BranchSessionService/ListTools"
-	// BranchSessionServiceGetToolConfigProcedure is the fully-qualified name of the
-	// BranchSessionService's GetToolConfig RPC.
+	// BranchSessionServiceGetToolConfigProcedure is the procedure name of the BranchSessionService's
+	// GetToolConfig RPC.
 	BranchSessionServiceGetToolConfigProcedure = "/workspace.v1.BranchSessionService/GetToolConfig"
-	// BranchSessionServiceSetToolConfigProcedure is the fully-qualified name of the
-	// BranchSessionService's SetToolConfig RPC.
+	// BranchSessionServiceSetToolConfigProcedure is the procedure name of the BranchSessionService's
+	// SetToolConfig RPC.
 	BranchSessionServiceSetToolConfigProcedure = "/workspace.v1.BranchSessionService/SetToolConfig"
-	// BranchSessionServiceSetExtensionConfigProcedure is the fully-qualified name of the
+	// BranchSessionServiceSetExtensionConfigProcedure is the procedure name of the
 	// BranchSessionService's SetExtensionConfig RPC.
 	BranchSessionServiceSetExtensionConfigProcedure = "/workspace.v1.BranchSessionService/SetExtensionConfig"
-	// BranchSessionServiceUploadFileProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceUploadFileProcedure is the procedure name of the BranchSessionService's
 	// UploadFile RPC.
 	BranchSessionServiceUploadFileProcedure = "/workspace.v1.BranchSessionService/UploadFile"
-	// BranchSessionServiceIngestFileProcedure is the fully-qualified name of the BranchSessionService's
+	// BranchSessionServiceIngestFileProcedure is the procedure name of the BranchSessionService's
 	// IngestFile RPC.
 	BranchSessionServiceIngestFileProcedure = "/workspace.v1.BranchSessionService/IngestFile"
-	// BranchSessionServiceGetFileProcedure is the fully-qualified name of the BranchSessionService's
-	// GetFile RPC.
+	// BranchSessionServiceGetFileProcedure is the procedure name of the BranchSessionService's GetFile
+	// RPC.
 	BranchSessionServiceGetFileProcedure = "/workspace.v1.BranchSessionService/GetFile"
-	// BranchSessionServiceGetFileMetaProcedure is the fully-qualified name of the
-	// BranchSessionService's GetFileMeta RPC.
+	// BranchSessionServiceGetFileMetaProcedure is the procedure name of the BranchSessionService's
+	// GetFileMeta RPC.
 	BranchSessionServiceGetFileMetaProcedure = "/workspace.v1.BranchSessionService/GetFileMeta"
-	// BranchSessionServiceGetFileStreamProcedure is the fully-qualified name of the
-	// BranchSessionService's GetFileStream RPC.
+	// BranchSessionServiceGetFileStreamProcedure is the procedure name of the BranchSessionService's
+	// GetFileStream RPC.
 	BranchSessionServiceGetFileStreamProcedure = "/workspace.v1.BranchSessionService/GetFileStream"
+)
+
+var (
+	branchSessionServiceEnsureBranchSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("EnsureBranchSession"),
+			Procedure:  BranchSessionServiceEnsureBranchSessionProcedure,
+		}
+	})
+	branchSessionServiceForkBranchSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ForkBranchSession"),
+			Procedure:  BranchSessionServiceForkBranchSessionProcedure,
+		}
+	})
+	branchSessionServiceListBranchSessionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListBranchSessions"),
+			Procedure:  BranchSessionServiceListBranchSessionsProcedure,
+		}
+	})
+	branchSessionServiceGetBranchSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("GetBranchSession"),
+			Procedure:  BranchSessionServiceGetBranchSessionProcedure,
+		}
+	})
+	branchSessionServiceDeleteBranchSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("DeleteBranchSession"),
+			Procedure:  BranchSessionServiceDeleteBranchSessionProcedure,
+		}
+	})
+	branchSessionServiceDeleteBranchSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("DeleteBranch"),
+			Procedure:  BranchSessionServiceDeleteBranchProcedure,
+		}
+	})
+	branchSessionServiceDeleteRepoSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("DeleteRepo"),
+			Procedure:  BranchSessionServiceDeleteRepoProcedure,
+		}
+	})
+	branchSessionServiceCreateFreeSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("CreateFreeSession"),
+			Procedure:  BranchSessionServiceCreateFreeSessionProcedure,
+		}
+	})
+	branchSessionServiceListReposSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListRepos"),
+			Procedure:  BranchSessionServiceListReposProcedure,
+		}
+	})
+	branchSessionServiceTreeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("Tree"),
+			Procedure:  BranchSessionServiceTreeProcedure,
+		}
+	})
+	branchSessionServiceReadBlobSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ReadBlob"),
+			Procedure:  BranchSessionServiceReadBlobProcedure,
+		}
+	})
+	branchSessionServiceReadRawSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ReadRaw"),
+			Procedure:  BranchSessionServiceReadRawProcedure,
+		}
+	})
+	branchSessionServiceLogSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("Log"),
+			Procedure:  BranchSessionServiceLogProcedure,
+		}
+	})
+	branchSessionServiceBranchesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("Branches"),
+			Procedure:  BranchSessionServiceBranchesProcedure,
+		}
+	})
+	branchSessionServiceTagsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("Tags"),
+			Procedure:  BranchSessionServiceTagsProcedure,
+		}
+	})
+	branchSessionServiceListReleasesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListReleases"),
+			Procedure:  BranchSessionServiceListReleasesProcedure,
+		}
+	})
+	branchSessionServiceGetReleaseAssetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("GetReleaseAsset"),
+			Procedure:  BranchSessionServiceGetReleaseAssetProcedure,
+		}
+	})
+	branchSessionServiceGetCommitSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("GetCommit"),
+			Procedure:  BranchSessionServiceGetCommitProcedure,
+		}
+	})
+	branchSessionServiceCommitDiffSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("CommitDiff"),
+			Procedure:  BranchSessionServiceCommitDiffProcedure,
+		}
+	})
+	branchSessionServiceEnsureRepoSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("EnsureRepo"),
+			Procedure:  BranchSessionServiceEnsureRepoProcedure,
+		}
+	})
+	branchSessionServiceCreateOrgSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("CreateOrg"),
+			Procedure:  BranchSessionServiceCreateOrgProcedure,
+		}
+	})
+	branchSessionServiceListOrgsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListOrgs"),
+			Procedure:  BranchSessionServiceListOrgsProcedure,
+		}
+	})
+	branchSessionServiceRepoMetaSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("RepoMeta"),
+			Procedure:  BranchSessionServiceRepoMetaProcedure,
+		}
+	})
+	branchSessionServiceContentsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("Contents"),
+			Procedure:  BranchSessionServiceContentsProcedure,
+		}
+	})
+	branchSessionServiceCompareSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("Compare"),
+			Procedure:  BranchSessionServiceCompareProcedure,
+		}
+	})
+	branchSessionServiceBlameSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("Blame"),
+			Procedure:  BranchSessionServiceBlameProcedure,
+		}
+	})
+	branchSessionServiceFileDiffSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("FileDiff"),
+			Procedure:  BranchSessionServiceFileDiffProcedure,
+		}
+	})
+	branchSessionServiceCreateTagSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("CreateTag"),
+			Procedure:  BranchSessionServiceCreateTagProcedure,
+		}
+	})
+	branchSessionServiceCreateBranchSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("CreateBranch"),
+			Procedure:  BranchSessionServiceCreateBranchProcedure,
+		}
+	})
+	branchSessionServiceArchiveSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("Archive"),
+			Procedure:  BranchSessionServiceArchiveProcedure,
+		}
+	})
+	branchSessionServiceImportRepoSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ImportRepo"),
+			Procedure:  BranchSessionServiceImportRepoProcedure,
+		}
+	})
+	branchSessionServiceSetPushMirrorSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("SetPushMirror"),
+			Procedure:  BranchSessionServiceSetPushMirrorProcedure,
+		}
+	})
+	branchSessionServiceListPushMirrorsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListPushMirrors"),
+			Procedure:  BranchSessionServiceListPushMirrorsProcedure,
+		}
+	})
+	branchSessionServiceDeletePushMirrorSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("DeletePushMirror"),
+			Procedure:  BranchSessionServiceDeletePushMirrorProcedure,
+		}
+	})
+	branchSessionServiceListMRsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListMRs"),
+			Procedure:  BranchSessionServiceListMRsProcedure,
+		}
+	})
+	branchSessionServiceGetMRSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("GetMR"),
+			Procedure:  BranchSessionServiceGetMRProcedure,
+		}
+	})
+	branchSessionServiceMRDiffSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("MRDiff"),
+			Procedure:  BranchSessionServiceMRDiffProcedure,
+		}
+	})
+	branchSessionServiceListMRCommentsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListMRComments"),
+			Procedure:  BranchSessionServiceListMRCommentsProcedure,
+		}
+	})
+	branchSessionServiceSubmitMRSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("SubmitMR"),
+			Procedure:  BranchSessionServiceSubmitMRProcedure,
+		}
+	})
+	branchSessionServiceCommentMRSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("CommentMR"),
+			Procedure:  BranchSessionServiceCommentMRProcedure,
+		}
+	})
+	branchSessionServiceMergeMRSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("MergeMR"),
+			Procedure:  BranchSessionServiceMergeMRProcedure,
+		}
+	})
+	branchSessionServiceCloseMRSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("CloseMR"),
+			Procedure:  BranchSessionServiceCloseMRProcedure,
+		}
+	})
+	branchSessionServiceListOCIImagesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListOCIImages"),
+			Procedure:  BranchSessionServiceListOCIImagesProcedure,
+		}
+	})
+	branchSessionServiceBuildSandboxImageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("BuildSandboxImage"),
+			Procedure:  BranchSessionServiceBuildSandboxImageProcedure,
+		}
+	})
+	branchSessionServiceGetBuildStatusSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("GetBuildStatus"),
+			Procedure:  BranchSessionServiceGetBuildStatusProcedure,
+		}
+	})
+	branchSessionServiceListBuildsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListBuilds"),
+			Procedure:  BranchSessionServiceListBuildsProcedure,
+		}
+	})
+	branchSessionServiceImportImageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ImportImage"),
+			Procedure:  BranchSessionServiceImportImageProcedure,
+		}
+	})
+	branchSessionServiceListSandboxesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListSandboxes"),
+			Procedure:  BranchSessionServiceListSandboxesProcedure,
+		}
+	})
+	branchSessionServiceCreateSandboxSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("CreateSandbox"),
+			Procedure:  BranchSessionServiceCreateSandboxProcedure,
+		}
+	})
+	branchSessionServiceGetSandboxSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("GetSandbox"),
+			Procedure:  BranchSessionServiceGetSandboxProcedure,
+		}
+	})
+	branchSessionServiceDeleteSandboxSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("DeleteSandbox"),
+			Procedure:  BranchSessionServiceDeleteSandboxProcedure,
+		}
+	})
+	branchSessionServiceResolveSandboxSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ResolveSandbox"),
+			Procedure:  BranchSessionServiceResolveSandboxProcedure,
+		}
+	})
+	branchSessionServiceListSandboxJobsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListSandboxJobs"),
+			Procedure:  BranchSessionServiceListSandboxJobsProcedure,
+		}
+	})
+	branchSessionServiceGetSandboxJobOutputSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("GetSandboxJobOutput"),
+			Procedure:  BranchSessionServiceGetSandboxJobOutputProcedure,
+		}
+	})
+	branchSessionServiceWatchSandboxJobSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("WatchSandboxJob"),
+			Procedure:  BranchSessionServiceWatchSandboxJobProcedure,
+		}
+	})
+	branchSessionServiceListSandboxFilesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListSandboxFiles"),
+			Procedure:  BranchSessionServiceListSandboxFilesProcedure,
+		}
+	})
+	branchSessionServiceReadSandboxFileSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ReadSandboxFile"),
+			Procedure:  BranchSessionServiceReadSandboxFileProcedure,
+		}
+	})
+	branchSessionServiceDeployServiceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("DeployService"),
+			Procedure:  BranchSessionServiceDeployServiceProcedure,
+		}
+	})
+	branchSessionServiceListServicesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListServices"),
+			Procedure:  BranchSessionServiceListServicesProcedure,
+		}
+	})
+	branchSessionServiceDeleteServiceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("DeleteService"),
+			Procedure:  BranchSessionServiceDeleteServiceProcedure,
+		}
+	})
+	branchSessionServicePauseServiceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("PauseService"),
+			Procedure:  BranchSessionServicePauseServiceProcedure,
+		}
+	})
+	branchSessionServiceResumeServiceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ResumeService"),
+			Procedure:  BranchSessionServiceResumeServiceProcedure,
+		}
+	})
+	branchSessionServiceScaleServiceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ScaleService"),
+			Procedure:  BranchSessionServiceScaleServiceProcedure,
+		}
+	})
+	branchSessionServicePromoteServiceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("PromoteService"),
+			Procedure:  BranchSessionServicePromoteServiceProcedure,
+		}
+	})
+	branchSessionServiceRollbackServiceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("RollbackService"),
+			Procedure:  BranchSessionServiceRollbackServiceProcedure,
+		}
+	})
+	branchSessionServiceGetServiceManifestSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("GetServiceManifest"),
+			Procedure:  BranchSessionServiceGetServiceManifestProcedure,
+		}
+	})
+	branchSessionServiceApplyServiceManifestSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ApplyServiceManifest"),
+			Procedure:  BranchSessionServiceApplyServiceManifestProcedure,
+		}
+	})
+	branchSessionServiceCreatePVCSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("CreatePVC"),
+			Procedure:  BranchSessionServiceCreatePVCProcedure,
+		}
+	})
+	branchSessionServiceListPVCsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListPVCs"),
+			Procedure:  BranchSessionServiceListPVCsProcedure,
+		}
+	})
+	branchSessionServiceDeletePVCSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("DeletePVC"),
+			Procedure:  BranchSessionServiceDeletePVCProcedure,
+		}
+	})
+	branchSessionServiceServiceLogsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ServiceLogs"),
+			Procedure:  BranchSessionServiceServiceLogsProcedure,
+		}
+	})
+	branchSessionServiceWatchServiceLogsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("WatchServiceLogs"),
+			Procedure:  BranchSessionServiceWatchServiceLogsProcedure,
+		}
+	})
+	branchSessionServiceSandboxLogsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("SandboxLogs"),
+			Procedure:  BranchSessionServiceSandboxLogsProcedure,
+		}
+	})
+	branchSessionServiceWatchWorkspaceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("WatchWorkspace"),
+			Procedure:  BranchSessionServiceWatchWorkspaceProcedure,
+		}
+	})
+	branchSessionServiceHelmDeploySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("HelmDeploy"),
+			Procedure:  BranchSessionServiceHelmDeployProcedure,
+		}
+	})
+	branchSessionServiceHelmListSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("HelmList"),
+			Procedure:  BranchSessionServiceHelmListProcedure,
+		}
+	})
+	branchSessionServiceHelmHistorySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("HelmHistory"),
+			Procedure:  BranchSessionServiceHelmHistoryProcedure,
+		}
+	})
+	branchSessionServiceHelmRollbackSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("HelmRollback"),
+			Procedure:  BranchSessionServiceHelmRollbackProcedure,
+		}
+	})
+	branchSessionServiceHelmUninstallSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("HelmUninstall"),
+			Procedure:  BranchSessionServiceHelmUninstallProcedure,
+		}
+	})
+	branchSessionServiceHelmPromoteSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("HelmPromote"),
+			Procedure:  BranchSessionServiceHelmPromoteProcedure,
+		}
+	})
+	branchSessionServiceHelmRollbackReleaseSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("HelmRollbackRelease"),
+			Procedure:  BranchSessionServiceHelmRollbackReleaseProcedure,
+		}
+	})
+	branchSessionServiceHelmObjectsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("HelmObjects"),
+			Procedure:  BranchSessionServiceHelmObjectsProcedure,
+		}
+	})
+	branchSessionServiceHelmObjectLogsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("HelmObjectLogs"),
+			Procedure:  BranchSessionServiceHelmObjectLogsProcedure,
+		}
+	})
+	branchSessionServiceHealthSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("Health"),
+			Procedure:  BranchSessionServiceHealthProcedure,
+		}
+	})
+	branchSessionServiceGetIdentitySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("GetIdentity"),
+			Procedure:  BranchSessionServiceGetIdentityProcedure,
+		}
+	})
+	branchSessionServiceListSessionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListSessions"),
+			Procedure:  BranchSessionServiceListSessionsProcedure,
+		}
+	})
+	branchSessionServiceGetSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("GetSession"),
+			Procedure:  BranchSessionServiceGetSessionProcedure,
+		}
+	})
+	branchSessionServiceListMessagesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListMessages"),
+			Procedure:  BranchSessionServiceListMessagesProcedure,
+		}
+	})
+	branchSessionServicePromptSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("Prompt"),
+			Procedure:  BranchSessionServicePromptProcedure,
+		}
+	})
+	branchSessionServiceWatchSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("WatchSession"),
+			Procedure:  BranchSessionServiceWatchSessionProcedure,
+		}
+	})
+	branchSessionServiceWatchSessionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("WatchSessions"),
+			Procedure:  BranchSessionServiceWatchSessionsProcedure,
+		}
+	})
+	branchSessionServiceSetModelSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("SetModel"),
+			Procedure:  BranchSessionServiceSetModelProcedure,
+		}
+	})
+	branchSessionServiceUndoSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("Undo"),
+			Procedure:  BranchSessionServiceUndoProcedure,
+		}
+	})
+	branchSessionServiceMarkReadSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("MarkRead"),
+			Procedure:  BranchSessionServiceMarkReadProcedure,
+		}
+	})
+	branchSessionServiceStateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("State"),
+			Procedure:  BranchSessionServiceStateProcedure,
+		}
+	})
+	branchSessionServiceMailboxSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("Mailbox"),
+			Procedure:  BranchSessionServiceMailboxProcedure,
+		}
+	})
+	branchSessionServiceInterruptSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("Interrupt"),
+			Procedure:  BranchSessionServiceInterruptProcedure,
+		}
+	})
+	branchSessionServiceCompactSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("Compact"),
+			Procedure:  BranchSessionServiceCompactProcedure,
+		}
+	})
+	branchSessionServiceUpdateSettingsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("UpdateSettings"),
+			Procedure:  BranchSessionServiceUpdateSettingsProcedure,
+		}
+	})
+	branchSessionServiceListProvidersSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListProviders"),
+			Procedure:  BranchSessionServiceListProvidersProcedure,
+		}
+	})
+	branchSessionServiceListProvidersCatalogSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListProvidersCatalog"),
+			Procedure:  BranchSessionServiceListProvidersCatalogProcedure,
+		}
+	})
+	branchSessionServiceRegisterProviderSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("RegisterProvider"),
+			Procedure:  BranchSessionServiceRegisterProviderProcedure,
+		}
+	})
+	branchSessionServiceDeleteProviderSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("DeleteProvider"),
+			Procedure:  BranchSessionServiceDeleteProviderProcedure,
+		}
+	})
+	branchSessionServiceTestProviderSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("TestProvider"),
+			Procedure:  BranchSessionServiceTestProviderProcedure,
+		}
+	})
+	branchSessionServiceListModelsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListModels"),
+			Procedure:  BranchSessionServiceListModelsProcedure,
+		}
+	})
+	branchSessionServiceListPresetsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListPresets"),
+			Procedure:  BranchSessionServiceListPresetsProcedure,
+		}
+	})
+	branchSessionServiceGetConfigSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("GetConfig"),
+			Procedure:  BranchSessionServiceGetConfigProcedure,
+		}
+	})
+	branchSessionServiceSetConfigSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("SetConfig"),
+			Procedure:  BranchSessionServiceSetConfigProcedure,
+		}
+	})
+	branchSessionServiceListToolsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("ListTools"),
+			Procedure:  BranchSessionServiceListToolsProcedure,
+		}
+	})
+	branchSessionServiceGetToolConfigSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("GetToolConfig"),
+			Procedure:  BranchSessionServiceGetToolConfigProcedure,
+		}
+	})
+	branchSessionServiceSetToolConfigSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("SetToolConfig"),
+			Procedure:  BranchSessionServiceSetToolConfigProcedure,
+		}
+	})
+	branchSessionServiceSetExtensionConfigSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("SetExtensionConfig"),
+			Procedure:  BranchSessionServiceSetExtensionConfigProcedure,
+		}
+	})
+	branchSessionServiceUploadFileSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("UploadFile"),
+			Procedure:  BranchSessionServiceUploadFileProcedure,
+		}
+	})
+	branchSessionServiceIngestFileSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("IngestFile"),
+			Procedure:  BranchSessionServiceIngestFileProcedure,
+		}
+	})
+	branchSessionServiceGetFileSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("GetFile"),
+			Procedure:  BranchSessionServiceGetFileProcedure,
+		}
+	})
+	branchSessionServiceGetFileMetaSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("GetFileMeta"),
+			Procedure:  BranchSessionServiceGetFileMetaProcedure,
+		}
+	})
+	branchSessionServiceGetFileStreamSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods().ByName("GetFileStream"),
+			Procedure:  BranchSessionServiceGetFileStreamProcedure,
+		}
+	})
 )
 
 // BranchSessionServiceClient is a client for the workspace.v1.BranchSessionService service.
 type BranchSessionServiceClient interface {
 	// branch sessions (repo:branch <-> session, 1:1)
-	EnsureBranchSession(context.Context, *connect.Request[v1.EnsureBranchSessionRequest]) (*connect.Response[v1.EnsureBranchSessionResponse], error)
-	ForkBranchSession(context.Context, *connect.Request[v1.ForkBranchSessionRequest]) (*connect.Response[v1.ForkBranchSessionResponse], error)
-	ListBranchSessions(context.Context, *connect.Request[v1.ListBranchSessionsRequest]) (*connect.Response[v1.ListBranchSessionsResponse], error)
-	GetBranchSession(context.Context, *connect.Request[v1.GetBranchSessionRequest]) (*connect.Response[v1.GetBranchSessionResponse], error)
-	DeleteBranchSession(context.Context, *connect.Request[v1.DeleteBranchSessionRequest]) (*connect.Response[v1.DeleteBranchSessionResponse], error)
+	EnsureBranchSession(context.Context, *v1.EnsureBranchSessionRequest) (*v1.EnsureBranchSessionResponse, error)
+	ForkBranchSession(context.Context, *v1.ForkBranchSessionRequest) (*v1.ForkBranchSessionResponse, error)
+	ListBranchSessions(context.Context, *v1.ListBranchSessionsRequest) (*v1.ListBranchSessionsResponse, error)
+	GetBranchSession(context.Context, *v1.GetBranchSessionRequest) (*v1.GetBranchSessionResponse, error)
+	DeleteBranchSession(context.Context, *v1.DeleteBranchSessionRequest) (*v1.DeleteBranchSessionResponse, error)
 	// DeleteBranch removes a repo branch AND its branch session (session +
 	// sandboxes cascade); requires the branch owner (non-main).
-	DeleteBranch(context.Context, *connect.Request[v1.DeleteBranchRequest]) (*connect.Response[v1.DeleteBranchResponse], error)
+	DeleteBranch(context.Context, *v1.DeleteBranchRequest) (*v1.DeleteBranchResponse, error)
 	// DeleteRepo removes a repo AND all its branch sessions (admin).
-	DeleteRepo(context.Context, *connect.Request[v1.DeleteRepoRequest]) (*connect.Response[v1.DeleteRepoResponse], error)
+	DeleteRepo(context.Context, *v1.DeleteRepoRequest) (*v1.DeleteRepoResponse, error)
 	// standalone sessions
-	CreateFreeSession(context.Context, *connect.Request[v1.CreateFreeSessionRequest]) (*connect.Response[v1.CreateFreeSessionResponse], error)
+	CreateFreeSession(context.Context, *v1.CreateFreeSessionRequest) (*v1.CreateFreeSessionResponse, error)
 	// git browse (read-only) + ensure
-	ListRepos(context.Context, *connect.Request[v1.ListReposRequest]) (*connect.Response[v1.ListReposResponse], error)
-	Tree(context.Context, *connect.Request[v1.TreeRequest]) (*connect.Response[v1.TreeResponse], error)
-	ReadBlob(context.Context, *connect.Request[v1.ReadBlobRequest]) (*connect.Response[v1.ReadBlobResponse], error)
+	ListRepos(context.Context, *v1.ListReposRequest) (*v1.ListReposResponse, error)
+	Tree(context.Context, *v1.TreeRequest) (*v1.TreeResponse, error)
+	ReadBlob(context.Context, *v1.ReadBlobRequest) (*v1.ReadBlobResponse, error)
 	// ReadRaw carries binary bytes so the webui can preview images / PDF / office.
-	ReadRaw(context.Context, *connect.Request[v1.ReadRawRequest]) (*connect.Response[v1.ReadRawResponse], error)
-	Log(context.Context, *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error)
-	Branches(context.Context, *connect.Request[v1.BranchesRequest]) (*connect.Response[v1.BranchesResponse], error)
-	Tags(context.Context, *connect.Request[v1.TagsRequest]) (*connect.Response[v1.TagsResponse], error)
+	ReadRaw(context.Context, *v1.ReadRawRequest) (*v1.ReadRawResponse, error)
+	Log(context.Context, *v1.LogRequest) (*v1.LogResponse, error)
+	Branches(context.Context, *v1.BranchesRequest) (*v1.BranchesResponse, error)
+	Tags(context.Context, *v1.TagsRequest) (*v1.TagsResponse, error)
 	// releases (read-only; assets are proxied by the gateway)
-	ListReleases(context.Context, *connect.Request[v1.ReleasesRequest]) (*connect.Response[v1.ReleasesResponse], error)
-	GetReleaseAsset(context.Context, *connect.Request[v1.ReleaseAssetRequest]) (*connect.Response[v1.ReleaseAssetResponse], error)
+	ListReleases(context.Context, *v1.ReleasesRequest) (*v1.ReleasesResponse, error)
+	GetReleaseAsset(context.Context, *v1.ReleaseAssetRequest) (*v1.ReleaseAssetResponse, error)
 	// commit + diff (read-only)
-	GetCommit(context.Context, *connect.Request[v1.GetCommitRequest]) (*connect.Response[v1.GetCommitResponse], error)
-	CommitDiff(context.Context, *connect.Request[v1.CommitDiffRequest]) (*connect.Response[v1.DiffResponse], error)
-	EnsureRepo(context.Context, *connect.Request[v1.EnsureRepoRequest]) (*connect.Response[v1.EnsureRepoResponse], error)
+	GetCommit(context.Context, *v1.GetCommitRequest) (*v1.GetCommitResponse, error)
+	CommitDiff(context.Context, *v1.CommitDiffRequest) (*v1.DiffResponse, error)
+	EnsureRepo(context.Context, *v1.EnsureRepoRequest) (*v1.EnsureRepoResponse, error)
 	// CreateOrg creates an org owned by the caller's tenant (admin).
-	CreateOrg(context.Context, *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error)
+	CreateOrg(context.Context, *v1.CreateOrgRequest) (*v1.CreateOrgResponse, error)
 	// ListOrgs lists the caller's tenant-owned orgs (incl. empty ones).
-	ListOrgs(context.Context, *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error)
+	ListOrgs(context.Context, *v1.ListOrgsRequest) (*v1.ListOrgsResponse, error)
 	// Tenant-scoped repo operations (the extension's ONLY path to Forgejo).
-	RepoMeta(context.Context, *connect.Request[v1.RepoMetaRequest]) (*connect.Response[v1.RepoMetaResponse], error)
-	Contents(context.Context, *connect.Request[v1.ContentsRequest]) (*connect.Response[v1.ContentsResponse], error)
-	Compare(context.Context, *connect.Request[v1.CompareRequest]) (*connect.Response[v1.CompareResponse], error)
-	Blame(context.Context, *connect.Request[v1.BlameRequest]) (*connect.Response[v1.BlameResponse], error)
-	FileDiff(context.Context, *connect.Request[v1.FileDiffRequest]) (*connect.Response[v1.FileDiffResponse], error)
-	CreateTag(context.Context, *connect.Request[v1.CreateTagRequest]) (*connect.Response[v1.CreateTagResponse], error)
+	RepoMeta(context.Context, *v1.RepoMetaRequest) (*v1.RepoMetaResponse, error)
+	Contents(context.Context, *v1.ContentsRequest) (*v1.ContentsResponse, error)
+	Compare(context.Context, *v1.CompareRequest) (*v1.CompareResponse, error)
+	Blame(context.Context, *v1.BlameRequest) (*v1.BlameResponse, error)
+	FileDiff(context.Context, *v1.FileDiffRequest) (*v1.FileDiffResponse, error)
+	CreateTag(context.Context, *v1.CreateTagRequest) (*v1.CreateTagResponse, error)
 	// CreateBranch is an INTERNAL primitive (no agent tool): it materializes a
 	// branch for a manually-created session (ForkBranchSession / lifecycle). It
 	// creates a ref only — it never changes branch CONTENT.
-	CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error)
-	Archive(context.Context, *connect.Request[v1.ArchiveRequest]) (*connect.Response[v1.ArchiveResponse], error)
+	CreateBranch(context.Context, *v1.CreateBranchRequest) (*v1.CreateBranchResponse, error)
+	Archive(context.Context, *v1.ArchiveRequest) (*v1.ArchiveResponse, error)
 	// ImportRepo migrates an EXTERNAL git repository into an org (admin).
-	ImportRepo(context.Context, *connect.Request[v1.ImportRepoRequest]) (*connect.Response[v1.ImportRepoResponse], error)
+	ImportRepo(context.Context, *v1.ImportRepoRequest) (*v1.ImportRepoResponse, error)
 	// push mirrors (admin): push this repo to external remotes continuously
-	SetPushMirror(context.Context, *connect.Request[v1.SetPushMirrorRequest]) (*connect.Response[v1.SetPushMirrorResponse], error)
-	ListPushMirrors(context.Context, *connect.Request[v1.ListPushMirrorsRequest]) (*connect.Response[v1.ListPushMirrorsResponse], error)
-	DeletePushMirror(context.Context, *connect.Request[v1.DeletePushMirrorRequest]) (*connect.Response[v1.DeletePushMirrorResponse], error)
+	SetPushMirror(context.Context, *v1.SetPushMirrorRequest) (*v1.SetPushMirrorResponse, error)
+	ListPushMirrors(context.Context, *v1.ListPushMirrorsRequest) (*v1.ListPushMirrorsResponse, error)
+	DeletePushMirror(context.Context, *v1.DeletePushMirrorRequest) (*v1.DeletePushMirrorResponse, error)
 	// change requests (read-only in this surface: List/Get/diff/comments)
-	ListMRs(context.Context, *connect.Request[v1.ListMRsRequest]) (*connect.Response[v1.ListMRsResponse], error)
-	GetMR(context.Context, *connect.Request[v1.GetMRRequest]) (*connect.Response[v1.GetMRResponse], error)
-	MRDiff(context.Context, *connect.Request[v1.MRDiffRequest]) (*connect.Response[v1.MRDiffResponse], error)
-	ListMRComments(context.Context, *connect.Request[v1.ListMRCommentsRequest]) (*connect.Response[v1.ListMRCommentsResponse], error)
+	ListMRs(context.Context, *v1.ListMRsRequest) (*v1.ListMRsResponse, error)
+	GetMR(context.Context, *v1.GetMRRequest) (*v1.GetMRResponse, error)
+	MRDiff(context.Context, *v1.MRDiffRequest) (*v1.MRDiffResponse, error)
+	ListMRComments(context.Context, *v1.ListMRCommentsRequest) (*v1.ListMRCommentsResponse, error)
 	// SubmitMR is the ONLY way to change a branch: it materializes the sandbox
 	// diff onto a NEW, immutable `mr/...` head branch and opens an MR into `base`.
-	SubmitMR(context.Context, *connect.Request[v1.SubmitMRRequest]) (*connect.Response[v1.SubmitMRResponse], error)
-	CommentMR(context.Context, *connect.Request[v1.CommentMRRequest]) (*connect.Response[v1.CommentMRResponse], error)
-	MergeMR(context.Context, *connect.Request[v1.MergeMRRequest]) (*connect.Response[v1.MergeMRResponse], error)
+	SubmitMR(context.Context, *v1.SubmitMRRequest) (*v1.SubmitMRResponse, error)
+	CommentMR(context.Context, *v1.CommentMRRequest) (*v1.CommentMRResponse, error)
+	MergeMR(context.Context, *v1.MergeMRRequest) (*v1.MergeMRResponse, error)
 	// CloseMR closes an MR whose base is the caller's own branch and deletes its
 	// `mr/...` head branch.
-	CloseMR(context.Context, *connect.Request[v1.CloseMRRequest]) (*connect.Response[v1.CloseMRResponse], error)
+	CloseMR(context.Context, *v1.CloseMRRequest) (*v1.CloseMRResponse, error)
 	// OCI images
-	ListOCIImages(context.Context, *connect.Request[v1.ListOCIImagesRequest]) (*connect.Response[v1.ListOCIImagesResponse], error)
-	BuildSandboxImage(context.Context, *connect.Request[v1.BuildSandboxImageRequest]) (*connect.Response[v1.BuildSandboxImageResponse], error)
+	ListOCIImages(context.Context, *v1.ListOCIImagesRequest) (*v1.ListOCIImagesResponse, error)
+	BuildSandboxImage(context.Context, *v1.BuildSandboxImageRequest) (*v1.BuildSandboxImageResponse, error)
 	// GetBuildStatus polls a background image build (BuildSandboxImage returns a
 	// build_id immediately; poll this for its state/image_ref/log).
-	GetBuildStatus(context.Context, *connect.Request[v1.GetBuildStatusRequest]) (*connect.Response[v1.GetBuildStatusResponse], error)
-	ListBuilds(context.Context, *connect.Request[v1.ListBuildsRequest]) (*connect.Response[v1.ListBuildsResponse], error)
-	ImportImage(context.Context, *connect.Request[v1.ImportImageRequest]) (*connect.Response[v1.ImportImageResponse], error)
+	GetBuildStatus(context.Context, *v1.GetBuildStatusRequest) (*v1.GetBuildStatusResponse, error)
+	ListBuilds(context.Context, *v1.ListBuildsRequest) (*v1.ListBuildsResponse, error)
+	ImportImage(context.Context, *v1.ImportImageRequest) (*v1.ImportImageResponse, error)
 	// sandboxes
-	ListSandboxes(context.Context, *connect.Request[v1.ListSandboxesRequest]) (*connect.Response[v1.ListSandboxesResponse], error)
-	CreateSandbox(context.Context, *connect.Request[v1.CreateSandboxRequest]) (*connect.Response[v1.CreateSandboxResponse], error)
-	GetSandbox(context.Context, *connect.Request[v1.GetSandboxRequest]) (*connect.Response[v1.GetSandboxResponse], error)
-	DeleteSandbox(context.Context, *connect.Request[v1.DeleteSandboxRequest]) (*connect.Response[v1.DeleteSandboxResponse], error)
-	ResolveSandbox(context.Context, *connect.Request[v1.ResolveSandboxRequest]) (*connect.Response[v1.ResolveSandboxResponse], error)
+	ListSandboxes(context.Context, *v1.ListSandboxesRequest) (*v1.ListSandboxesResponse, error)
+	CreateSandbox(context.Context, *v1.CreateSandboxRequest) (*v1.CreateSandboxResponse, error)
+	GetSandbox(context.Context, *v1.GetSandboxRequest) (*v1.GetSandboxResponse, error)
+	DeleteSandbox(context.Context, *v1.DeleteSandboxRequest) (*v1.DeleteSandboxResponse, error)
+	ResolveSandbox(context.Context, *v1.ResolveSandboxRequest) (*v1.ResolveSandboxResponse, error)
 	// sandbox jobs (read-only observability)
-	ListSandboxJobs(context.Context, *connect.Request[v1.ListSandboxJobsRequest]) (*connect.Response[v1.ListSandboxJobsResponse], error)
-	GetSandboxJobOutput(context.Context, *connect.Request[v1.GetSandboxJobOutputRequest]) (*connect.Response[v1.GetSandboxJobOutputResponse], error)
-	WatchSandboxJob(context.Context, *connect.Request[v1.WatchSandboxJobRequest]) (*connect.ServerStreamForClient[v1.WatchSandboxJobResponse], error)
-	ListSandboxFiles(context.Context, *connect.Request[v1.ListSandboxFilesRequest]) (*connect.Response[v1.ListSandboxFilesResponse], error)
-	ReadSandboxFile(context.Context, *connect.Request[v1.ReadSandboxFileRequest]) (*connect.Response[v1.ReadSandboxFileResponse], error)
+	ListSandboxJobs(context.Context, *v1.ListSandboxJobsRequest) (*v1.ListSandboxJobsResponse, error)
+	GetSandboxJobOutput(context.Context, *v1.GetSandboxJobOutputRequest) (*v1.GetSandboxJobOutputResponse, error)
+	WatchSandboxJob(context.Context, *v1.WatchSandboxJobRequest) (BranchSessionServiceWatchSandboxJobClientStream, error)
+	ListSandboxFiles(context.Context, *v1.ListSandboxFilesRequest) (*v1.ListSandboxFilesResponse, error)
+	ReadSandboxFile(context.Context, *v1.ReadSandboxFileRequest) (*v1.ReadSandboxFileResponse, error)
 	// services (long-lived Deployments)
-	DeployService(context.Context, *connect.Request[v1.DeployServiceRequest]) (*connect.Response[v1.DeployServiceResponse], error)
-	ListServices(context.Context, *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error)
-	DeleteService(context.Context, *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error)
-	PauseService(context.Context, *connect.Request[v1.PauseServiceRequest]) (*connect.Response[v1.PauseServiceResponse], error)
-	ResumeService(context.Context, *connect.Request[v1.ResumeServiceRequest]) (*connect.Response[v1.ResumeServiceResponse], error)
+	DeployService(context.Context, *v1.DeployServiceRequest) (*v1.DeployServiceResponse, error)
+	ListServices(context.Context, *v1.ListServicesRequest) (*v1.ListServicesResponse, error)
+	DeleteService(context.Context, *v1.DeleteServiceRequest) (*v1.DeleteServiceResponse, error)
+	PauseService(context.Context, *v1.PauseServiceRequest) (*v1.PauseServiceResponse, error)
+	ResumeService(context.Context, *v1.ResumeServiceRequest) (*v1.ResumeServiceResponse, error)
 	// ScaleService sets the desired replica count (0 = scaled down).
-	ScaleService(context.Context, *connect.Request[v1.ScaleServiceRequest]) (*connect.Response[v1.ScaleServiceResponse], error)
+	ScaleService(context.Context, *v1.ScaleServiceRequest) (*v1.ScaleServiceResponse, error)
 	// PromoteService / RollbackService: blue-green slot switch.
-	PromoteService(context.Context, *connect.Request[v1.PromoteServiceRequest]) (*connect.Response[v1.PromoteServiceResponse], error)
-	RollbackService(context.Context, *connect.Request[v1.RollbackServiceRequest]) (*connect.Response[v1.RollbackServiceResponse], error)
+	PromoteService(context.Context, *v1.PromoteServiceRequest) (*v1.PromoteServiceResponse, error)
+	RollbackService(context.Context, *v1.RollbackServiceRequest) (*v1.RollbackServiceResponse, error)
 	// GetServiceManifest returns the Deployment + Services as YAML (read-only).
-	GetServiceManifest(context.Context, *connect.Request[v1.GetServiceManifestRequest]) (*connect.Response[v1.GetServiceManifestResponse], error)
+	GetServiceManifest(context.Context, *v1.GetServiceManifestRequest) (*v1.GetServiceManifestResponse, error)
 	// ApplyServiceManifest replaces a service from edited YAML (owner-only).
-	ApplyServiceManifest(context.Context, *connect.Request[v1.ApplyServiceManifestRequest]) (*connect.Response[v1.ApplyServiceManifestResponse], error)
+	ApplyServiceManifest(context.Context, *v1.ApplyServiceManifestRequest) (*v1.ApplyServiceManifestResponse, error)
 	// Persistent volume claims (admin-managed storage for services).
-	CreatePVC(context.Context, *connect.Request[v1.CreatePVCRequest]) (*connect.Response[v1.CreatePVCResponse], error)
-	ListPVCs(context.Context, *connect.Request[v1.ListPVCsRequest]) (*connect.Response[v1.ListPVCsResponse], error)
-	DeletePVC(context.Context, *connect.Request[v1.DeletePVCRequest]) (*connect.Response[v1.DeletePVCResponse], error)
+	CreatePVC(context.Context, *v1.CreatePVCRequest) (*v1.CreatePVCResponse, error)
+	ListPVCs(context.Context, *v1.ListPVCsRequest) (*v1.ListPVCsResponse, error)
+	DeletePVC(context.Context, *v1.DeletePVCRequest) (*v1.DeletePVCResponse, error)
 	// service logs (read a service's container logs; seam for a log backend)
-	ServiceLogs(context.Context, *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error)
-	WatchServiceLogs(context.Context, *connect.Request[v1.WatchServiceLogsRequest]) (*connect.ServerStreamForClient[v1.WatchServiceLogsResponse], error)
+	ServiceLogs(context.Context, *v1.ServiceLogsRequest) (*v1.ServiceLogsResponse, error)
+	WatchServiceLogs(context.Context, *v1.WatchServiceLogsRequest) (BranchSessionServiceWatchServiceLogsClientStream, error)
 	// sandbox logs (read a sandbox pod's container logs; `previous` = the
 	// crashed/OOM-killed instance). Read-only observability for the webui; NOT
 	// exposed as an agent tool.
-	SandboxLogs(context.Context, *connect.Request[v1.SandboxLogsRequest]) (*connect.Response[v1.SandboxLogsResponse], error)
+	SandboxLogs(context.Context, *v1.SandboxLogsRequest) (*v1.SandboxLogsResponse, error)
 	// WatchWorkspace streams the tenant's sandboxes/services/PVCs live.
-	WatchWorkspace(context.Context, *connect.Request[v1.WatchWorkspaceRequest]) (*connect.ServerStreamForClient[v1.WatchWorkspaceResponse], error)
+	WatchWorkspace(context.Context, *v1.WatchWorkspaceRequest) (BranchSessionServiceWatchWorkspaceClientStream, error)
 	// ---- Helm ----
-	HelmDeploy(context.Context, *connect.Request[v1.HelmDeployRequest]) (*connect.Response[v1.HelmDeployResponse], error)
-	HelmList(context.Context, *connect.Request[v1.HelmListRequest]) (*connect.Response[v1.HelmListResponse], error)
-	HelmHistory(context.Context, *connect.Request[v1.HelmHistoryRequest]) (*connect.Response[v1.HelmHistoryResponse], error)
-	HelmRollback(context.Context, *connect.Request[v1.HelmRollbackRequest]) (*connect.Response[v1.HelmRollbackResponse], error)
-	HelmUninstall(context.Context, *connect.Request[v1.HelmUninstallRequest]) (*connect.Response[v1.HelmUninstallResponse], error)
+	HelmDeploy(context.Context, *v1.HelmDeployRequest) (*v1.HelmDeployResponse, error)
+	HelmList(context.Context, *v1.HelmListRequest) (*v1.HelmListResponse, error)
+	HelmHistory(context.Context, *v1.HelmHistoryRequest) (*v1.HelmHistoryResponse, error)
+	HelmRollback(context.Context, *v1.HelmRollbackRequest) (*v1.HelmRollbackResponse, error)
+	HelmUninstall(context.Context, *v1.HelmUninstallRequest) (*v1.HelmUninstallResponse, error)
 	// Blue-green slot switch for a Helm release.
-	HelmPromote(context.Context, *connect.Request[v1.HelmPromoteRequest]) (*connect.Response[v1.HelmPromoteResponse], error)
-	HelmRollbackRelease(context.Context, *connect.Request[v1.HelmRollbackReleaseRequest]) (*connect.Response[v1.HelmRollbackReleaseResponse], error)
+	HelmPromote(context.Context, *v1.HelmPromoteRequest) (*v1.HelmPromoteResponse, error)
+	HelmRollbackRelease(context.Context, *v1.HelmRollbackReleaseRequest) (*v1.HelmRollbackReleaseResponse, error)
 	// Live per-object status + logs of a release (so a UI/tool can show each
 	// deployed workload/pod, and read one pod's log).
-	HelmObjects(context.Context, *connect.Request[v1.HelmObjectsRequest]) (*connect.Response[v1.HelmObjectsResponse], error)
-	HelmObjectLogs(context.Context, *connect.Request[v1.HelmObjectLogsRequest]) (*connect.Response[v1.HelmObjectLogsResponse], error)
+	HelmObjects(context.Context, *v1.HelmObjectsRequest) (*v1.HelmObjectsResponse, error)
+	HelmObjectLogs(context.Context, *v1.HelmObjectLogsRequest) (*v1.HelmObjectLogsResponse, error)
 	// ---- forwarded agent surface (minimal; no policy RPCs) ----
-	Health(context.Context, *connect.Request[v11.HealthRequest]) (*connect.Response[v11.HealthResponse], error)
-	GetIdentity(context.Context, *connect.Request[v11.GetIdentityRequest]) (*connect.Response[v11.GetIdentityResponse], error)
-	ListSessions(context.Context, *connect.Request[v11.ListSessionsRequest]) (*connect.Response[v11.ListSessionsResponse], error)
-	GetSession(context.Context, *connect.Request[v11.GetSessionRequest]) (*connect.Response[v11.GetSessionResponse], error)
+	Health(context.Context, *v11.HealthRequest) (*v11.HealthResponse, error)
+	GetIdentity(context.Context, *v11.GetIdentityRequest) (*v11.GetIdentityResponse, error)
+	ListSessions(context.Context, *v11.ListSessionsRequest) (*v11.ListSessionsResponse, error)
+	GetSession(context.Context, *v11.GetSessionRequest) (*v11.GetSessionResponse, error)
 	// NOTE: session deletion is NOT forwarded verbatim. Use DeleteBranchSession
 	// (the single, authorized, cascading entry point) so ownership is checked and
 	// sandboxes/free-session rows are reclaimed consistently.
-	ListMessages(context.Context, *connect.Request[v11.ListMessagesRequest]) (*connect.Response[v11.ListMessagesResponse], error)
-	Prompt(context.Context, *connect.Request[v11.PromptRequest]) (*connect.ServerStreamForClient[v11.PromptResponse], error)
-	WatchSession(context.Context, *connect.Request[v11.WatchSessionRequest]) (*connect.ServerStreamForClient[v11.WatchSessionResponse], error)
-	WatchSessions(context.Context, *connect.Request[v11.WatchSessionsRequest]) (*connect.ServerStreamForClient[v11.WatchSessionsResponse], error)
-	SetModel(context.Context, *connect.Request[v11.SetModelRequest]) (*connect.Response[v11.SetModelResponse], error)
-	Undo(context.Context, *connect.Request[v11.UndoRequest]) (*connect.Response[v11.UndoResponse], error)
-	MarkRead(context.Context, *connect.Request[v11.MarkReadRequest]) (*connect.Response[v11.MarkReadResponse], error)
-	State(context.Context, *connect.Request[v11.StateRequest]) (*connect.Response[v11.StateResponse], error)
-	Mailbox(context.Context, *connect.Request[v11.MailboxRequest]) (*connect.Response[v11.MailboxResponse], error)
-	Interrupt(context.Context, *connect.Request[v11.InterruptRequest]) (*connect.Response[v11.InterruptResponse], error)
-	Compact(context.Context, *connect.Request[v11.CompactRequest]) (*connect.Response[v11.CompactResponse], error)
+	ListMessages(context.Context, *v11.ListMessagesRequest) (*v11.ListMessagesResponse, error)
+	Prompt(context.Context, *v11.PromptRequest) (BranchSessionServicePromptClientStream, error)
+	WatchSession(context.Context, *v11.WatchSessionRequest) (BranchSessionServiceWatchSessionClientStream, error)
+	WatchSessions(context.Context, *v11.WatchSessionsRequest) (BranchSessionServiceWatchSessionsClientStream, error)
+	SetModel(context.Context, *v11.SetModelRequest) (*v11.SetModelResponse, error)
+	Undo(context.Context, *v11.UndoRequest) (*v11.UndoResponse, error)
+	MarkRead(context.Context, *v11.MarkReadRequest) (*v11.MarkReadResponse, error)
+	State(context.Context, *v11.StateRequest) (*v11.StateResponse, error)
+	Mailbox(context.Context, *v11.MailboxRequest) (*v11.MailboxResponse, error)
+	Interrupt(context.Context, *v11.InterruptRequest) (*v11.InterruptResponse, error)
+	Compact(context.Context, *v11.CompactRequest) (*v11.CompactResponse, error)
 	// settings (narrowed)
-	UpdateSettings(context.Context, *connect.Request[v1.UpdateSettingsRequest]) (*connect.Response[v1.UpdateSettingsResponse], error)
+	UpdateSettings(context.Context, *v1.UpdateSettingsRequest) (*v1.UpdateSettingsResponse, error)
 	// models + providers (per-tenant config)
-	ListProviders(context.Context, *connect.Request[v11.ListProvidersRequest]) (*connect.Response[v11.ListProvidersResponse], error)
-	ListProvidersCatalog(context.Context, *connect.Request[v11.ListProvidersCatalogRequest]) (*connect.Response[v11.ListProvidersCatalogResponse], error)
-	RegisterProvider(context.Context, *connect.Request[v11.RegisterProviderRequest]) (*connect.Response[v11.RegisterProviderResponse], error)
-	DeleteProvider(context.Context, *connect.Request[v11.DeleteProviderRequest]) (*connect.Response[v11.DeleteProviderResponse], error)
-	TestProvider(context.Context, *connect.Request[v11.TestProviderRequest]) (*connect.Response[v11.TestProviderResponse], error)
-	ListModels(context.Context, *connect.Request[v11.ListModelsRequest]) (*connect.Response[v11.ListModelsResponse], error)
+	ListProviders(context.Context, *v11.ListProvidersRequest) (*v11.ListProvidersResponse, error)
+	ListProvidersCatalog(context.Context, *v11.ListProvidersCatalogRequest) (*v11.ListProvidersCatalogResponse, error)
+	RegisterProvider(context.Context, *v11.RegisterProviderRequest) (*v11.RegisterProviderResponse, error)
+	DeleteProvider(context.Context, *v11.DeleteProviderRequest) (*v11.DeleteProviderResponse, error)
+	TestProvider(context.Context, *v11.TestProviderRequest) (*v11.TestProviderResponse, error)
+	ListModels(context.Context, *v11.ListModelsRequest) (*v11.ListModelsResponse, error)
 	// presets (READ-ONLY: no upsert/delete)
-	ListPresets(context.Context, *connect.Request[v11.ListPresetsRequest]) (*connect.Response[v11.ListPresetsResponse], error)
+	ListPresets(context.Context, *v11.ListPresetsRequest) (*v11.ListPresetsResponse, error)
 	// config + tools (per-tenant config)
-	GetConfig(context.Context, *connect.Request[v11.GetConfigRequest]) (*connect.Response[v11.GetConfigResponse], error)
-	SetConfig(context.Context, *connect.Request[v11.SetConfigRequest]) (*connect.Response[v11.SetConfigResponse], error)
-	ListTools(context.Context, *connect.Request[v11.ListToolsRequest]) (*connect.Response[v11.ListToolsResponse], error)
-	GetToolConfig(context.Context, *connect.Request[v11.GetToolConfigRequest]) (*connect.Response[v11.GetToolConfigResponse], error)
-	SetToolConfig(context.Context, *connect.Request[v11.SetToolConfigRequest]) (*connect.Response[v11.SetToolConfigResponse], error)
-	SetExtensionConfig(context.Context, *connect.Request[v11.SetExtensionConfigRequest]) (*connect.Response[v11.SetExtensionConfigResponse], error)
+	GetConfig(context.Context, *v11.GetConfigRequest) (*v11.GetConfigResponse, error)
+	SetConfig(context.Context, *v11.SetConfigRequest) (*v11.SetConfigResponse, error)
+	ListTools(context.Context, *v11.ListToolsRequest) (*v11.ListToolsResponse, error)
+	GetToolConfig(context.Context, *v11.GetToolConfigRequest) (*v11.GetToolConfigResponse, error)
+	SetToolConfig(context.Context, *v11.SetToolConfigRequest) (*v11.SetToolConfigResponse, error)
+	SetExtensionConfig(context.Context, *v11.SetExtensionConfigRequest) (*v11.SetExtensionConfigResponse, error)
 	// files
-	UploadFile(context.Context, *connect.Request[v11.UploadFileRequest]) (*connect.Response[v11.UploadFileResponse], error)
-	IngestFile(context.Context, *connect.Request[v11.IngestFileRequest]) (*connect.Response[v11.IngestFileResponse], error)
-	GetFile(context.Context, *connect.Request[v11.GetFileRequest]) (*connect.Response[v11.GetFileResponse], error)
-	GetFileMeta(context.Context, *connect.Request[v11.GetFileMetaRequest]) (*connect.Response[v11.GetFileMetaResponse], error)
-	GetFileStream(context.Context, *connect.Request[v11.GetFileRequest]) (*connect.ServerStreamForClient[v11.FileChunk], error)
+	UploadFile(context.Context, *v11.UploadFileRequest) (*v11.UploadFileResponse, error)
+	IngestFile(context.Context, *v11.IngestFileRequest) (*v11.IngestFileResponse, error)
+	GetFile(context.Context, *v11.GetFileRequest) (*v11.GetFileResponse, error)
+	GetFileMeta(context.Context, *v11.GetFileMetaRequest) (*v11.GetFileMetaResponse, error)
+	GetFileStream(context.Context, *v11.GetFileRequest) (BranchSessionServiceGetFileStreamClientStream, error)
 }
 
 // NewBranchSessionServiceClient constructs a client for the workspace.v1.BranchSessionService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewBranchSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BranchSessionServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	branchSessionServiceMethods := v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods()
-	return &branchSessionServiceClient{
-		ensureBranchSession: connect.NewClient[v1.EnsureBranchSessionRequest, v1.EnsureBranchSessionResponse](
-			httpClient,
-			baseURL+BranchSessionServiceEnsureBranchSessionProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("EnsureBranchSession")),
-			connect.WithClientOptions(opts...),
-		),
-		forkBranchSession: connect.NewClient[v1.ForkBranchSessionRequest, v1.ForkBranchSessionResponse](
-			httpClient,
-			baseURL+BranchSessionServiceForkBranchSessionProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ForkBranchSession")),
-			connect.WithClientOptions(opts...),
-		),
-		listBranchSessions: connect.NewClient[v1.ListBranchSessionsRequest, v1.ListBranchSessionsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListBranchSessionsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListBranchSessions")),
-			connect.WithClientOptions(opts...),
-		),
-		getBranchSession: connect.NewClient[v1.GetBranchSessionRequest, v1.GetBranchSessionResponse](
-			httpClient,
-			baseURL+BranchSessionServiceGetBranchSessionProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("GetBranchSession")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteBranchSession: connect.NewClient[v1.DeleteBranchSessionRequest, v1.DeleteBranchSessionResponse](
-			httpClient,
-			baseURL+BranchSessionServiceDeleteBranchSessionProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("DeleteBranchSession")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteBranch: connect.NewClient[v1.DeleteBranchRequest, v1.DeleteBranchResponse](
-			httpClient,
-			baseURL+BranchSessionServiceDeleteBranchProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("DeleteBranch")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteRepo: connect.NewClient[v1.DeleteRepoRequest, v1.DeleteRepoResponse](
-			httpClient,
-			baseURL+BranchSessionServiceDeleteRepoProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("DeleteRepo")),
-			connect.WithClientOptions(opts...),
-		),
-		createFreeSession: connect.NewClient[v1.CreateFreeSessionRequest, v1.CreateFreeSessionResponse](
-			httpClient,
-			baseURL+BranchSessionServiceCreateFreeSessionProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("CreateFreeSession")),
-			connect.WithClientOptions(opts...),
-		),
-		listRepos: connect.NewClient[v1.ListReposRequest, v1.ListReposResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListReposProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListRepos")),
-			connect.WithClientOptions(opts...),
-		),
-		tree: connect.NewClient[v1.TreeRequest, v1.TreeResponse](
-			httpClient,
-			baseURL+BranchSessionServiceTreeProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("Tree")),
-			connect.WithClientOptions(opts...),
-		),
-		readBlob: connect.NewClient[v1.ReadBlobRequest, v1.ReadBlobResponse](
-			httpClient,
-			baseURL+BranchSessionServiceReadBlobProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ReadBlob")),
-			connect.WithClientOptions(opts...),
-		),
-		readRaw: connect.NewClient[v1.ReadRawRequest, v1.ReadRawResponse](
-			httpClient,
-			baseURL+BranchSessionServiceReadRawProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ReadRaw")),
-			connect.WithClientOptions(opts...),
-		),
-		log: connect.NewClient[v1.LogRequest, v1.LogResponse](
-			httpClient,
-			baseURL+BranchSessionServiceLogProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("Log")),
-			connect.WithClientOptions(opts...),
-		),
-		branches: connect.NewClient[v1.BranchesRequest, v1.BranchesResponse](
-			httpClient,
-			baseURL+BranchSessionServiceBranchesProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("Branches")),
-			connect.WithClientOptions(opts...),
-		),
-		tags: connect.NewClient[v1.TagsRequest, v1.TagsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceTagsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("Tags")),
-			connect.WithClientOptions(opts...),
-		),
-		listReleases: connect.NewClient[v1.ReleasesRequest, v1.ReleasesResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListReleasesProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListReleases")),
-			connect.WithClientOptions(opts...),
-		),
-		getReleaseAsset: connect.NewClient[v1.ReleaseAssetRequest, v1.ReleaseAssetResponse](
-			httpClient,
-			baseURL+BranchSessionServiceGetReleaseAssetProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("GetReleaseAsset")),
-			connect.WithClientOptions(opts...),
-		),
-		getCommit: connect.NewClient[v1.GetCommitRequest, v1.GetCommitResponse](
-			httpClient,
-			baseURL+BranchSessionServiceGetCommitProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("GetCommit")),
-			connect.WithClientOptions(opts...),
-		),
-		commitDiff: connect.NewClient[v1.CommitDiffRequest, v1.DiffResponse](
-			httpClient,
-			baseURL+BranchSessionServiceCommitDiffProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("CommitDiff")),
-			connect.WithClientOptions(opts...),
-		),
-		ensureRepo: connect.NewClient[v1.EnsureRepoRequest, v1.EnsureRepoResponse](
-			httpClient,
-			baseURL+BranchSessionServiceEnsureRepoProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("EnsureRepo")),
-			connect.WithClientOptions(opts...),
-		),
-		createOrg: connect.NewClient[v1.CreateOrgRequest, v1.CreateOrgResponse](
-			httpClient,
-			baseURL+BranchSessionServiceCreateOrgProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("CreateOrg")),
-			connect.WithClientOptions(opts...),
-		),
-		listOrgs: connect.NewClient[v1.ListOrgsRequest, v1.ListOrgsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListOrgsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListOrgs")),
-			connect.WithClientOptions(opts...),
-		),
-		repoMeta: connect.NewClient[v1.RepoMetaRequest, v1.RepoMetaResponse](
-			httpClient,
-			baseURL+BranchSessionServiceRepoMetaProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("RepoMeta")),
-			connect.WithClientOptions(opts...),
-		),
-		contents: connect.NewClient[v1.ContentsRequest, v1.ContentsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceContentsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("Contents")),
-			connect.WithClientOptions(opts...),
-		),
-		compare: connect.NewClient[v1.CompareRequest, v1.CompareResponse](
-			httpClient,
-			baseURL+BranchSessionServiceCompareProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("Compare")),
-			connect.WithClientOptions(opts...),
-		),
-		blame: connect.NewClient[v1.BlameRequest, v1.BlameResponse](
-			httpClient,
-			baseURL+BranchSessionServiceBlameProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("Blame")),
-			connect.WithClientOptions(opts...),
-		),
-		fileDiff: connect.NewClient[v1.FileDiffRequest, v1.FileDiffResponse](
-			httpClient,
-			baseURL+BranchSessionServiceFileDiffProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("FileDiff")),
-			connect.WithClientOptions(opts...),
-		),
-		createTag: connect.NewClient[v1.CreateTagRequest, v1.CreateTagResponse](
-			httpClient,
-			baseURL+BranchSessionServiceCreateTagProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("CreateTag")),
-			connect.WithClientOptions(opts...),
-		),
-		createBranch: connect.NewClient[v1.CreateBranchRequest, v1.CreateBranchResponse](
-			httpClient,
-			baseURL+BranchSessionServiceCreateBranchProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("CreateBranch")),
-			connect.WithClientOptions(opts...),
-		),
-		archive: connect.NewClient[v1.ArchiveRequest, v1.ArchiveResponse](
-			httpClient,
-			baseURL+BranchSessionServiceArchiveProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("Archive")),
-			connect.WithClientOptions(opts...),
-		),
-		importRepo: connect.NewClient[v1.ImportRepoRequest, v1.ImportRepoResponse](
-			httpClient,
-			baseURL+BranchSessionServiceImportRepoProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ImportRepo")),
-			connect.WithClientOptions(opts...),
-		),
-		setPushMirror: connect.NewClient[v1.SetPushMirrorRequest, v1.SetPushMirrorResponse](
-			httpClient,
-			baseURL+BranchSessionServiceSetPushMirrorProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("SetPushMirror")),
-			connect.WithClientOptions(opts...),
-		),
-		listPushMirrors: connect.NewClient[v1.ListPushMirrorsRequest, v1.ListPushMirrorsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListPushMirrorsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListPushMirrors")),
-			connect.WithClientOptions(opts...),
-		),
-		deletePushMirror: connect.NewClient[v1.DeletePushMirrorRequest, v1.DeletePushMirrorResponse](
-			httpClient,
-			baseURL+BranchSessionServiceDeletePushMirrorProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("DeletePushMirror")),
-			connect.WithClientOptions(opts...),
-		),
-		listMRs: connect.NewClient[v1.ListMRsRequest, v1.ListMRsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListMRsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListMRs")),
-			connect.WithClientOptions(opts...),
-		),
-		getMR: connect.NewClient[v1.GetMRRequest, v1.GetMRResponse](
-			httpClient,
-			baseURL+BranchSessionServiceGetMRProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("GetMR")),
-			connect.WithClientOptions(opts...),
-		),
-		mRDiff: connect.NewClient[v1.MRDiffRequest, v1.MRDiffResponse](
-			httpClient,
-			baseURL+BranchSessionServiceMRDiffProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("MRDiff")),
-			connect.WithClientOptions(opts...),
-		),
-		listMRComments: connect.NewClient[v1.ListMRCommentsRequest, v1.ListMRCommentsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListMRCommentsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListMRComments")),
-			connect.WithClientOptions(opts...),
-		),
-		submitMR: connect.NewClient[v1.SubmitMRRequest, v1.SubmitMRResponse](
-			httpClient,
-			baseURL+BranchSessionServiceSubmitMRProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("SubmitMR")),
-			connect.WithClientOptions(opts...),
-		),
-		commentMR: connect.NewClient[v1.CommentMRRequest, v1.CommentMRResponse](
-			httpClient,
-			baseURL+BranchSessionServiceCommentMRProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("CommentMR")),
-			connect.WithClientOptions(opts...),
-		),
-		mergeMR: connect.NewClient[v1.MergeMRRequest, v1.MergeMRResponse](
-			httpClient,
-			baseURL+BranchSessionServiceMergeMRProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("MergeMR")),
-			connect.WithClientOptions(opts...),
-		),
-		closeMR: connect.NewClient[v1.CloseMRRequest, v1.CloseMRResponse](
-			httpClient,
-			baseURL+BranchSessionServiceCloseMRProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("CloseMR")),
-			connect.WithClientOptions(opts...),
-		),
-		listOCIImages: connect.NewClient[v1.ListOCIImagesRequest, v1.ListOCIImagesResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListOCIImagesProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListOCIImages")),
-			connect.WithClientOptions(opts...),
-		),
-		buildSandboxImage: connect.NewClient[v1.BuildSandboxImageRequest, v1.BuildSandboxImageResponse](
-			httpClient,
-			baseURL+BranchSessionServiceBuildSandboxImageProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("BuildSandboxImage")),
-			connect.WithClientOptions(opts...),
-		),
-		getBuildStatus: connect.NewClient[v1.GetBuildStatusRequest, v1.GetBuildStatusResponse](
-			httpClient,
-			baseURL+BranchSessionServiceGetBuildStatusProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("GetBuildStatus")),
-			connect.WithClientOptions(opts...),
-		),
-		listBuilds: connect.NewClient[v1.ListBuildsRequest, v1.ListBuildsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListBuildsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListBuilds")),
-			connect.WithClientOptions(opts...),
-		),
-		importImage: connect.NewClient[v1.ImportImageRequest, v1.ImportImageResponse](
-			httpClient,
-			baseURL+BranchSessionServiceImportImageProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ImportImage")),
-			connect.WithClientOptions(opts...),
-		),
-		listSandboxes: connect.NewClient[v1.ListSandboxesRequest, v1.ListSandboxesResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListSandboxesProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListSandboxes")),
-			connect.WithClientOptions(opts...),
-		),
-		createSandbox: connect.NewClient[v1.CreateSandboxRequest, v1.CreateSandboxResponse](
-			httpClient,
-			baseURL+BranchSessionServiceCreateSandboxProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("CreateSandbox")),
-			connect.WithClientOptions(opts...),
-		),
-		getSandbox: connect.NewClient[v1.GetSandboxRequest, v1.GetSandboxResponse](
-			httpClient,
-			baseURL+BranchSessionServiceGetSandboxProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("GetSandbox")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteSandbox: connect.NewClient[v1.DeleteSandboxRequest, v1.DeleteSandboxResponse](
-			httpClient,
-			baseURL+BranchSessionServiceDeleteSandboxProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("DeleteSandbox")),
-			connect.WithClientOptions(opts...),
-		),
-		resolveSandbox: connect.NewClient[v1.ResolveSandboxRequest, v1.ResolveSandboxResponse](
-			httpClient,
-			baseURL+BranchSessionServiceResolveSandboxProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ResolveSandbox")),
-			connect.WithClientOptions(opts...),
-		),
-		listSandboxJobs: connect.NewClient[v1.ListSandboxJobsRequest, v1.ListSandboxJobsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListSandboxJobsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListSandboxJobs")),
-			connect.WithClientOptions(opts...),
-		),
-		getSandboxJobOutput: connect.NewClient[v1.GetSandboxJobOutputRequest, v1.GetSandboxJobOutputResponse](
-			httpClient,
-			baseURL+BranchSessionServiceGetSandboxJobOutputProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("GetSandboxJobOutput")),
-			connect.WithClientOptions(opts...),
-		),
-		watchSandboxJob: connect.NewClient[v1.WatchSandboxJobRequest, v1.WatchSandboxJobResponse](
-			httpClient,
-			baseURL+BranchSessionServiceWatchSandboxJobProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("WatchSandboxJob")),
-			connect.WithClientOptions(opts...),
-		),
-		listSandboxFiles: connect.NewClient[v1.ListSandboxFilesRequest, v1.ListSandboxFilesResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListSandboxFilesProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListSandboxFiles")),
-			connect.WithClientOptions(opts...),
-		),
-		readSandboxFile: connect.NewClient[v1.ReadSandboxFileRequest, v1.ReadSandboxFileResponse](
-			httpClient,
-			baseURL+BranchSessionServiceReadSandboxFileProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ReadSandboxFile")),
-			connect.WithClientOptions(opts...),
-		),
-		deployService: connect.NewClient[v1.DeployServiceRequest, v1.DeployServiceResponse](
-			httpClient,
-			baseURL+BranchSessionServiceDeployServiceProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("DeployService")),
-			connect.WithClientOptions(opts...),
-		),
-		listServices: connect.NewClient[v1.ListServicesRequest, v1.ListServicesResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListServicesProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListServices")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteService: connect.NewClient[v1.DeleteServiceRequest, v1.DeleteServiceResponse](
-			httpClient,
-			baseURL+BranchSessionServiceDeleteServiceProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("DeleteService")),
-			connect.WithClientOptions(opts...),
-		),
-		pauseService: connect.NewClient[v1.PauseServiceRequest, v1.PauseServiceResponse](
-			httpClient,
-			baseURL+BranchSessionServicePauseServiceProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("PauseService")),
-			connect.WithClientOptions(opts...),
-		),
-		resumeService: connect.NewClient[v1.ResumeServiceRequest, v1.ResumeServiceResponse](
-			httpClient,
-			baseURL+BranchSessionServiceResumeServiceProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ResumeService")),
-			connect.WithClientOptions(opts...),
-		),
-		scaleService: connect.NewClient[v1.ScaleServiceRequest, v1.ScaleServiceResponse](
-			httpClient,
-			baseURL+BranchSessionServiceScaleServiceProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ScaleService")),
-			connect.WithClientOptions(opts...),
-		),
-		promoteService: connect.NewClient[v1.PromoteServiceRequest, v1.PromoteServiceResponse](
-			httpClient,
-			baseURL+BranchSessionServicePromoteServiceProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("PromoteService")),
-			connect.WithClientOptions(opts...),
-		),
-		rollbackService: connect.NewClient[v1.RollbackServiceRequest, v1.RollbackServiceResponse](
-			httpClient,
-			baseURL+BranchSessionServiceRollbackServiceProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("RollbackService")),
-			connect.WithClientOptions(opts...),
-		),
-		getServiceManifest: connect.NewClient[v1.GetServiceManifestRequest, v1.GetServiceManifestResponse](
-			httpClient,
-			baseURL+BranchSessionServiceGetServiceManifestProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("GetServiceManifest")),
-			connect.WithClientOptions(opts...),
-		),
-		applyServiceManifest: connect.NewClient[v1.ApplyServiceManifestRequest, v1.ApplyServiceManifestResponse](
-			httpClient,
-			baseURL+BranchSessionServiceApplyServiceManifestProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ApplyServiceManifest")),
-			connect.WithClientOptions(opts...),
-		),
-		createPVC: connect.NewClient[v1.CreatePVCRequest, v1.CreatePVCResponse](
-			httpClient,
-			baseURL+BranchSessionServiceCreatePVCProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("CreatePVC")),
-			connect.WithClientOptions(opts...),
-		),
-		listPVCs: connect.NewClient[v1.ListPVCsRequest, v1.ListPVCsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListPVCsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListPVCs")),
-			connect.WithClientOptions(opts...),
-		),
-		deletePVC: connect.NewClient[v1.DeletePVCRequest, v1.DeletePVCResponse](
-			httpClient,
-			baseURL+BranchSessionServiceDeletePVCProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("DeletePVC")),
-			connect.WithClientOptions(opts...),
-		),
-		serviceLogs: connect.NewClient[v1.ServiceLogsRequest, v1.ServiceLogsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceServiceLogsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ServiceLogs")),
-			connect.WithClientOptions(opts...),
-		),
-		watchServiceLogs: connect.NewClient[v1.WatchServiceLogsRequest, v1.WatchServiceLogsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceWatchServiceLogsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("WatchServiceLogs")),
-			connect.WithClientOptions(opts...),
-		),
-		sandboxLogs: connect.NewClient[v1.SandboxLogsRequest, v1.SandboxLogsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceSandboxLogsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("SandboxLogs")),
-			connect.WithClientOptions(opts...),
-		),
-		watchWorkspace: connect.NewClient[v1.WatchWorkspaceRequest, v1.WatchWorkspaceResponse](
-			httpClient,
-			baseURL+BranchSessionServiceWatchWorkspaceProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("WatchWorkspace")),
-			connect.WithClientOptions(opts...),
-		),
-		helmDeploy: connect.NewClient[v1.HelmDeployRequest, v1.HelmDeployResponse](
-			httpClient,
-			baseURL+BranchSessionServiceHelmDeployProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("HelmDeploy")),
-			connect.WithClientOptions(opts...),
-		),
-		helmList: connect.NewClient[v1.HelmListRequest, v1.HelmListResponse](
-			httpClient,
-			baseURL+BranchSessionServiceHelmListProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("HelmList")),
-			connect.WithClientOptions(opts...),
-		),
-		helmHistory: connect.NewClient[v1.HelmHistoryRequest, v1.HelmHistoryResponse](
-			httpClient,
-			baseURL+BranchSessionServiceHelmHistoryProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("HelmHistory")),
-			connect.WithClientOptions(opts...),
-		),
-		helmRollback: connect.NewClient[v1.HelmRollbackRequest, v1.HelmRollbackResponse](
-			httpClient,
-			baseURL+BranchSessionServiceHelmRollbackProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("HelmRollback")),
-			connect.WithClientOptions(opts...),
-		),
-		helmUninstall: connect.NewClient[v1.HelmUninstallRequest, v1.HelmUninstallResponse](
-			httpClient,
-			baseURL+BranchSessionServiceHelmUninstallProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("HelmUninstall")),
-			connect.WithClientOptions(opts...),
-		),
-		helmPromote: connect.NewClient[v1.HelmPromoteRequest, v1.HelmPromoteResponse](
-			httpClient,
-			baseURL+BranchSessionServiceHelmPromoteProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("HelmPromote")),
-			connect.WithClientOptions(opts...),
-		),
-		helmRollbackRelease: connect.NewClient[v1.HelmRollbackReleaseRequest, v1.HelmRollbackReleaseResponse](
-			httpClient,
-			baseURL+BranchSessionServiceHelmRollbackReleaseProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("HelmRollbackRelease")),
-			connect.WithClientOptions(opts...),
-		),
-		helmObjects: connect.NewClient[v1.HelmObjectsRequest, v1.HelmObjectsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceHelmObjectsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("HelmObjects")),
-			connect.WithClientOptions(opts...),
-		),
-		helmObjectLogs: connect.NewClient[v1.HelmObjectLogsRequest, v1.HelmObjectLogsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceHelmObjectLogsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("HelmObjectLogs")),
-			connect.WithClientOptions(opts...),
-		),
-		health: connect.NewClient[v11.HealthRequest, v11.HealthResponse](
-			httpClient,
-			baseURL+BranchSessionServiceHealthProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("Health")),
-			connect.WithClientOptions(opts...),
-		),
-		getIdentity: connect.NewClient[v11.GetIdentityRequest, v11.GetIdentityResponse](
-			httpClient,
-			baseURL+BranchSessionServiceGetIdentityProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("GetIdentity")),
-			connect.WithClientOptions(opts...),
-		),
-		listSessions: connect.NewClient[v11.ListSessionsRequest, v11.ListSessionsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListSessionsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListSessions")),
-			connect.WithClientOptions(opts...),
-		),
-		getSession: connect.NewClient[v11.GetSessionRequest, v11.GetSessionResponse](
-			httpClient,
-			baseURL+BranchSessionServiceGetSessionProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("GetSession")),
-			connect.WithClientOptions(opts...),
-		),
-		listMessages: connect.NewClient[v11.ListMessagesRequest, v11.ListMessagesResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListMessagesProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListMessages")),
-			connect.WithClientOptions(opts...),
-		),
-		prompt: connect.NewClient[v11.PromptRequest, v11.PromptResponse](
-			httpClient,
-			baseURL+BranchSessionServicePromptProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("Prompt")),
-			connect.WithClientOptions(opts...),
-		),
-		watchSession: connect.NewClient[v11.WatchSessionRequest, v11.WatchSessionResponse](
-			httpClient,
-			baseURL+BranchSessionServiceWatchSessionProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("WatchSession")),
-			connect.WithClientOptions(opts...),
-		),
-		watchSessions: connect.NewClient[v11.WatchSessionsRequest, v11.WatchSessionsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceWatchSessionsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("WatchSessions")),
-			connect.WithClientOptions(opts...),
-		),
-		setModel: connect.NewClient[v11.SetModelRequest, v11.SetModelResponse](
-			httpClient,
-			baseURL+BranchSessionServiceSetModelProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("SetModel")),
-			connect.WithClientOptions(opts...),
-		),
-		undo: connect.NewClient[v11.UndoRequest, v11.UndoResponse](
-			httpClient,
-			baseURL+BranchSessionServiceUndoProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("Undo")),
-			connect.WithClientOptions(opts...),
-		),
-		markRead: connect.NewClient[v11.MarkReadRequest, v11.MarkReadResponse](
-			httpClient,
-			baseURL+BranchSessionServiceMarkReadProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("MarkRead")),
-			connect.WithClientOptions(opts...),
-		),
-		state: connect.NewClient[v11.StateRequest, v11.StateResponse](
-			httpClient,
-			baseURL+BranchSessionServiceStateProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("State")),
-			connect.WithClientOptions(opts...),
-		),
-		mailbox: connect.NewClient[v11.MailboxRequest, v11.MailboxResponse](
-			httpClient,
-			baseURL+BranchSessionServiceMailboxProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("Mailbox")),
-			connect.WithClientOptions(opts...),
-		),
-		interrupt: connect.NewClient[v11.InterruptRequest, v11.InterruptResponse](
-			httpClient,
-			baseURL+BranchSessionServiceInterruptProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("Interrupt")),
-			connect.WithClientOptions(opts...),
-		),
-		compact: connect.NewClient[v11.CompactRequest, v11.CompactResponse](
-			httpClient,
-			baseURL+BranchSessionServiceCompactProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("Compact")),
-			connect.WithClientOptions(opts...),
-		),
-		updateSettings: connect.NewClient[v1.UpdateSettingsRequest, v1.UpdateSettingsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceUpdateSettingsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("UpdateSettings")),
-			connect.WithClientOptions(opts...),
-		),
-		listProviders: connect.NewClient[v11.ListProvidersRequest, v11.ListProvidersResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListProvidersProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListProviders")),
-			connect.WithClientOptions(opts...),
-		),
-		listProvidersCatalog: connect.NewClient[v11.ListProvidersCatalogRequest, v11.ListProvidersCatalogResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListProvidersCatalogProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListProvidersCatalog")),
-			connect.WithClientOptions(opts...),
-		),
-		registerProvider: connect.NewClient[v11.RegisterProviderRequest, v11.RegisterProviderResponse](
-			httpClient,
-			baseURL+BranchSessionServiceRegisterProviderProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("RegisterProvider")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteProvider: connect.NewClient[v11.DeleteProviderRequest, v11.DeleteProviderResponse](
-			httpClient,
-			baseURL+BranchSessionServiceDeleteProviderProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("DeleteProvider")),
-			connect.WithClientOptions(opts...),
-		),
-		testProvider: connect.NewClient[v11.TestProviderRequest, v11.TestProviderResponse](
-			httpClient,
-			baseURL+BranchSessionServiceTestProviderProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("TestProvider")),
-			connect.WithClientOptions(opts...),
-		),
-		listModels: connect.NewClient[v11.ListModelsRequest, v11.ListModelsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListModelsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListModels")),
-			connect.WithClientOptions(opts...),
-		),
-		listPresets: connect.NewClient[v11.ListPresetsRequest, v11.ListPresetsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListPresetsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListPresets")),
-			connect.WithClientOptions(opts...),
-		),
-		getConfig: connect.NewClient[v11.GetConfigRequest, v11.GetConfigResponse](
-			httpClient,
-			baseURL+BranchSessionServiceGetConfigProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("GetConfig")),
-			connect.WithClientOptions(opts...),
-		),
-		setConfig: connect.NewClient[v11.SetConfigRequest, v11.SetConfigResponse](
-			httpClient,
-			baseURL+BranchSessionServiceSetConfigProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("SetConfig")),
-			connect.WithClientOptions(opts...),
-		),
-		listTools: connect.NewClient[v11.ListToolsRequest, v11.ListToolsResponse](
-			httpClient,
-			baseURL+BranchSessionServiceListToolsProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("ListTools")),
-			connect.WithClientOptions(opts...),
-		),
-		getToolConfig: connect.NewClient[v11.GetToolConfigRequest, v11.GetToolConfigResponse](
-			httpClient,
-			baseURL+BranchSessionServiceGetToolConfigProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("GetToolConfig")),
-			connect.WithClientOptions(opts...),
-		),
-		setToolConfig: connect.NewClient[v11.SetToolConfigRequest, v11.SetToolConfigResponse](
-			httpClient,
-			baseURL+BranchSessionServiceSetToolConfigProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("SetToolConfig")),
-			connect.WithClientOptions(opts...),
-		),
-		setExtensionConfig: connect.NewClient[v11.SetExtensionConfigRequest, v11.SetExtensionConfigResponse](
-			httpClient,
-			baseURL+BranchSessionServiceSetExtensionConfigProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("SetExtensionConfig")),
-			connect.WithClientOptions(opts...),
-		),
-		uploadFile: connect.NewClient[v11.UploadFileRequest, v11.UploadFileResponse](
-			httpClient,
-			baseURL+BranchSessionServiceUploadFileProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("UploadFile")),
-			connect.WithClientOptions(opts...),
-		),
-		ingestFile: connect.NewClient[v11.IngestFileRequest, v11.IngestFileResponse](
-			httpClient,
-			baseURL+BranchSessionServiceIngestFileProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("IngestFile")),
-			connect.WithClientOptions(opts...),
-		),
-		getFile: connect.NewClient[v11.GetFileRequest, v11.GetFileResponse](
-			httpClient,
-			baseURL+BranchSessionServiceGetFileProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("GetFile")),
-			connect.WithClientOptions(opts...),
-		),
-		getFileMeta: connect.NewClient[v11.GetFileMetaRequest, v11.GetFileMetaResponse](
-			httpClient,
-			baseURL+BranchSessionServiceGetFileMetaProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("GetFileMeta")),
-			connect.WithClientOptions(opts...),
-		),
-		getFileStream: connect.NewClient[v11.GetFileRequest, v11.FileChunk](
-			httpClient,
-			baseURL+BranchSessionServiceGetFileStreamProcedure,
-			connect.WithSchema(branchSessionServiceMethods.ByName("GetFileStream")),
-			connect.WithClientOptions(opts...),
-		),
+// service. Multiple service clients may share a single connect.Client.
+func NewBranchSessionServiceClient(client *connect.Client) BranchSessionServiceClient {
+	return &branchSessionServiceClient{client: client}
+}
+
+// BranchSessionServiceWatchSandboxJobClientStream is the client stream for the
+// BranchSessionService's WatchSandboxJob RPC.
+type BranchSessionServiceWatchSandboxJobClientStream struct {
+	stream connect.ClientStream
+}
+
+// Receive returns the next response message from the server.
+func (s BranchSessionServiceWatchSandboxJobClientStream) Receive() (*v1.WatchSandboxJobResponse, error) {
+	var res v1.WatchSandboxJobResponse
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
 	}
+	return &res, nil
 }
 
-// branchSessionServiceClient implements BranchSessionServiceClient.
-type branchSessionServiceClient struct {
-	ensureBranchSession  *connect.Client[v1.EnsureBranchSessionRequest, v1.EnsureBranchSessionResponse]
-	forkBranchSession    *connect.Client[v1.ForkBranchSessionRequest, v1.ForkBranchSessionResponse]
-	listBranchSessions   *connect.Client[v1.ListBranchSessionsRequest, v1.ListBranchSessionsResponse]
-	getBranchSession     *connect.Client[v1.GetBranchSessionRequest, v1.GetBranchSessionResponse]
-	deleteBranchSession  *connect.Client[v1.DeleteBranchSessionRequest, v1.DeleteBranchSessionResponse]
-	deleteBranch         *connect.Client[v1.DeleteBranchRequest, v1.DeleteBranchResponse]
-	deleteRepo           *connect.Client[v1.DeleteRepoRequest, v1.DeleteRepoResponse]
-	createFreeSession    *connect.Client[v1.CreateFreeSessionRequest, v1.CreateFreeSessionResponse]
-	listRepos            *connect.Client[v1.ListReposRequest, v1.ListReposResponse]
-	tree                 *connect.Client[v1.TreeRequest, v1.TreeResponse]
-	readBlob             *connect.Client[v1.ReadBlobRequest, v1.ReadBlobResponse]
-	readRaw              *connect.Client[v1.ReadRawRequest, v1.ReadRawResponse]
-	log                  *connect.Client[v1.LogRequest, v1.LogResponse]
-	branches             *connect.Client[v1.BranchesRequest, v1.BranchesResponse]
-	tags                 *connect.Client[v1.TagsRequest, v1.TagsResponse]
-	listReleases         *connect.Client[v1.ReleasesRequest, v1.ReleasesResponse]
-	getReleaseAsset      *connect.Client[v1.ReleaseAssetRequest, v1.ReleaseAssetResponse]
-	getCommit            *connect.Client[v1.GetCommitRequest, v1.GetCommitResponse]
-	commitDiff           *connect.Client[v1.CommitDiffRequest, v1.DiffResponse]
-	ensureRepo           *connect.Client[v1.EnsureRepoRequest, v1.EnsureRepoResponse]
-	createOrg            *connect.Client[v1.CreateOrgRequest, v1.CreateOrgResponse]
-	listOrgs             *connect.Client[v1.ListOrgsRequest, v1.ListOrgsResponse]
-	repoMeta             *connect.Client[v1.RepoMetaRequest, v1.RepoMetaResponse]
-	contents             *connect.Client[v1.ContentsRequest, v1.ContentsResponse]
-	compare              *connect.Client[v1.CompareRequest, v1.CompareResponse]
-	blame                *connect.Client[v1.BlameRequest, v1.BlameResponse]
-	fileDiff             *connect.Client[v1.FileDiffRequest, v1.FileDiffResponse]
-	createTag            *connect.Client[v1.CreateTagRequest, v1.CreateTagResponse]
-	createBranch         *connect.Client[v1.CreateBranchRequest, v1.CreateBranchResponse]
-	archive              *connect.Client[v1.ArchiveRequest, v1.ArchiveResponse]
-	importRepo           *connect.Client[v1.ImportRepoRequest, v1.ImportRepoResponse]
-	setPushMirror        *connect.Client[v1.SetPushMirrorRequest, v1.SetPushMirrorResponse]
-	listPushMirrors      *connect.Client[v1.ListPushMirrorsRequest, v1.ListPushMirrorsResponse]
-	deletePushMirror     *connect.Client[v1.DeletePushMirrorRequest, v1.DeletePushMirrorResponse]
-	listMRs              *connect.Client[v1.ListMRsRequest, v1.ListMRsResponse]
-	getMR                *connect.Client[v1.GetMRRequest, v1.GetMRResponse]
-	mRDiff               *connect.Client[v1.MRDiffRequest, v1.MRDiffResponse]
-	listMRComments       *connect.Client[v1.ListMRCommentsRequest, v1.ListMRCommentsResponse]
-	submitMR             *connect.Client[v1.SubmitMRRequest, v1.SubmitMRResponse]
-	commentMR            *connect.Client[v1.CommentMRRequest, v1.CommentMRResponse]
-	mergeMR              *connect.Client[v1.MergeMRRequest, v1.MergeMRResponse]
-	closeMR              *connect.Client[v1.CloseMRRequest, v1.CloseMRResponse]
-	listOCIImages        *connect.Client[v1.ListOCIImagesRequest, v1.ListOCIImagesResponse]
-	buildSandboxImage    *connect.Client[v1.BuildSandboxImageRequest, v1.BuildSandboxImageResponse]
-	getBuildStatus       *connect.Client[v1.GetBuildStatusRequest, v1.GetBuildStatusResponse]
-	listBuilds           *connect.Client[v1.ListBuildsRequest, v1.ListBuildsResponse]
-	importImage          *connect.Client[v1.ImportImageRequest, v1.ImportImageResponse]
-	listSandboxes        *connect.Client[v1.ListSandboxesRequest, v1.ListSandboxesResponse]
-	createSandbox        *connect.Client[v1.CreateSandboxRequest, v1.CreateSandboxResponse]
-	getSandbox           *connect.Client[v1.GetSandboxRequest, v1.GetSandboxResponse]
-	deleteSandbox        *connect.Client[v1.DeleteSandboxRequest, v1.DeleteSandboxResponse]
-	resolveSandbox       *connect.Client[v1.ResolveSandboxRequest, v1.ResolveSandboxResponse]
-	listSandboxJobs      *connect.Client[v1.ListSandboxJobsRequest, v1.ListSandboxJobsResponse]
-	getSandboxJobOutput  *connect.Client[v1.GetSandboxJobOutputRequest, v1.GetSandboxJobOutputResponse]
-	watchSandboxJob      *connect.Client[v1.WatchSandboxJobRequest, v1.WatchSandboxJobResponse]
-	listSandboxFiles     *connect.Client[v1.ListSandboxFilesRequest, v1.ListSandboxFilesResponse]
-	readSandboxFile      *connect.Client[v1.ReadSandboxFileRequest, v1.ReadSandboxFileResponse]
-	deployService        *connect.Client[v1.DeployServiceRequest, v1.DeployServiceResponse]
-	listServices         *connect.Client[v1.ListServicesRequest, v1.ListServicesResponse]
-	deleteService        *connect.Client[v1.DeleteServiceRequest, v1.DeleteServiceResponse]
-	pauseService         *connect.Client[v1.PauseServiceRequest, v1.PauseServiceResponse]
-	resumeService        *connect.Client[v1.ResumeServiceRequest, v1.ResumeServiceResponse]
-	scaleService         *connect.Client[v1.ScaleServiceRequest, v1.ScaleServiceResponse]
-	promoteService       *connect.Client[v1.PromoteServiceRequest, v1.PromoteServiceResponse]
-	rollbackService      *connect.Client[v1.RollbackServiceRequest, v1.RollbackServiceResponse]
-	getServiceManifest   *connect.Client[v1.GetServiceManifestRequest, v1.GetServiceManifestResponse]
-	applyServiceManifest *connect.Client[v1.ApplyServiceManifestRequest, v1.ApplyServiceManifestResponse]
-	createPVC            *connect.Client[v1.CreatePVCRequest, v1.CreatePVCResponse]
-	listPVCs             *connect.Client[v1.ListPVCsRequest, v1.ListPVCsResponse]
-	deletePVC            *connect.Client[v1.DeletePVCRequest, v1.DeletePVCResponse]
-	serviceLogs          *connect.Client[v1.ServiceLogsRequest, v1.ServiceLogsResponse]
-	watchServiceLogs     *connect.Client[v1.WatchServiceLogsRequest, v1.WatchServiceLogsResponse]
-	sandboxLogs          *connect.Client[v1.SandboxLogsRequest, v1.SandboxLogsResponse]
-	watchWorkspace       *connect.Client[v1.WatchWorkspaceRequest, v1.WatchWorkspaceResponse]
-	helmDeploy           *connect.Client[v1.HelmDeployRequest, v1.HelmDeployResponse]
-	helmList             *connect.Client[v1.HelmListRequest, v1.HelmListResponse]
-	helmHistory          *connect.Client[v1.HelmHistoryRequest, v1.HelmHistoryResponse]
-	helmRollback         *connect.Client[v1.HelmRollbackRequest, v1.HelmRollbackResponse]
-	helmUninstall        *connect.Client[v1.HelmUninstallRequest, v1.HelmUninstallResponse]
-	helmPromote          *connect.Client[v1.HelmPromoteRequest, v1.HelmPromoteResponse]
-	helmRollbackRelease  *connect.Client[v1.HelmRollbackReleaseRequest, v1.HelmRollbackReleaseResponse]
-	helmObjects          *connect.Client[v1.HelmObjectsRequest, v1.HelmObjectsResponse]
-	helmObjectLogs       *connect.Client[v1.HelmObjectLogsRequest, v1.HelmObjectLogsResponse]
-	health               *connect.Client[v11.HealthRequest, v11.HealthResponse]
-	getIdentity          *connect.Client[v11.GetIdentityRequest, v11.GetIdentityResponse]
-	listSessions         *connect.Client[v11.ListSessionsRequest, v11.ListSessionsResponse]
-	getSession           *connect.Client[v11.GetSessionRequest, v11.GetSessionResponse]
-	listMessages         *connect.Client[v11.ListMessagesRequest, v11.ListMessagesResponse]
-	prompt               *connect.Client[v11.PromptRequest, v11.PromptResponse]
-	watchSession         *connect.Client[v11.WatchSessionRequest, v11.WatchSessionResponse]
-	watchSessions        *connect.Client[v11.WatchSessionsRequest, v11.WatchSessionsResponse]
-	setModel             *connect.Client[v11.SetModelRequest, v11.SetModelResponse]
-	undo                 *connect.Client[v11.UndoRequest, v11.UndoResponse]
-	markRead             *connect.Client[v11.MarkReadRequest, v11.MarkReadResponse]
-	state                *connect.Client[v11.StateRequest, v11.StateResponse]
-	mailbox              *connect.Client[v11.MailboxRequest, v11.MailboxResponse]
-	interrupt            *connect.Client[v11.InterruptRequest, v11.InterruptResponse]
-	compact              *connect.Client[v11.CompactRequest, v11.CompactResponse]
-	updateSettings       *connect.Client[v1.UpdateSettingsRequest, v1.UpdateSettingsResponse]
-	listProviders        *connect.Client[v11.ListProvidersRequest, v11.ListProvidersResponse]
-	listProvidersCatalog *connect.Client[v11.ListProvidersCatalogRequest, v11.ListProvidersCatalogResponse]
-	registerProvider     *connect.Client[v11.RegisterProviderRequest, v11.RegisterProviderResponse]
-	deleteProvider       *connect.Client[v11.DeleteProviderRequest, v11.DeleteProviderResponse]
-	testProvider         *connect.Client[v11.TestProviderRequest, v11.TestProviderResponse]
-	listModels           *connect.Client[v11.ListModelsRequest, v11.ListModelsResponse]
-	listPresets          *connect.Client[v11.ListPresetsRequest, v11.ListPresetsResponse]
-	getConfig            *connect.Client[v11.GetConfigRequest, v11.GetConfigResponse]
-	setConfig            *connect.Client[v11.SetConfigRequest, v11.SetConfigResponse]
-	listTools            *connect.Client[v11.ListToolsRequest, v11.ListToolsResponse]
-	getToolConfig        *connect.Client[v11.GetToolConfigRequest, v11.GetToolConfigResponse]
-	setToolConfig        *connect.Client[v11.SetToolConfigRequest, v11.SetToolConfigResponse]
-	setExtensionConfig   *connect.Client[v11.SetExtensionConfigRequest, v11.SetExtensionConfigResponse]
-	uploadFile           *connect.Client[v11.UploadFileRequest, v11.UploadFileResponse]
-	ingestFile           *connect.Client[v11.IngestFileRequest, v11.IngestFileResponse]
-	getFile              *connect.Client[v11.GetFileRequest, v11.GetFileResponse]
-	getFileMeta          *connect.Client[v11.GetFileMetaRequest, v11.GetFileMetaResponse]
-	getFileStream        *connect.Client[v11.GetFileRequest, v11.FileChunk]
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s BranchSessionServiceWatchSandboxJobClientStream) Close() error {
+	return s.stream.Close()
 }
 
-// EnsureBranchSession calls workspace.v1.BranchSessionService.EnsureBranchSession.
-func (c *branchSessionServiceClient) EnsureBranchSession(ctx context.Context, req *connect.Request[v1.EnsureBranchSessionRequest]) (*connect.Response[v1.EnsureBranchSessionResponse], error) {
-	return c.ensureBranchSession.CallUnary(ctx, req)
+// BranchSessionServiceWatchServiceLogsClientStream is the client stream for the
+// BranchSessionService's WatchServiceLogs RPC.
+type BranchSessionServiceWatchServiceLogsClientStream struct {
+	stream connect.ClientStream
 }
 
-// ForkBranchSession calls workspace.v1.BranchSessionService.ForkBranchSession.
-func (c *branchSessionServiceClient) ForkBranchSession(ctx context.Context, req *connect.Request[v1.ForkBranchSessionRequest]) (*connect.Response[v1.ForkBranchSessionResponse], error) {
-	return c.forkBranchSession.CallUnary(ctx, req)
+// Receive returns the next response message from the server.
+func (s BranchSessionServiceWatchServiceLogsClientStream) Receive() (*v1.WatchServiceLogsResponse, error) {
+	var res v1.WatchServiceLogsResponse
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
-// ListBranchSessions calls workspace.v1.BranchSessionService.ListBranchSessions.
-func (c *branchSessionServiceClient) ListBranchSessions(ctx context.Context, req *connect.Request[v1.ListBranchSessionsRequest]) (*connect.Response[v1.ListBranchSessionsResponse], error) {
-	return c.listBranchSessions.CallUnary(ctx, req)
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s BranchSessionServiceWatchServiceLogsClientStream) Close() error {
+	return s.stream.Close()
 }
 
-// GetBranchSession calls workspace.v1.BranchSessionService.GetBranchSession.
-func (c *branchSessionServiceClient) GetBranchSession(ctx context.Context, req *connect.Request[v1.GetBranchSessionRequest]) (*connect.Response[v1.GetBranchSessionResponse], error) {
-	return c.getBranchSession.CallUnary(ctx, req)
+// BranchSessionServiceWatchWorkspaceClientStream is the client stream for the
+// BranchSessionService's WatchWorkspace RPC.
+type BranchSessionServiceWatchWorkspaceClientStream struct {
+	stream connect.ClientStream
 }
 
-// DeleteBranchSession calls workspace.v1.BranchSessionService.DeleteBranchSession.
-func (c *branchSessionServiceClient) DeleteBranchSession(ctx context.Context, req *connect.Request[v1.DeleteBranchSessionRequest]) (*connect.Response[v1.DeleteBranchSessionResponse], error) {
-	return c.deleteBranchSession.CallUnary(ctx, req)
+// Receive returns the next response message from the server.
+func (s BranchSessionServiceWatchWorkspaceClientStream) Receive() (*v1.WatchWorkspaceResponse, error) {
+	var res v1.WatchWorkspaceResponse
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
-// DeleteBranch calls workspace.v1.BranchSessionService.DeleteBranch.
-func (c *branchSessionServiceClient) DeleteBranch(ctx context.Context, req *connect.Request[v1.DeleteBranchRequest]) (*connect.Response[v1.DeleteBranchResponse], error) {
-	return c.deleteBranch.CallUnary(ctx, req)
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s BranchSessionServiceWatchWorkspaceClientStream) Close() error {
+	return s.stream.Close()
 }
 
-// DeleteRepo calls workspace.v1.BranchSessionService.DeleteRepo.
-func (c *branchSessionServiceClient) DeleteRepo(ctx context.Context, req *connect.Request[v1.DeleteRepoRequest]) (*connect.Response[v1.DeleteRepoResponse], error) {
-	return c.deleteRepo.CallUnary(ctx, req)
+// BranchSessionServicePromptClientStream is the client stream for the BranchSessionService's Prompt
+// RPC.
+type BranchSessionServicePromptClientStream struct {
+	stream connect.ClientStream
 }
 
-// CreateFreeSession calls workspace.v1.BranchSessionService.CreateFreeSession.
-func (c *branchSessionServiceClient) CreateFreeSession(ctx context.Context, req *connect.Request[v1.CreateFreeSessionRequest]) (*connect.Response[v1.CreateFreeSessionResponse], error) {
-	return c.createFreeSession.CallUnary(ctx, req)
+// Receive returns the next response message from the server.
+func (s BranchSessionServicePromptClientStream) Receive() (*v11.PromptResponse, error) {
+	var res v11.PromptResponse
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
-// ListRepos calls workspace.v1.BranchSessionService.ListRepos.
-func (c *branchSessionServiceClient) ListRepos(ctx context.Context, req *connect.Request[v1.ListReposRequest]) (*connect.Response[v1.ListReposResponse], error) {
-	return c.listRepos.CallUnary(ctx, req)
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s BranchSessionServicePromptClientStream) Close() error {
+	return s.stream.Close()
 }
 
-// Tree calls workspace.v1.BranchSessionService.Tree.
-func (c *branchSessionServiceClient) Tree(ctx context.Context, req *connect.Request[v1.TreeRequest]) (*connect.Response[v1.TreeResponse], error) {
-	return c.tree.CallUnary(ctx, req)
+// BranchSessionServiceWatchSessionClientStream is the client stream for the BranchSessionService's
+// WatchSession RPC.
+type BranchSessionServiceWatchSessionClientStream struct {
+	stream connect.ClientStream
 }
 
-// ReadBlob calls workspace.v1.BranchSessionService.ReadBlob.
-func (c *branchSessionServiceClient) ReadBlob(ctx context.Context, req *connect.Request[v1.ReadBlobRequest]) (*connect.Response[v1.ReadBlobResponse], error) {
-	return c.readBlob.CallUnary(ctx, req)
+// Receive returns the next response message from the server.
+func (s BranchSessionServiceWatchSessionClientStream) Receive() (*v11.WatchSessionResponse, error) {
+	var res v11.WatchSessionResponse
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
-// ReadRaw calls workspace.v1.BranchSessionService.ReadRaw.
-func (c *branchSessionServiceClient) ReadRaw(ctx context.Context, req *connect.Request[v1.ReadRawRequest]) (*connect.Response[v1.ReadRawResponse], error) {
-	return c.readRaw.CallUnary(ctx, req)
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s BranchSessionServiceWatchSessionClientStream) Close() error {
+	return s.stream.Close()
 }
 
-// Log calls workspace.v1.BranchSessionService.Log.
-func (c *branchSessionServiceClient) Log(ctx context.Context, req *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error) {
-	return c.log.CallUnary(ctx, req)
+// BranchSessionServiceWatchSessionsClientStream is the client stream for the BranchSessionService's
+// WatchSessions RPC.
+type BranchSessionServiceWatchSessionsClientStream struct {
+	stream connect.ClientStream
 }
 
-// Branches calls workspace.v1.BranchSessionService.Branches.
-func (c *branchSessionServiceClient) Branches(ctx context.Context, req *connect.Request[v1.BranchesRequest]) (*connect.Response[v1.BranchesResponse], error) {
-	return c.branches.CallUnary(ctx, req)
-}
-
-// Tags calls workspace.v1.BranchSessionService.Tags.
-func (c *branchSessionServiceClient) Tags(ctx context.Context, req *connect.Request[v1.TagsRequest]) (*connect.Response[v1.TagsResponse], error) {
-	return c.tags.CallUnary(ctx, req)
-}
-
-// ListReleases calls workspace.v1.BranchSessionService.ListReleases.
-func (c *branchSessionServiceClient) ListReleases(ctx context.Context, req *connect.Request[v1.ReleasesRequest]) (*connect.Response[v1.ReleasesResponse], error) {
-	return c.listReleases.CallUnary(ctx, req)
-}
-
-// GetReleaseAsset calls workspace.v1.BranchSessionService.GetReleaseAsset.
-func (c *branchSessionServiceClient) GetReleaseAsset(ctx context.Context, req *connect.Request[v1.ReleaseAssetRequest]) (*connect.Response[v1.ReleaseAssetResponse], error) {
-	return c.getReleaseAsset.CallUnary(ctx, req)
-}
-
-// GetCommit calls workspace.v1.BranchSessionService.GetCommit.
-func (c *branchSessionServiceClient) GetCommit(ctx context.Context, req *connect.Request[v1.GetCommitRequest]) (*connect.Response[v1.GetCommitResponse], error) {
-	return c.getCommit.CallUnary(ctx, req)
-}
-
-// CommitDiff calls workspace.v1.BranchSessionService.CommitDiff.
-func (c *branchSessionServiceClient) CommitDiff(ctx context.Context, req *connect.Request[v1.CommitDiffRequest]) (*connect.Response[v1.DiffResponse], error) {
-	return c.commitDiff.CallUnary(ctx, req)
-}
-
-// EnsureRepo calls workspace.v1.BranchSessionService.EnsureRepo.
-func (c *branchSessionServiceClient) EnsureRepo(ctx context.Context, req *connect.Request[v1.EnsureRepoRequest]) (*connect.Response[v1.EnsureRepoResponse], error) {
-	return c.ensureRepo.CallUnary(ctx, req)
-}
-
-// CreateOrg calls workspace.v1.BranchSessionService.CreateOrg.
-func (c *branchSessionServiceClient) CreateOrg(ctx context.Context, req *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error) {
-	return c.createOrg.CallUnary(ctx, req)
-}
-
-// ListOrgs calls workspace.v1.BranchSessionService.ListOrgs.
-func (c *branchSessionServiceClient) ListOrgs(ctx context.Context, req *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error) {
-	return c.listOrgs.CallUnary(ctx, req)
-}
-
-// RepoMeta calls workspace.v1.BranchSessionService.RepoMeta.
-func (c *branchSessionServiceClient) RepoMeta(ctx context.Context, req *connect.Request[v1.RepoMetaRequest]) (*connect.Response[v1.RepoMetaResponse], error) {
-	return c.repoMeta.CallUnary(ctx, req)
-}
-
-// Contents calls workspace.v1.BranchSessionService.Contents.
-func (c *branchSessionServiceClient) Contents(ctx context.Context, req *connect.Request[v1.ContentsRequest]) (*connect.Response[v1.ContentsResponse], error) {
-	return c.contents.CallUnary(ctx, req)
-}
-
-// Compare calls workspace.v1.BranchSessionService.Compare.
-func (c *branchSessionServiceClient) Compare(ctx context.Context, req *connect.Request[v1.CompareRequest]) (*connect.Response[v1.CompareResponse], error) {
-	return c.compare.CallUnary(ctx, req)
-}
-
-// Blame calls workspace.v1.BranchSessionService.Blame.
-func (c *branchSessionServiceClient) Blame(ctx context.Context, req *connect.Request[v1.BlameRequest]) (*connect.Response[v1.BlameResponse], error) {
-	return c.blame.CallUnary(ctx, req)
-}
-
-// FileDiff calls workspace.v1.BranchSessionService.FileDiff.
-func (c *branchSessionServiceClient) FileDiff(ctx context.Context, req *connect.Request[v1.FileDiffRequest]) (*connect.Response[v1.FileDiffResponse], error) {
-	return c.fileDiff.CallUnary(ctx, req)
-}
-
-// CreateTag calls workspace.v1.BranchSessionService.CreateTag.
-func (c *branchSessionServiceClient) CreateTag(ctx context.Context, req *connect.Request[v1.CreateTagRequest]) (*connect.Response[v1.CreateTagResponse], error) {
-	return c.createTag.CallUnary(ctx, req)
-}
-
-// CreateBranch calls workspace.v1.BranchSessionService.CreateBranch.
-func (c *branchSessionServiceClient) CreateBranch(ctx context.Context, req *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error) {
-	return c.createBranch.CallUnary(ctx, req)
-}
-
-// Archive calls workspace.v1.BranchSessionService.Archive.
-func (c *branchSessionServiceClient) Archive(ctx context.Context, req *connect.Request[v1.ArchiveRequest]) (*connect.Response[v1.ArchiveResponse], error) {
-	return c.archive.CallUnary(ctx, req)
-}
-
-// ImportRepo calls workspace.v1.BranchSessionService.ImportRepo.
-func (c *branchSessionServiceClient) ImportRepo(ctx context.Context, req *connect.Request[v1.ImportRepoRequest]) (*connect.Response[v1.ImportRepoResponse], error) {
-	return c.importRepo.CallUnary(ctx, req)
-}
-
-// SetPushMirror calls workspace.v1.BranchSessionService.SetPushMirror.
-func (c *branchSessionServiceClient) SetPushMirror(ctx context.Context, req *connect.Request[v1.SetPushMirrorRequest]) (*connect.Response[v1.SetPushMirrorResponse], error) {
-	return c.setPushMirror.CallUnary(ctx, req)
-}
-
-// ListPushMirrors calls workspace.v1.BranchSessionService.ListPushMirrors.
-func (c *branchSessionServiceClient) ListPushMirrors(ctx context.Context, req *connect.Request[v1.ListPushMirrorsRequest]) (*connect.Response[v1.ListPushMirrorsResponse], error) {
-	return c.listPushMirrors.CallUnary(ctx, req)
-}
-
-// DeletePushMirror calls workspace.v1.BranchSessionService.DeletePushMirror.
-func (c *branchSessionServiceClient) DeletePushMirror(ctx context.Context, req *connect.Request[v1.DeletePushMirrorRequest]) (*connect.Response[v1.DeletePushMirrorResponse], error) {
-	return c.deletePushMirror.CallUnary(ctx, req)
-}
-
-// ListMRs calls workspace.v1.BranchSessionService.ListMRs.
-func (c *branchSessionServiceClient) ListMRs(ctx context.Context, req *connect.Request[v1.ListMRsRequest]) (*connect.Response[v1.ListMRsResponse], error) {
-	return c.listMRs.CallUnary(ctx, req)
-}
-
-// GetMR calls workspace.v1.BranchSessionService.GetMR.
-func (c *branchSessionServiceClient) GetMR(ctx context.Context, req *connect.Request[v1.GetMRRequest]) (*connect.Response[v1.GetMRResponse], error) {
-	return c.getMR.CallUnary(ctx, req)
-}
-
-// MRDiff calls workspace.v1.BranchSessionService.MRDiff.
-func (c *branchSessionServiceClient) MRDiff(ctx context.Context, req *connect.Request[v1.MRDiffRequest]) (*connect.Response[v1.MRDiffResponse], error) {
-	return c.mRDiff.CallUnary(ctx, req)
-}
-
-// ListMRComments calls workspace.v1.BranchSessionService.ListMRComments.
-func (c *branchSessionServiceClient) ListMRComments(ctx context.Context, req *connect.Request[v1.ListMRCommentsRequest]) (*connect.Response[v1.ListMRCommentsResponse], error) {
-	return c.listMRComments.CallUnary(ctx, req)
-}
-
-// SubmitMR calls workspace.v1.BranchSessionService.SubmitMR.
-func (c *branchSessionServiceClient) SubmitMR(ctx context.Context, req *connect.Request[v1.SubmitMRRequest]) (*connect.Response[v1.SubmitMRResponse], error) {
-	return c.submitMR.CallUnary(ctx, req)
-}
-
-// CommentMR calls workspace.v1.BranchSessionService.CommentMR.
-func (c *branchSessionServiceClient) CommentMR(ctx context.Context, req *connect.Request[v1.CommentMRRequest]) (*connect.Response[v1.CommentMRResponse], error) {
-	return c.commentMR.CallUnary(ctx, req)
-}
-
-// MergeMR calls workspace.v1.BranchSessionService.MergeMR.
-func (c *branchSessionServiceClient) MergeMR(ctx context.Context, req *connect.Request[v1.MergeMRRequest]) (*connect.Response[v1.MergeMRResponse], error) {
-	return c.mergeMR.CallUnary(ctx, req)
-}
-
-// CloseMR calls workspace.v1.BranchSessionService.CloseMR.
-func (c *branchSessionServiceClient) CloseMR(ctx context.Context, req *connect.Request[v1.CloseMRRequest]) (*connect.Response[v1.CloseMRResponse], error) {
-	return c.closeMR.CallUnary(ctx, req)
-}
-
-// ListOCIImages calls workspace.v1.BranchSessionService.ListOCIImages.
-func (c *branchSessionServiceClient) ListOCIImages(ctx context.Context, req *connect.Request[v1.ListOCIImagesRequest]) (*connect.Response[v1.ListOCIImagesResponse], error) {
-	return c.listOCIImages.CallUnary(ctx, req)
-}
-
-// BuildSandboxImage calls workspace.v1.BranchSessionService.BuildSandboxImage.
-func (c *branchSessionServiceClient) BuildSandboxImage(ctx context.Context, req *connect.Request[v1.BuildSandboxImageRequest]) (*connect.Response[v1.BuildSandboxImageResponse], error) {
-	return c.buildSandboxImage.CallUnary(ctx, req)
-}
-
-// GetBuildStatus calls workspace.v1.BranchSessionService.GetBuildStatus.
-func (c *branchSessionServiceClient) GetBuildStatus(ctx context.Context, req *connect.Request[v1.GetBuildStatusRequest]) (*connect.Response[v1.GetBuildStatusResponse], error) {
-	return c.getBuildStatus.CallUnary(ctx, req)
-}
-
-// ListBuilds calls workspace.v1.BranchSessionService.ListBuilds.
-func (c *branchSessionServiceClient) ListBuilds(ctx context.Context, req *connect.Request[v1.ListBuildsRequest]) (*connect.Response[v1.ListBuildsResponse], error) {
-	return c.listBuilds.CallUnary(ctx, req)
-}
-
-// ImportImage calls workspace.v1.BranchSessionService.ImportImage.
-func (c *branchSessionServiceClient) ImportImage(ctx context.Context, req *connect.Request[v1.ImportImageRequest]) (*connect.Response[v1.ImportImageResponse], error) {
-	return c.importImage.CallUnary(ctx, req)
-}
-
-// ListSandboxes calls workspace.v1.BranchSessionService.ListSandboxes.
-func (c *branchSessionServiceClient) ListSandboxes(ctx context.Context, req *connect.Request[v1.ListSandboxesRequest]) (*connect.Response[v1.ListSandboxesResponse], error) {
-	return c.listSandboxes.CallUnary(ctx, req)
-}
-
-// CreateSandbox calls workspace.v1.BranchSessionService.CreateSandbox.
-func (c *branchSessionServiceClient) CreateSandbox(ctx context.Context, req *connect.Request[v1.CreateSandboxRequest]) (*connect.Response[v1.CreateSandboxResponse], error) {
-	return c.createSandbox.CallUnary(ctx, req)
-}
-
-// GetSandbox calls workspace.v1.BranchSessionService.GetSandbox.
-func (c *branchSessionServiceClient) GetSandbox(ctx context.Context, req *connect.Request[v1.GetSandboxRequest]) (*connect.Response[v1.GetSandboxResponse], error) {
-	return c.getSandbox.CallUnary(ctx, req)
-}
-
-// DeleteSandbox calls workspace.v1.BranchSessionService.DeleteSandbox.
-func (c *branchSessionServiceClient) DeleteSandbox(ctx context.Context, req *connect.Request[v1.DeleteSandboxRequest]) (*connect.Response[v1.DeleteSandboxResponse], error) {
-	return c.deleteSandbox.CallUnary(ctx, req)
-}
-
-// ResolveSandbox calls workspace.v1.BranchSessionService.ResolveSandbox.
-func (c *branchSessionServiceClient) ResolveSandbox(ctx context.Context, req *connect.Request[v1.ResolveSandboxRequest]) (*connect.Response[v1.ResolveSandboxResponse], error) {
-	return c.resolveSandbox.CallUnary(ctx, req)
-}
-
-// ListSandboxJobs calls workspace.v1.BranchSessionService.ListSandboxJobs.
-func (c *branchSessionServiceClient) ListSandboxJobs(ctx context.Context, req *connect.Request[v1.ListSandboxJobsRequest]) (*connect.Response[v1.ListSandboxJobsResponse], error) {
-	return c.listSandboxJobs.CallUnary(ctx, req)
-}
-
-// GetSandboxJobOutput calls workspace.v1.BranchSessionService.GetSandboxJobOutput.
-func (c *branchSessionServiceClient) GetSandboxJobOutput(ctx context.Context, req *connect.Request[v1.GetSandboxJobOutputRequest]) (*connect.Response[v1.GetSandboxJobOutputResponse], error) {
-	return c.getSandboxJobOutput.CallUnary(ctx, req)
-}
-
-// WatchSandboxJob calls workspace.v1.BranchSessionService.WatchSandboxJob.
-func (c *branchSessionServiceClient) WatchSandboxJob(ctx context.Context, req *connect.Request[v1.WatchSandboxJobRequest]) (*connect.ServerStreamForClient[v1.WatchSandboxJobResponse], error) {
-	return c.watchSandboxJob.CallServerStream(ctx, req)
-}
-
-// ListSandboxFiles calls workspace.v1.BranchSessionService.ListSandboxFiles.
-func (c *branchSessionServiceClient) ListSandboxFiles(ctx context.Context, req *connect.Request[v1.ListSandboxFilesRequest]) (*connect.Response[v1.ListSandboxFilesResponse], error) {
-	return c.listSandboxFiles.CallUnary(ctx, req)
-}
-
-// ReadSandboxFile calls workspace.v1.BranchSessionService.ReadSandboxFile.
-func (c *branchSessionServiceClient) ReadSandboxFile(ctx context.Context, req *connect.Request[v1.ReadSandboxFileRequest]) (*connect.Response[v1.ReadSandboxFileResponse], error) {
-	return c.readSandboxFile.CallUnary(ctx, req)
-}
-
-// DeployService calls workspace.v1.BranchSessionService.DeployService.
-func (c *branchSessionServiceClient) DeployService(ctx context.Context, req *connect.Request[v1.DeployServiceRequest]) (*connect.Response[v1.DeployServiceResponse], error) {
-	return c.deployService.CallUnary(ctx, req)
-}
-
-// ListServices calls workspace.v1.BranchSessionService.ListServices.
-func (c *branchSessionServiceClient) ListServices(ctx context.Context, req *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error) {
-	return c.listServices.CallUnary(ctx, req)
-}
-
-// DeleteService calls workspace.v1.BranchSessionService.DeleteService.
-func (c *branchSessionServiceClient) DeleteService(ctx context.Context, req *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error) {
-	return c.deleteService.CallUnary(ctx, req)
-}
-
-// PauseService calls workspace.v1.BranchSessionService.PauseService.
-func (c *branchSessionServiceClient) PauseService(ctx context.Context, req *connect.Request[v1.PauseServiceRequest]) (*connect.Response[v1.PauseServiceResponse], error) {
-	return c.pauseService.CallUnary(ctx, req)
-}
-
-// ResumeService calls workspace.v1.BranchSessionService.ResumeService.
-func (c *branchSessionServiceClient) ResumeService(ctx context.Context, req *connect.Request[v1.ResumeServiceRequest]) (*connect.Response[v1.ResumeServiceResponse], error) {
-	return c.resumeService.CallUnary(ctx, req)
-}
-
-// ScaleService calls workspace.v1.BranchSessionService.ScaleService.
-func (c *branchSessionServiceClient) ScaleService(ctx context.Context, req *connect.Request[v1.ScaleServiceRequest]) (*connect.Response[v1.ScaleServiceResponse], error) {
-	return c.scaleService.CallUnary(ctx, req)
-}
-
-// PromoteService calls workspace.v1.BranchSessionService.PromoteService.
-func (c *branchSessionServiceClient) PromoteService(ctx context.Context, req *connect.Request[v1.PromoteServiceRequest]) (*connect.Response[v1.PromoteServiceResponse], error) {
-	return c.promoteService.CallUnary(ctx, req)
-}
-
-// RollbackService calls workspace.v1.BranchSessionService.RollbackService.
-func (c *branchSessionServiceClient) RollbackService(ctx context.Context, req *connect.Request[v1.RollbackServiceRequest]) (*connect.Response[v1.RollbackServiceResponse], error) {
-	return c.rollbackService.CallUnary(ctx, req)
-}
-
-// GetServiceManifest calls workspace.v1.BranchSessionService.GetServiceManifest.
-func (c *branchSessionServiceClient) GetServiceManifest(ctx context.Context, req *connect.Request[v1.GetServiceManifestRequest]) (*connect.Response[v1.GetServiceManifestResponse], error) {
-	return c.getServiceManifest.CallUnary(ctx, req)
-}
-
-// ApplyServiceManifest calls workspace.v1.BranchSessionService.ApplyServiceManifest.
-func (c *branchSessionServiceClient) ApplyServiceManifest(ctx context.Context, req *connect.Request[v1.ApplyServiceManifestRequest]) (*connect.Response[v1.ApplyServiceManifestResponse], error) {
-	return c.applyServiceManifest.CallUnary(ctx, req)
-}
-
-// CreatePVC calls workspace.v1.BranchSessionService.CreatePVC.
-func (c *branchSessionServiceClient) CreatePVC(ctx context.Context, req *connect.Request[v1.CreatePVCRequest]) (*connect.Response[v1.CreatePVCResponse], error) {
-	return c.createPVC.CallUnary(ctx, req)
-}
-
-// ListPVCs calls workspace.v1.BranchSessionService.ListPVCs.
-func (c *branchSessionServiceClient) ListPVCs(ctx context.Context, req *connect.Request[v1.ListPVCsRequest]) (*connect.Response[v1.ListPVCsResponse], error) {
-	return c.listPVCs.CallUnary(ctx, req)
-}
-
-// DeletePVC calls workspace.v1.BranchSessionService.DeletePVC.
-func (c *branchSessionServiceClient) DeletePVC(ctx context.Context, req *connect.Request[v1.DeletePVCRequest]) (*connect.Response[v1.DeletePVCResponse], error) {
-	return c.deletePVC.CallUnary(ctx, req)
-}
-
-// ServiceLogs calls workspace.v1.BranchSessionService.ServiceLogs.
-func (c *branchSessionServiceClient) ServiceLogs(ctx context.Context, req *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error) {
-	return c.serviceLogs.CallUnary(ctx, req)
-}
-
-// WatchServiceLogs calls workspace.v1.BranchSessionService.WatchServiceLogs.
-func (c *branchSessionServiceClient) WatchServiceLogs(ctx context.Context, req *connect.Request[v1.WatchServiceLogsRequest]) (*connect.ServerStreamForClient[v1.WatchServiceLogsResponse], error) {
-	return c.watchServiceLogs.CallServerStream(ctx, req)
-}
-
-// SandboxLogs calls workspace.v1.BranchSessionService.SandboxLogs.
-func (c *branchSessionServiceClient) SandboxLogs(ctx context.Context, req *connect.Request[v1.SandboxLogsRequest]) (*connect.Response[v1.SandboxLogsResponse], error) {
-	return c.sandboxLogs.CallUnary(ctx, req)
-}
-
-// WatchWorkspace calls workspace.v1.BranchSessionService.WatchWorkspace.
-func (c *branchSessionServiceClient) WatchWorkspace(ctx context.Context, req *connect.Request[v1.WatchWorkspaceRequest]) (*connect.ServerStreamForClient[v1.WatchWorkspaceResponse], error) {
-	return c.watchWorkspace.CallServerStream(ctx, req)
-}
-
-// HelmDeploy calls workspace.v1.BranchSessionService.HelmDeploy.
-func (c *branchSessionServiceClient) HelmDeploy(ctx context.Context, req *connect.Request[v1.HelmDeployRequest]) (*connect.Response[v1.HelmDeployResponse], error) {
-	return c.helmDeploy.CallUnary(ctx, req)
-}
-
-// HelmList calls workspace.v1.BranchSessionService.HelmList.
-func (c *branchSessionServiceClient) HelmList(ctx context.Context, req *connect.Request[v1.HelmListRequest]) (*connect.Response[v1.HelmListResponse], error) {
-	return c.helmList.CallUnary(ctx, req)
-}
-
-// HelmHistory calls workspace.v1.BranchSessionService.HelmHistory.
-func (c *branchSessionServiceClient) HelmHistory(ctx context.Context, req *connect.Request[v1.HelmHistoryRequest]) (*connect.Response[v1.HelmHistoryResponse], error) {
-	return c.helmHistory.CallUnary(ctx, req)
-}
-
-// HelmRollback calls workspace.v1.BranchSessionService.HelmRollback.
-func (c *branchSessionServiceClient) HelmRollback(ctx context.Context, req *connect.Request[v1.HelmRollbackRequest]) (*connect.Response[v1.HelmRollbackResponse], error) {
-	return c.helmRollback.CallUnary(ctx, req)
-}
-
-// HelmUninstall calls workspace.v1.BranchSessionService.HelmUninstall.
-func (c *branchSessionServiceClient) HelmUninstall(ctx context.Context, req *connect.Request[v1.HelmUninstallRequest]) (*connect.Response[v1.HelmUninstallResponse], error) {
-	return c.helmUninstall.CallUnary(ctx, req)
-}
-
-// HelmPromote calls workspace.v1.BranchSessionService.HelmPromote.
-func (c *branchSessionServiceClient) HelmPromote(ctx context.Context, req *connect.Request[v1.HelmPromoteRequest]) (*connect.Response[v1.HelmPromoteResponse], error) {
-	return c.helmPromote.CallUnary(ctx, req)
-}
-
-// HelmRollbackRelease calls workspace.v1.BranchSessionService.HelmRollbackRelease.
-func (c *branchSessionServiceClient) HelmRollbackRelease(ctx context.Context, req *connect.Request[v1.HelmRollbackReleaseRequest]) (*connect.Response[v1.HelmRollbackReleaseResponse], error) {
-	return c.helmRollbackRelease.CallUnary(ctx, req)
-}
-
-// HelmObjects calls workspace.v1.BranchSessionService.HelmObjects.
-func (c *branchSessionServiceClient) HelmObjects(ctx context.Context, req *connect.Request[v1.HelmObjectsRequest]) (*connect.Response[v1.HelmObjectsResponse], error) {
-	return c.helmObjects.CallUnary(ctx, req)
-}
-
-// HelmObjectLogs calls workspace.v1.BranchSessionService.HelmObjectLogs.
-func (c *branchSessionServiceClient) HelmObjectLogs(ctx context.Context, req *connect.Request[v1.HelmObjectLogsRequest]) (*connect.Response[v1.HelmObjectLogsResponse], error) {
-	return c.helmObjectLogs.CallUnary(ctx, req)
-}
-
-// Health calls workspace.v1.BranchSessionService.Health.
-func (c *branchSessionServiceClient) Health(ctx context.Context, req *connect.Request[v11.HealthRequest]) (*connect.Response[v11.HealthResponse], error) {
-	return c.health.CallUnary(ctx, req)
-}
-
-// GetIdentity calls workspace.v1.BranchSessionService.GetIdentity.
-func (c *branchSessionServiceClient) GetIdentity(ctx context.Context, req *connect.Request[v11.GetIdentityRequest]) (*connect.Response[v11.GetIdentityResponse], error) {
-	return c.getIdentity.CallUnary(ctx, req)
-}
-
-// ListSessions calls workspace.v1.BranchSessionService.ListSessions.
-func (c *branchSessionServiceClient) ListSessions(ctx context.Context, req *connect.Request[v11.ListSessionsRequest]) (*connect.Response[v11.ListSessionsResponse], error) {
-	return c.listSessions.CallUnary(ctx, req)
-}
-
-// GetSession calls workspace.v1.BranchSessionService.GetSession.
-func (c *branchSessionServiceClient) GetSession(ctx context.Context, req *connect.Request[v11.GetSessionRequest]) (*connect.Response[v11.GetSessionResponse], error) {
-	return c.getSession.CallUnary(ctx, req)
-}
-
-// ListMessages calls workspace.v1.BranchSessionService.ListMessages.
-func (c *branchSessionServiceClient) ListMessages(ctx context.Context, req *connect.Request[v11.ListMessagesRequest]) (*connect.Response[v11.ListMessagesResponse], error) {
-	return c.listMessages.CallUnary(ctx, req)
-}
-
-// Prompt calls workspace.v1.BranchSessionService.Prompt.
-func (c *branchSessionServiceClient) Prompt(ctx context.Context, req *connect.Request[v11.PromptRequest]) (*connect.ServerStreamForClient[v11.PromptResponse], error) {
-	return c.prompt.CallServerStream(ctx, req)
-}
-
-// WatchSession calls workspace.v1.BranchSessionService.WatchSession.
-func (c *branchSessionServiceClient) WatchSession(ctx context.Context, req *connect.Request[v11.WatchSessionRequest]) (*connect.ServerStreamForClient[v11.WatchSessionResponse], error) {
-	return c.watchSession.CallServerStream(ctx, req)
-}
-
-// WatchSessions calls workspace.v1.BranchSessionService.WatchSessions.
-func (c *branchSessionServiceClient) WatchSessions(ctx context.Context, req *connect.Request[v11.WatchSessionsRequest]) (*connect.ServerStreamForClient[v11.WatchSessionsResponse], error) {
-	return c.watchSessions.CallServerStream(ctx, req)
-}
-
-// SetModel calls workspace.v1.BranchSessionService.SetModel.
-func (c *branchSessionServiceClient) SetModel(ctx context.Context, req *connect.Request[v11.SetModelRequest]) (*connect.Response[v11.SetModelResponse], error) {
-	return c.setModel.CallUnary(ctx, req)
-}
-
-// Undo calls workspace.v1.BranchSessionService.Undo.
-func (c *branchSessionServiceClient) Undo(ctx context.Context, req *connect.Request[v11.UndoRequest]) (*connect.Response[v11.UndoResponse], error) {
-	return c.undo.CallUnary(ctx, req)
-}
-
-// MarkRead calls workspace.v1.BranchSessionService.MarkRead.
-func (c *branchSessionServiceClient) MarkRead(ctx context.Context, req *connect.Request[v11.MarkReadRequest]) (*connect.Response[v11.MarkReadResponse], error) {
-	return c.markRead.CallUnary(ctx, req)
-}
-
-// State calls workspace.v1.BranchSessionService.State.
-func (c *branchSessionServiceClient) State(ctx context.Context, req *connect.Request[v11.StateRequest]) (*connect.Response[v11.StateResponse], error) {
-	return c.state.CallUnary(ctx, req)
-}
-
-// Mailbox calls workspace.v1.BranchSessionService.Mailbox.
-func (c *branchSessionServiceClient) Mailbox(ctx context.Context, req *connect.Request[v11.MailboxRequest]) (*connect.Response[v11.MailboxResponse], error) {
-	return c.mailbox.CallUnary(ctx, req)
-}
-
-// Interrupt calls workspace.v1.BranchSessionService.Interrupt.
-func (c *branchSessionServiceClient) Interrupt(ctx context.Context, req *connect.Request[v11.InterruptRequest]) (*connect.Response[v11.InterruptResponse], error) {
-	return c.interrupt.CallUnary(ctx, req)
-}
-
-// Compact calls workspace.v1.BranchSessionService.Compact.
-func (c *branchSessionServiceClient) Compact(ctx context.Context, req *connect.Request[v11.CompactRequest]) (*connect.Response[v11.CompactResponse], error) {
-	return c.compact.CallUnary(ctx, req)
-}
-
-// UpdateSettings calls workspace.v1.BranchSessionService.UpdateSettings.
-func (c *branchSessionServiceClient) UpdateSettings(ctx context.Context, req *connect.Request[v1.UpdateSettingsRequest]) (*connect.Response[v1.UpdateSettingsResponse], error) {
-	return c.updateSettings.CallUnary(ctx, req)
-}
-
-// ListProviders calls workspace.v1.BranchSessionService.ListProviders.
-func (c *branchSessionServiceClient) ListProviders(ctx context.Context, req *connect.Request[v11.ListProvidersRequest]) (*connect.Response[v11.ListProvidersResponse], error) {
-	return c.listProviders.CallUnary(ctx, req)
-}
-
-// ListProvidersCatalog calls workspace.v1.BranchSessionService.ListProvidersCatalog.
-func (c *branchSessionServiceClient) ListProvidersCatalog(ctx context.Context, req *connect.Request[v11.ListProvidersCatalogRequest]) (*connect.Response[v11.ListProvidersCatalogResponse], error) {
-	return c.listProvidersCatalog.CallUnary(ctx, req)
-}
-
-// RegisterProvider calls workspace.v1.BranchSessionService.RegisterProvider.
-func (c *branchSessionServiceClient) RegisterProvider(ctx context.Context, req *connect.Request[v11.RegisterProviderRequest]) (*connect.Response[v11.RegisterProviderResponse], error) {
-	return c.registerProvider.CallUnary(ctx, req)
-}
-
-// DeleteProvider calls workspace.v1.BranchSessionService.DeleteProvider.
-func (c *branchSessionServiceClient) DeleteProvider(ctx context.Context, req *connect.Request[v11.DeleteProviderRequest]) (*connect.Response[v11.DeleteProviderResponse], error) {
-	return c.deleteProvider.CallUnary(ctx, req)
-}
-
-// TestProvider calls workspace.v1.BranchSessionService.TestProvider.
-func (c *branchSessionServiceClient) TestProvider(ctx context.Context, req *connect.Request[v11.TestProviderRequest]) (*connect.Response[v11.TestProviderResponse], error) {
-	return c.testProvider.CallUnary(ctx, req)
-}
-
-// ListModels calls workspace.v1.BranchSessionService.ListModels.
-func (c *branchSessionServiceClient) ListModels(ctx context.Context, req *connect.Request[v11.ListModelsRequest]) (*connect.Response[v11.ListModelsResponse], error) {
-	return c.listModels.CallUnary(ctx, req)
-}
-
-// ListPresets calls workspace.v1.BranchSessionService.ListPresets.
-func (c *branchSessionServiceClient) ListPresets(ctx context.Context, req *connect.Request[v11.ListPresetsRequest]) (*connect.Response[v11.ListPresetsResponse], error) {
-	return c.listPresets.CallUnary(ctx, req)
-}
-
-// GetConfig calls workspace.v1.BranchSessionService.GetConfig.
-func (c *branchSessionServiceClient) GetConfig(ctx context.Context, req *connect.Request[v11.GetConfigRequest]) (*connect.Response[v11.GetConfigResponse], error) {
-	return c.getConfig.CallUnary(ctx, req)
-}
-
-// SetConfig calls workspace.v1.BranchSessionService.SetConfig.
-func (c *branchSessionServiceClient) SetConfig(ctx context.Context, req *connect.Request[v11.SetConfigRequest]) (*connect.Response[v11.SetConfigResponse], error) {
-	return c.setConfig.CallUnary(ctx, req)
-}
-
-// ListTools calls workspace.v1.BranchSessionService.ListTools.
-func (c *branchSessionServiceClient) ListTools(ctx context.Context, req *connect.Request[v11.ListToolsRequest]) (*connect.Response[v11.ListToolsResponse], error) {
-	return c.listTools.CallUnary(ctx, req)
-}
-
-// GetToolConfig calls workspace.v1.BranchSessionService.GetToolConfig.
-func (c *branchSessionServiceClient) GetToolConfig(ctx context.Context, req *connect.Request[v11.GetToolConfigRequest]) (*connect.Response[v11.GetToolConfigResponse], error) {
-	return c.getToolConfig.CallUnary(ctx, req)
-}
-
-// SetToolConfig calls workspace.v1.BranchSessionService.SetToolConfig.
-func (c *branchSessionServiceClient) SetToolConfig(ctx context.Context, req *connect.Request[v11.SetToolConfigRequest]) (*connect.Response[v11.SetToolConfigResponse], error) {
-	return c.setToolConfig.CallUnary(ctx, req)
-}
-
-// SetExtensionConfig calls workspace.v1.BranchSessionService.SetExtensionConfig.
-func (c *branchSessionServiceClient) SetExtensionConfig(ctx context.Context, req *connect.Request[v11.SetExtensionConfigRequest]) (*connect.Response[v11.SetExtensionConfigResponse], error) {
-	return c.setExtensionConfig.CallUnary(ctx, req)
-}
-
-// UploadFile calls workspace.v1.BranchSessionService.UploadFile.
-func (c *branchSessionServiceClient) UploadFile(ctx context.Context, req *connect.Request[v11.UploadFileRequest]) (*connect.Response[v11.UploadFileResponse], error) {
-	return c.uploadFile.CallUnary(ctx, req)
-}
-
-// IngestFile calls workspace.v1.BranchSessionService.IngestFile.
-func (c *branchSessionServiceClient) IngestFile(ctx context.Context, req *connect.Request[v11.IngestFileRequest]) (*connect.Response[v11.IngestFileResponse], error) {
-	return c.ingestFile.CallUnary(ctx, req)
-}
-
-// GetFile calls workspace.v1.BranchSessionService.GetFile.
-func (c *branchSessionServiceClient) GetFile(ctx context.Context, req *connect.Request[v11.GetFileRequest]) (*connect.Response[v11.GetFileResponse], error) {
-	return c.getFile.CallUnary(ctx, req)
-}
-
-// GetFileMeta calls workspace.v1.BranchSessionService.GetFileMeta.
-func (c *branchSessionServiceClient) GetFileMeta(ctx context.Context, req *connect.Request[v11.GetFileMetaRequest]) (*connect.Response[v11.GetFileMetaResponse], error) {
-	return c.getFileMeta.CallUnary(ctx, req)
-}
-
-// GetFileStream calls workspace.v1.BranchSessionService.GetFileStream.
-func (c *branchSessionServiceClient) GetFileStream(ctx context.Context, req *connect.Request[v11.GetFileRequest]) (*connect.ServerStreamForClient[v11.FileChunk], error) {
-	return c.getFileStream.CallServerStream(ctx, req)
+// Receive returns the next response message from the server.
+func (s BranchSessionServiceWatchSessionsClientStream) Receive() (*v11.WatchSessionsResponse, error) {
+	var res v11.WatchSessionsResponse
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s BranchSessionServiceWatchSessionsClientStream) Close() error {
+	return s.stream.Close()
+}
+
+// BranchSessionServiceGetFileStreamClientStream is the client stream for the BranchSessionService's
+// GetFileStream RPC.
+type BranchSessionServiceGetFileStreamClientStream struct {
+	stream connect.ClientStream
+}
+
+// Receive returns the next response message from the server.
+func (s BranchSessionServiceGetFileStreamClientStream) Receive() (*v11.FileChunk, error) {
+	var res v11.FileChunk
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s BranchSessionServiceGetFileStreamClientStream) Close() error {
+	return s.stream.Close()
 }
 
 // BranchSessionServiceHandler is an implementation of the workspace.v1.BranchSessionService
 // service.
 type BranchSessionServiceHandler interface {
 	// branch sessions (repo:branch <-> session, 1:1)
-	EnsureBranchSession(context.Context, *connect.Request[v1.EnsureBranchSessionRequest]) (*connect.Response[v1.EnsureBranchSessionResponse], error)
-	ForkBranchSession(context.Context, *connect.Request[v1.ForkBranchSessionRequest]) (*connect.Response[v1.ForkBranchSessionResponse], error)
-	ListBranchSessions(context.Context, *connect.Request[v1.ListBranchSessionsRequest]) (*connect.Response[v1.ListBranchSessionsResponse], error)
-	GetBranchSession(context.Context, *connect.Request[v1.GetBranchSessionRequest]) (*connect.Response[v1.GetBranchSessionResponse], error)
-	DeleteBranchSession(context.Context, *connect.Request[v1.DeleteBranchSessionRequest]) (*connect.Response[v1.DeleteBranchSessionResponse], error)
+	EnsureBranchSession(context.Context, *v1.EnsureBranchSessionRequest) (*v1.EnsureBranchSessionResponse, error)
+	ForkBranchSession(context.Context, *v1.ForkBranchSessionRequest) (*v1.ForkBranchSessionResponse, error)
+	ListBranchSessions(context.Context, *v1.ListBranchSessionsRequest) (*v1.ListBranchSessionsResponse, error)
+	GetBranchSession(context.Context, *v1.GetBranchSessionRequest) (*v1.GetBranchSessionResponse, error)
+	DeleteBranchSession(context.Context, *v1.DeleteBranchSessionRequest) (*v1.DeleteBranchSessionResponse, error)
 	// DeleteBranch removes a repo branch AND its branch session (session +
 	// sandboxes cascade); requires the branch owner (non-main).
-	DeleteBranch(context.Context, *connect.Request[v1.DeleteBranchRequest]) (*connect.Response[v1.DeleteBranchResponse], error)
+	DeleteBranch(context.Context, *v1.DeleteBranchRequest) (*v1.DeleteBranchResponse, error)
 	// DeleteRepo removes a repo AND all its branch sessions (admin).
-	DeleteRepo(context.Context, *connect.Request[v1.DeleteRepoRequest]) (*connect.Response[v1.DeleteRepoResponse], error)
+	DeleteRepo(context.Context, *v1.DeleteRepoRequest) (*v1.DeleteRepoResponse, error)
 	// standalone sessions
-	CreateFreeSession(context.Context, *connect.Request[v1.CreateFreeSessionRequest]) (*connect.Response[v1.CreateFreeSessionResponse], error)
+	CreateFreeSession(context.Context, *v1.CreateFreeSessionRequest) (*v1.CreateFreeSessionResponse, error)
 	// git browse (read-only) + ensure
-	ListRepos(context.Context, *connect.Request[v1.ListReposRequest]) (*connect.Response[v1.ListReposResponse], error)
-	Tree(context.Context, *connect.Request[v1.TreeRequest]) (*connect.Response[v1.TreeResponse], error)
-	ReadBlob(context.Context, *connect.Request[v1.ReadBlobRequest]) (*connect.Response[v1.ReadBlobResponse], error)
+	ListRepos(context.Context, *v1.ListReposRequest) (*v1.ListReposResponse, error)
+	Tree(context.Context, *v1.TreeRequest) (*v1.TreeResponse, error)
+	ReadBlob(context.Context, *v1.ReadBlobRequest) (*v1.ReadBlobResponse, error)
 	// ReadRaw carries binary bytes so the webui can preview images / PDF / office.
-	ReadRaw(context.Context, *connect.Request[v1.ReadRawRequest]) (*connect.Response[v1.ReadRawResponse], error)
-	Log(context.Context, *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error)
-	Branches(context.Context, *connect.Request[v1.BranchesRequest]) (*connect.Response[v1.BranchesResponse], error)
-	Tags(context.Context, *connect.Request[v1.TagsRequest]) (*connect.Response[v1.TagsResponse], error)
+	ReadRaw(context.Context, *v1.ReadRawRequest) (*v1.ReadRawResponse, error)
+	Log(context.Context, *v1.LogRequest) (*v1.LogResponse, error)
+	Branches(context.Context, *v1.BranchesRequest) (*v1.BranchesResponse, error)
+	Tags(context.Context, *v1.TagsRequest) (*v1.TagsResponse, error)
 	// releases (read-only; assets are proxied by the gateway)
-	ListReleases(context.Context, *connect.Request[v1.ReleasesRequest]) (*connect.Response[v1.ReleasesResponse], error)
-	GetReleaseAsset(context.Context, *connect.Request[v1.ReleaseAssetRequest]) (*connect.Response[v1.ReleaseAssetResponse], error)
+	ListReleases(context.Context, *v1.ReleasesRequest) (*v1.ReleasesResponse, error)
+	GetReleaseAsset(context.Context, *v1.ReleaseAssetRequest) (*v1.ReleaseAssetResponse, error)
 	// commit + diff (read-only)
-	GetCommit(context.Context, *connect.Request[v1.GetCommitRequest]) (*connect.Response[v1.GetCommitResponse], error)
-	CommitDiff(context.Context, *connect.Request[v1.CommitDiffRequest]) (*connect.Response[v1.DiffResponse], error)
-	EnsureRepo(context.Context, *connect.Request[v1.EnsureRepoRequest]) (*connect.Response[v1.EnsureRepoResponse], error)
+	GetCommit(context.Context, *v1.GetCommitRequest) (*v1.GetCommitResponse, error)
+	CommitDiff(context.Context, *v1.CommitDiffRequest) (*v1.DiffResponse, error)
+	EnsureRepo(context.Context, *v1.EnsureRepoRequest) (*v1.EnsureRepoResponse, error)
 	// CreateOrg creates an org owned by the caller's tenant (admin).
-	CreateOrg(context.Context, *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error)
+	CreateOrg(context.Context, *v1.CreateOrgRequest) (*v1.CreateOrgResponse, error)
 	// ListOrgs lists the caller's tenant-owned orgs (incl. empty ones).
-	ListOrgs(context.Context, *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error)
+	ListOrgs(context.Context, *v1.ListOrgsRequest) (*v1.ListOrgsResponse, error)
 	// Tenant-scoped repo operations (the extension's ONLY path to Forgejo).
-	RepoMeta(context.Context, *connect.Request[v1.RepoMetaRequest]) (*connect.Response[v1.RepoMetaResponse], error)
-	Contents(context.Context, *connect.Request[v1.ContentsRequest]) (*connect.Response[v1.ContentsResponse], error)
-	Compare(context.Context, *connect.Request[v1.CompareRequest]) (*connect.Response[v1.CompareResponse], error)
-	Blame(context.Context, *connect.Request[v1.BlameRequest]) (*connect.Response[v1.BlameResponse], error)
-	FileDiff(context.Context, *connect.Request[v1.FileDiffRequest]) (*connect.Response[v1.FileDiffResponse], error)
-	CreateTag(context.Context, *connect.Request[v1.CreateTagRequest]) (*connect.Response[v1.CreateTagResponse], error)
+	RepoMeta(context.Context, *v1.RepoMetaRequest) (*v1.RepoMetaResponse, error)
+	Contents(context.Context, *v1.ContentsRequest) (*v1.ContentsResponse, error)
+	Compare(context.Context, *v1.CompareRequest) (*v1.CompareResponse, error)
+	Blame(context.Context, *v1.BlameRequest) (*v1.BlameResponse, error)
+	FileDiff(context.Context, *v1.FileDiffRequest) (*v1.FileDiffResponse, error)
+	CreateTag(context.Context, *v1.CreateTagRequest) (*v1.CreateTagResponse, error)
 	// CreateBranch is an INTERNAL primitive (no agent tool): it materializes a
 	// branch for a manually-created session (ForkBranchSession / lifecycle). It
 	// creates a ref only — it never changes branch CONTENT.
-	CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error)
-	Archive(context.Context, *connect.Request[v1.ArchiveRequest]) (*connect.Response[v1.ArchiveResponse], error)
+	CreateBranch(context.Context, *v1.CreateBranchRequest) (*v1.CreateBranchResponse, error)
+	Archive(context.Context, *v1.ArchiveRequest) (*v1.ArchiveResponse, error)
 	// ImportRepo migrates an EXTERNAL git repository into an org (admin).
-	ImportRepo(context.Context, *connect.Request[v1.ImportRepoRequest]) (*connect.Response[v1.ImportRepoResponse], error)
+	ImportRepo(context.Context, *v1.ImportRepoRequest) (*v1.ImportRepoResponse, error)
 	// push mirrors (admin): push this repo to external remotes continuously
-	SetPushMirror(context.Context, *connect.Request[v1.SetPushMirrorRequest]) (*connect.Response[v1.SetPushMirrorResponse], error)
-	ListPushMirrors(context.Context, *connect.Request[v1.ListPushMirrorsRequest]) (*connect.Response[v1.ListPushMirrorsResponse], error)
-	DeletePushMirror(context.Context, *connect.Request[v1.DeletePushMirrorRequest]) (*connect.Response[v1.DeletePushMirrorResponse], error)
+	SetPushMirror(context.Context, *v1.SetPushMirrorRequest) (*v1.SetPushMirrorResponse, error)
+	ListPushMirrors(context.Context, *v1.ListPushMirrorsRequest) (*v1.ListPushMirrorsResponse, error)
+	DeletePushMirror(context.Context, *v1.DeletePushMirrorRequest) (*v1.DeletePushMirrorResponse, error)
 	// change requests (read-only in this surface: List/Get/diff/comments)
-	ListMRs(context.Context, *connect.Request[v1.ListMRsRequest]) (*connect.Response[v1.ListMRsResponse], error)
-	GetMR(context.Context, *connect.Request[v1.GetMRRequest]) (*connect.Response[v1.GetMRResponse], error)
-	MRDiff(context.Context, *connect.Request[v1.MRDiffRequest]) (*connect.Response[v1.MRDiffResponse], error)
-	ListMRComments(context.Context, *connect.Request[v1.ListMRCommentsRequest]) (*connect.Response[v1.ListMRCommentsResponse], error)
+	ListMRs(context.Context, *v1.ListMRsRequest) (*v1.ListMRsResponse, error)
+	GetMR(context.Context, *v1.GetMRRequest) (*v1.GetMRResponse, error)
+	MRDiff(context.Context, *v1.MRDiffRequest) (*v1.MRDiffResponse, error)
+	ListMRComments(context.Context, *v1.ListMRCommentsRequest) (*v1.ListMRCommentsResponse, error)
 	// SubmitMR is the ONLY way to change a branch: it materializes the sandbox
 	// diff onto a NEW, immutable `mr/...` head branch and opens an MR into `base`.
-	SubmitMR(context.Context, *connect.Request[v1.SubmitMRRequest]) (*connect.Response[v1.SubmitMRResponse], error)
-	CommentMR(context.Context, *connect.Request[v1.CommentMRRequest]) (*connect.Response[v1.CommentMRResponse], error)
-	MergeMR(context.Context, *connect.Request[v1.MergeMRRequest]) (*connect.Response[v1.MergeMRResponse], error)
+	SubmitMR(context.Context, *v1.SubmitMRRequest) (*v1.SubmitMRResponse, error)
+	CommentMR(context.Context, *v1.CommentMRRequest) (*v1.CommentMRResponse, error)
+	MergeMR(context.Context, *v1.MergeMRRequest) (*v1.MergeMRResponse, error)
 	// CloseMR closes an MR whose base is the caller's own branch and deletes its
 	// `mr/...` head branch.
-	CloseMR(context.Context, *connect.Request[v1.CloseMRRequest]) (*connect.Response[v1.CloseMRResponse], error)
+	CloseMR(context.Context, *v1.CloseMRRequest) (*v1.CloseMRResponse, error)
 	// OCI images
-	ListOCIImages(context.Context, *connect.Request[v1.ListOCIImagesRequest]) (*connect.Response[v1.ListOCIImagesResponse], error)
-	BuildSandboxImage(context.Context, *connect.Request[v1.BuildSandboxImageRequest]) (*connect.Response[v1.BuildSandboxImageResponse], error)
+	ListOCIImages(context.Context, *v1.ListOCIImagesRequest) (*v1.ListOCIImagesResponse, error)
+	BuildSandboxImage(context.Context, *v1.BuildSandboxImageRequest) (*v1.BuildSandboxImageResponse, error)
 	// GetBuildStatus polls a background image build (BuildSandboxImage returns a
 	// build_id immediately; poll this for its state/image_ref/log).
-	GetBuildStatus(context.Context, *connect.Request[v1.GetBuildStatusRequest]) (*connect.Response[v1.GetBuildStatusResponse], error)
-	ListBuilds(context.Context, *connect.Request[v1.ListBuildsRequest]) (*connect.Response[v1.ListBuildsResponse], error)
-	ImportImage(context.Context, *connect.Request[v1.ImportImageRequest]) (*connect.Response[v1.ImportImageResponse], error)
+	GetBuildStatus(context.Context, *v1.GetBuildStatusRequest) (*v1.GetBuildStatusResponse, error)
+	ListBuilds(context.Context, *v1.ListBuildsRequest) (*v1.ListBuildsResponse, error)
+	ImportImage(context.Context, *v1.ImportImageRequest) (*v1.ImportImageResponse, error)
 	// sandboxes
-	ListSandboxes(context.Context, *connect.Request[v1.ListSandboxesRequest]) (*connect.Response[v1.ListSandboxesResponse], error)
-	CreateSandbox(context.Context, *connect.Request[v1.CreateSandboxRequest]) (*connect.Response[v1.CreateSandboxResponse], error)
-	GetSandbox(context.Context, *connect.Request[v1.GetSandboxRequest]) (*connect.Response[v1.GetSandboxResponse], error)
-	DeleteSandbox(context.Context, *connect.Request[v1.DeleteSandboxRequest]) (*connect.Response[v1.DeleteSandboxResponse], error)
-	ResolveSandbox(context.Context, *connect.Request[v1.ResolveSandboxRequest]) (*connect.Response[v1.ResolveSandboxResponse], error)
+	ListSandboxes(context.Context, *v1.ListSandboxesRequest) (*v1.ListSandboxesResponse, error)
+	CreateSandbox(context.Context, *v1.CreateSandboxRequest) (*v1.CreateSandboxResponse, error)
+	GetSandbox(context.Context, *v1.GetSandboxRequest) (*v1.GetSandboxResponse, error)
+	DeleteSandbox(context.Context, *v1.DeleteSandboxRequest) (*v1.DeleteSandboxResponse, error)
+	ResolveSandbox(context.Context, *v1.ResolveSandboxRequest) (*v1.ResolveSandboxResponse, error)
 	// sandbox jobs (read-only observability)
-	ListSandboxJobs(context.Context, *connect.Request[v1.ListSandboxJobsRequest]) (*connect.Response[v1.ListSandboxJobsResponse], error)
-	GetSandboxJobOutput(context.Context, *connect.Request[v1.GetSandboxJobOutputRequest]) (*connect.Response[v1.GetSandboxJobOutputResponse], error)
-	WatchSandboxJob(context.Context, *connect.Request[v1.WatchSandboxJobRequest], *connect.ServerStream[v1.WatchSandboxJobResponse]) error
-	ListSandboxFiles(context.Context, *connect.Request[v1.ListSandboxFilesRequest]) (*connect.Response[v1.ListSandboxFilesResponse], error)
-	ReadSandboxFile(context.Context, *connect.Request[v1.ReadSandboxFileRequest]) (*connect.Response[v1.ReadSandboxFileResponse], error)
+	ListSandboxJobs(context.Context, *v1.ListSandboxJobsRequest) (*v1.ListSandboxJobsResponse, error)
+	GetSandboxJobOutput(context.Context, *v1.GetSandboxJobOutputRequest) (*v1.GetSandboxJobOutputResponse, error)
+	WatchSandboxJob(context.Context, *v1.WatchSandboxJobRequest, BranchSessionServiceWatchSandboxJobServerStream) error
+	ListSandboxFiles(context.Context, *v1.ListSandboxFilesRequest) (*v1.ListSandboxFilesResponse, error)
+	ReadSandboxFile(context.Context, *v1.ReadSandboxFileRequest) (*v1.ReadSandboxFileResponse, error)
 	// services (long-lived Deployments)
-	DeployService(context.Context, *connect.Request[v1.DeployServiceRequest]) (*connect.Response[v1.DeployServiceResponse], error)
-	ListServices(context.Context, *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error)
-	DeleteService(context.Context, *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error)
-	PauseService(context.Context, *connect.Request[v1.PauseServiceRequest]) (*connect.Response[v1.PauseServiceResponse], error)
-	ResumeService(context.Context, *connect.Request[v1.ResumeServiceRequest]) (*connect.Response[v1.ResumeServiceResponse], error)
+	DeployService(context.Context, *v1.DeployServiceRequest) (*v1.DeployServiceResponse, error)
+	ListServices(context.Context, *v1.ListServicesRequest) (*v1.ListServicesResponse, error)
+	DeleteService(context.Context, *v1.DeleteServiceRequest) (*v1.DeleteServiceResponse, error)
+	PauseService(context.Context, *v1.PauseServiceRequest) (*v1.PauseServiceResponse, error)
+	ResumeService(context.Context, *v1.ResumeServiceRequest) (*v1.ResumeServiceResponse, error)
 	// ScaleService sets the desired replica count (0 = scaled down).
-	ScaleService(context.Context, *connect.Request[v1.ScaleServiceRequest]) (*connect.Response[v1.ScaleServiceResponse], error)
+	ScaleService(context.Context, *v1.ScaleServiceRequest) (*v1.ScaleServiceResponse, error)
 	// PromoteService / RollbackService: blue-green slot switch.
-	PromoteService(context.Context, *connect.Request[v1.PromoteServiceRequest]) (*connect.Response[v1.PromoteServiceResponse], error)
-	RollbackService(context.Context, *connect.Request[v1.RollbackServiceRequest]) (*connect.Response[v1.RollbackServiceResponse], error)
+	PromoteService(context.Context, *v1.PromoteServiceRequest) (*v1.PromoteServiceResponse, error)
+	RollbackService(context.Context, *v1.RollbackServiceRequest) (*v1.RollbackServiceResponse, error)
 	// GetServiceManifest returns the Deployment + Services as YAML (read-only).
-	GetServiceManifest(context.Context, *connect.Request[v1.GetServiceManifestRequest]) (*connect.Response[v1.GetServiceManifestResponse], error)
+	GetServiceManifest(context.Context, *v1.GetServiceManifestRequest) (*v1.GetServiceManifestResponse, error)
 	// ApplyServiceManifest replaces a service from edited YAML (owner-only).
-	ApplyServiceManifest(context.Context, *connect.Request[v1.ApplyServiceManifestRequest]) (*connect.Response[v1.ApplyServiceManifestResponse], error)
+	ApplyServiceManifest(context.Context, *v1.ApplyServiceManifestRequest) (*v1.ApplyServiceManifestResponse, error)
 	// Persistent volume claims (admin-managed storage for services).
-	CreatePVC(context.Context, *connect.Request[v1.CreatePVCRequest]) (*connect.Response[v1.CreatePVCResponse], error)
-	ListPVCs(context.Context, *connect.Request[v1.ListPVCsRequest]) (*connect.Response[v1.ListPVCsResponse], error)
-	DeletePVC(context.Context, *connect.Request[v1.DeletePVCRequest]) (*connect.Response[v1.DeletePVCResponse], error)
+	CreatePVC(context.Context, *v1.CreatePVCRequest) (*v1.CreatePVCResponse, error)
+	ListPVCs(context.Context, *v1.ListPVCsRequest) (*v1.ListPVCsResponse, error)
+	DeletePVC(context.Context, *v1.DeletePVCRequest) (*v1.DeletePVCResponse, error)
 	// service logs (read a service's container logs; seam for a log backend)
-	ServiceLogs(context.Context, *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error)
-	WatchServiceLogs(context.Context, *connect.Request[v1.WatchServiceLogsRequest], *connect.ServerStream[v1.WatchServiceLogsResponse]) error
+	ServiceLogs(context.Context, *v1.ServiceLogsRequest) (*v1.ServiceLogsResponse, error)
+	WatchServiceLogs(context.Context, *v1.WatchServiceLogsRequest, BranchSessionServiceWatchServiceLogsServerStream) error
 	// sandbox logs (read a sandbox pod's container logs; `previous` = the
 	// crashed/OOM-killed instance). Read-only observability for the webui; NOT
 	// exposed as an agent tool.
-	SandboxLogs(context.Context, *connect.Request[v1.SandboxLogsRequest]) (*connect.Response[v1.SandboxLogsResponse], error)
+	SandboxLogs(context.Context, *v1.SandboxLogsRequest) (*v1.SandboxLogsResponse, error)
 	// WatchWorkspace streams the tenant's sandboxes/services/PVCs live.
-	WatchWorkspace(context.Context, *connect.Request[v1.WatchWorkspaceRequest], *connect.ServerStream[v1.WatchWorkspaceResponse]) error
+	WatchWorkspace(context.Context, *v1.WatchWorkspaceRequest, BranchSessionServiceWatchWorkspaceServerStream) error
 	// ---- Helm ----
-	HelmDeploy(context.Context, *connect.Request[v1.HelmDeployRequest]) (*connect.Response[v1.HelmDeployResponse], error)
-	HelmList(context.Context, *connect.Request[v1.HelmListRequest]) (*connect.Response[v1.HelmListResponse], error)
-	HelmHistory(context.Context, *connect.Request[v1.HelmHistoryRequest]) (*connect.Response[v1.HelmHistoryResponse], error)
-	HelmRollback(context.Context, *connect.Request[v1.HelmRollbackRequest]) (*connect.Response[v1.HelmRollbackResponse], error)
-	HelmUninstall(context.Context, *connect.Request[v1.HelmUninstallRequest]) (*connect.Response[v1.HelmUninstallResponse], error)
+	HelmDeploy(context.Context, *v1.HelmDeployRequest) (*v1.HelmDeployResponse, error)
+	HelmList(context.Context, *v1.HelmListRequest) (*v1.HelmListResponse, error)
+	HelmHistory(context.Context, *v1.HelmHistoryRequest) (*v1.HelmHistoryResponse, error)
+	HelmRollback(context.Context, *v1.HelmRollbackRequest) (*v1.HelmRollbackResponse, error)
+	HelmUninstall(context.Context, *v1.HelmUninstallRequest) (*v1.HelmUninstallResponse, error)
 	// Blue-green slot switch for a Helm release.
-	HelmPromote(context.Context, *connect.Request[v1.HelmPromoteRequest]) (*connect.Response[v1.HelmPromoteResponse], error)
-	HelmRollbackRelease(context.Context, *connect.Request[v1.HelmRollbackReleaseRequest]) (*connect.Response[v1.HelmRollbackReleaseResponse], error)
+	HelmPromote(context.Context, *v1.HelmPromoteRequest) (*v1.HelmPromoteResponse, error)
+	HelmRollbackRelease(context.Context, *v1.HelmRollbackReleaseRequest) (*v1.HelmRollbackReleaseResponse, error)
 	// Live per-object status + logs of a release (so a UI/tool can show each
 	// deployed workload/pod, and read one pod's log).
-	HelmObjects(context.Context, *connect.Request[v1.HelmObjectsRequest]) (*connect.Response[v1.HelmObjectsResponse], error)
-	HelmObjectLogs(context.Context, *connect.Request[v1.HelmObjectLogsRequest]) (*connect.Response[v1.HelmObjectLogsResponse], error)
+	HelmObjects(context.Context, *v1.HelmObjectsRequest) (*v1.HelmObjectsResponse, error)
+	HelmObjectLogs(context.Context, *v1.HelmObjectLogsRequest) (*v1.HelmObjectLogsResponse, error)
 	// ---- forwarded agent surface (minimal; no policy RPCs) ----
-	Health(context.Context, *connect.Request[v11.HealthRequest]) (*connect.Response[v11.HealthResponse], error)
-	GetIdentity(context.Context, *connect.Request[v11.GetIdentityRequest]) (*connect.Response[v11.GetIdentityResponse], error)
-	ListSessions(context.Context, *connect.Request[v11.ListSessionsRequest]) (*connect.Response[v11.ListSessionsResponse], error)
-	GetSession(context.Context, *connect.Request[v11.GetSessionRequest]) (*connect.Response[v11.GetSessionResponse], error)
+	Health(context.Context, *v11.HealthRequest) (*v11.HealthResponse, error)
+	GetIdentity(context.Context, *v11.GetIdentityRequest) (*v11.GetIdentityResponse, error)
+	ListSessions(context.Context, *v11.ListSessionsRequest) (*v11.ListSessionsResponse, error)
+	GetSession(context.Context, *v11.GetSessionRequest) (*v11.GetSessionResponse, error)
 	// NOTE: session deletion is NOT forwarded verbatim. Use DeleteBranchSession
 	// (the single, authorized, cascading entry point) so ownership is checked and
 	// sandboxes/free-session rows are reclaimed consistently.
-	ListMessages(context.Context, *connect.Request[v11.ListMessagesRequest]) (*connect.Response[v11.ListMessagesResponse], error)
-	Prompt(context.Context, *connect.Request[v11.PromptRequest], *connect.ServerStream[v11.PromptResponse]) error
-	WatchSession(context.Context, *connect.Request[v11.WatchSessionRequest], *connect.ServerStream[v11.WatchSessionResponse]) error
-	WatchSessions(context.Context, *connect.Request[v11.WatchSessionsRequest], *connect.ServerStream[v11.WatchSessionsResponse]) error
-	SetModel(context.Context, *connect.Request[v11.SetModelRequest]) (*connect.Response[v11.SetModelResponse], error)
-	Undo(context.Context, *connect.Request[v11.UndoRequest]) (*connect.Response[v11.UndoResponse], error)
-	MarkRead(context.Context, *connect.Request[v11.MarkReadRequest]) (*connect.Response[v11.MarkReadResponse], error)
-	State(context.Context, *connect.Request[v11.StateRequest]) (*connect.Response[v11.StateResponse], error)
-	Mailbox(context.Context, *connect.Request[v11.MailboxRequest]) (*connect.Response[v11.MailboxResponse], error)
-	Interrupt(context.Context, *connect.Request[v11.InterruptRequest]) (*connect.Response[v11.InterruptResponse], error)
-	Compact(context.Context, *connect.Request[v11.CompactRequest]) (*connect.Response[v11.CompactResponse], error)
+	ListMessages(context.Context, *v11.ListMessagesRequest) (*v11.ListMessagesResponse, error)
+	Prompt(context.Context, *v11.PromptRequest, BranchSessionServicePromptServerStream) error
+	WatchSession(context.Context, *v11.WatchSessionRequest, BranchSessionServiceWatchSessionServerStream) error
+	WatchSessions(context.Context, *v11.WatchSessionsRequest, BranchSessionServiceWatchSessionsServerStream) error
+	SetModel(context.Context, *v11.SetModelRequest) (*v11.SetModelResponse, error)
+	Undo(context.Context, *v11.UndoRequest) (*v11.UndoResponse, error)
+	MarkRead(context.Context, *v11.MarkReadRequest) (*v11.MarkReadResponse, error)
+	State(context.Context, *v11.StateRequest) (*v11.StateResponse, error)
+	Mailbox(context.Context, *v11.MailboxRequest) (*v11.MailboxResponse, error)
+	Interrupt(context.Context, *v11.InterruptRequest) (*v11.InterruptResponse, error)
+	Compact(context.Context, *v11.CompactRequest) (*v11.CompactResponse, error)
 	// settings (narrowed)
-	UpdateSettings(context.Context, *connect.Request[v1.UpdateSettingsRequest]) (*connect.Response[v1.UpdateSettingsResponse], error)
+	UpdateSettings(context.Context, *v1.UpdateSettingsRequest) (*v1.UpdateSettingsResponse, error)
 	// models + providers (per-tenant config)
-	ListProviders(context.Context, *connect.Request[v11.ListProvidersRequest]) (*connect.Response[v11.ListProvidersResponse], error)
-	ListProvidersCatalog(context.Context, *connect.Request[v11.ListProvidersCatalogRequest]) (*connect.Response[v11.ListProvidersCatalogResponse], error)
-	RegisterProvider(context.Context, *connect.Request[v11.RegisterProviderRequest]) (*connect.Response[v11.RegisterProviderResponse], error)
-	DeleteProvider(context.Context, *connect.Request[v11.DeleteProviderRequest]) (*connect.Response[v11.DeleteProviderResponse], error)
-	TestProvider(context.Context, *connect.Request[v11.TestProviderRequest]) (*connect.Response[v11.TestProviderResponse], error)
-	ListModels(context.Context, *connect.Request[v11.ListModelsRequest]) (*connect.Response[v11.ListModelsResponse], error)
+	ListProviders(context.Context, *v11.ListProvidersRequest) (*v11.ListProvidersResponse, error)
+	ListProvidersCatalog(context.Context, *v11.ListProvidersCatalogRequest) (*v11.ListProvidersCatalogResponse, error)
+	RegisterProvider(context.Context, *v11.RegisterProviderRequest) (*v11.RegisterProviderResponse, error)
+	DeleteProvider(context.Context, *v11.DeleteProviderRequest) (*v11.DeleteProviderResponse, error)
+	TestProvider(context.Context, *v11.TestProviderRequest) (*v11.TestProviderResponse, error)
+	ListModels(context.Context, *v11.ListModelsRequest) (*v11.ListModelsResponse, error)
 	// presets (READ-ONLY: no upsert/delete)
-	ListPresets(context.Context, *connect.Request[v11.ListPresetsRequest]) (*connect.Response[v11.ListPresetsResponse], error)
+	ListPresets(context.Context, *v11.ListPresetsRequest) (*v11.ListPresetsResponse, error)
 	// config + tools (per-tenant config)
-	GetConfig(context.Context, *connect.Request[v11.GetConfigRequest]) (*connect.Response[v11.GetConfigResponse], error)
-	SetConfig(context.Context, *connect.Request[v11.SetConfigRequest]) (*connect.Response[v11.SetConfigResponse], error)
-	ListTools(context.Context, *connect.Request[v11.ListToolsRequest]) (*connect.Response[v11.ListToolsResponse], error)
-	GetToolConfig(context.Context, *connect.Request[v11.GetToolConfigRequest]) (*connect.Response[v11.GetToolConfigResponse], error)
-	SetToolConfig(context.Context, *connect.Request[v11.SetToolConfigRequest]) (*connect.Response[v11.SetToolConfigResponse], error)
-	SetExtensionConfig(context.Context, *connect.Request[v11.SetExtensionConfigRequest]) (*connect.Response[v11.SetExtensionConfigResponse], error)
+	GetConfig(context.Context, *v11.GetConfigRequest) (*v11.GetConfigResponse, error)
+	SetConfig(context.Context, *v11.SetConfigRequest) (*v11.SetConfigResponse, error)
+	ListTools(context.Context, *v11.ListToolsRequest) (*v11.ListToolsResponse, error)
+	GetToolConfig(context.Context, *v11.GetToolConfigRequest) (*v11.GetToolConfigResponse, error)
+	SetToolConfig(context.Context, *v11.SetToolConfigRequest) (*v11.SetToolConfigResponse, error)
+	SetExtensionConfig(context.Context, *v11.SetExtensionConfigRequest) (*v11.SetExtensionConfigResponse, error)
 	// files
-	UploadFile(context.Context, *connect.Request[v11.UploadFileRequest]) (*connect.Response[v11.UploadFileResponse], error)
-	IngestFile(context.Context, *connect.Request[v11.IngestFileRequest]) (*connect.Response[v11.IngestFileResponse], error)
-	GetFile(context.Context, *connect.Request[v11.GetFileRequest]) (*connect.Response[v11.GetFileResponse], error)
-	GetFileMeta(context.Context, *connect.Request[v11.GetFileMetaRequest]) (*connect.Response[v11.GetFileMetaResponse], error)
-	GetFileStream(context.Context, *connect.Request[v11.GetFileRequest], *connect.ServerStream[v11.FileChunk]) error
+	UploadFile(context.Context, *v11.UploadFileRequest) (*v11.UploadFileResponse, error)
+	IngestFile(context.Context, *v11.IngestFileRequest) (*v11.IngestFileResponse, error)
+	GetFile(context.Context, *v11.GetFileRequest) (*v11.GetFileResponse, error)
+	GetFileMeta(context.Context, *v11.GetFileMetaRequest) (*v11.GetFileMetaResponse, error)
+	GetFileStream(context.Context, *v11.GetFileRequest, BranchSessionServiceGetFileStreamServerStream) error
 }
 
-// NewBranchSessionServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewBranchSessionServiceHandler(svc BranchSessionServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	branchSessionServiceMethods := v1.File_workspace_v1_workspace_proto.Services().ByName("BranchSessionService").Methods()
-	branchSessionServiceEnsureBranchSessionHandler := connect.NewUnaryHandler(
-		BranchSessionServiceEnsureBranchSessionProcedure,
-		svc.EnsureBranchSession,
-		connect.WithSchema(branchSessionServiceMethods.ByName("EnsureBranchSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceForkBranchSessionHandler := connect.NewUnaryHandler(
-		BranchSessionServiceForkBranchSessionProcedure,
-		svc.ForkBranchSession,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ForkBranchSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListBranchSessionsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListBranchSessionsProcedure,
-		svc.ListBranchSessions,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListBranchSessions")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceGetBranchSessionHandler := connect.NewUnaryHandler(
-		BranchSessionServiceGetBranchSessionProcedure,
-		svc.GetBranchSession,
-		connect.WithSchema(branchSessionServiceMethods.ByName("GetBranchSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceDeleteBranchSessionHandler := connect.NewUnaryHandler(
-		BranchSessionServiceDeleteBranchSessionProcedure,
-		svc.DeleteBranchSession,
-		connect.WithSchema(branchSessionServiceMethods.ByName("DeleteBranchSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceDeleteBranchHandler := connect.NewUnaryHandler(
-		BranchSessionServiceDeleteBranchProcedure,
-		svc.DeleteBranch,
-		connect.WithSchema(branchSessionServiceMethods.ByName("DeleteBranch")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceDeleteRepoHandler := connect.NewUnaryHandler(
-		BranchSessionServiceDeleteRepoProcedure,
-		svc.DeleteRepo,
-		connect.WithSchema(branchSessionServiceMethods.ByName("DeleteRepo")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceCreateFreeSessionHandler := connect.NewUnaryHandler(
-		BranchSessionServiceCreateFreeSessionProcedure,
-		svc.CreateFreeSession,
-		connect.WithSchema(branchSessionServiceMethods.ByName("CreateFreeSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListReposHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListReposProcedure,
-		svc.ListRepos,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListRepos")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceTreeHandler := connect.NewUnaryHandler(
-		BranchSessionServiceTreeProcedure,
-		svc.Tree,
-		connect.WithSchema(branchSessionServiceMethods.ByName("Tree")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceReadBlobHandler := connect.NewUnaryHandler(
-		BranchSessionServiceReadBlobProcedure,
-		svc.ReadBlob,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ReadBlob")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceReadRawHandler := connect.NewUnaryHandler(
-		BranchSessionServiceReadRawProcedure,
-		svc.ReadRaw,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ReadRaw")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceLogHandler := connect.NewUnaryHandler(
-		BranchSessionServiceLogProcedure,
-		svc.Log,
-		connect.WithSchema(branchSessionServiceMethods.ByName("Log")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceBranchesHandler := connect.NewUnaryHandler(
-		BranchSessionServiceBranchesProcedure,
-		svc.Branches,
-		connect.WithSchema(branchSessionServiceMethods.ByName("Branches")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceTagsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceTagsProcedure,
-		svc.Tags,
-		connect.WithSchema(branchSessionServiceMethods.ByName("Tags")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListReleasesHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListReleasesProcedure,
-		svc.ListReleases,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListReleases")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceGetReleaseAssetHandler := connect.NewUnaryHandler(
-		BranchSessionServiceGetReleaseAssetProcedure,
-		svc.GetReleaseAsset,
-		connect.WithSchema(branchSessionServiceMethods.ByName("GetReleaseAsset")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceGetCommitHandler := connect.NewUnaryHandler(
-		BranchSessionServiceGetCommitProcedure,
-		svc.GetCommit,
-		connect.WithSchema(branchSessionServiceMethods.ByName("GetCommit")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceCommitDiffHandler := connect.NewUnaryHandler(
-		BranchSessionServiceCommitDiffProcedure,
-		svc.CommitDiff,
-		connect.WithSchema(branchSessionServiceMethods.ByName("CommitDiff")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceEnsureRepoHandler := connect.NewUnaryHandler(
-		BranchSessionServiceEnsureRepoProcedure,
-		svc.EnsureRepo,
-		connect.WithSchema(branchSessionServiceMethods.ByName("EnsureRepo")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceCreateOrgHandler := connect.NewUnaryHandler(
-		BranchSessionServiceCreateOrgProcedure,
-		svc.CreateOrg,
-		connect.WithSchema(branchSessionServiceMethods.ByName("CreateOrg")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListOrgsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListOrgsProcedure,
-		svc.ListOrgs,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListOrgs")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceRepoMetaHandler := connect.NewUnaryHandler(
-		BranchSessionServiceRepoMetaProcedure,
-		svc.RepoMeta,
-		connect.WithSchema(branchSessionServiceMethods.ByName("RepoMeta")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceContentsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceContentsProcedure,
-		svc.Contents,
-		connect.WithSchema(branchSessionServiceMethods.ByName("Contents")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceCompareHandler := connect.NewUnaryHandler(
-		BranchSessionServiceCompareProcedure,
-		svc.Compare,
-		connect.WithSchema(branchSessionServiceMethods.ByName("Compare")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceBlameHandler := connect.NewUnaryHandler(
-		BranchSessionServiceBlameProcedure,
-		svc.Blame,
-		connect.WithSchema(branchSessionServiceMethods.ByName("Blame")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceFileDiffHandler := connect.NewUnaryHandler(
-		BranchSessionServiceFileDiffProcedure,
-		svc.FileDiff,
-		connect.WithSchema(branchSessionServiceMethods.ByName("FileDiff")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceCreateTagHandler := connect.NewUnaryHandler(
-		BranchSessionServiceCreateTagProcedure,
-		svc.CreateTag,
-		connect.WithSchema(branchSessionServiceMethods.ByName("CreateTag")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceCreateBranchHandler := connect.NewUnaryHandler(
-		BranchSessionServiceCreateBranchProcedure,
-		svc.CreateBranch,
-		connect.WithSchema(branchSessionServiceMethods.ByName("CreateBranch")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceArchiveHandler := connect.NewUnaryHandler(
-		BranchSessionServiceArchiveProcedure,
-		svc.Archive,
-		connect.WithSchema(branchSessionServiceMethods.ByName("Archive")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceImportRepoHandler := connect.NewUnaryHandler(
-		BranchSessionServiceImportRepoProcedure,
-		svc.ImportRepo,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ImportRepo")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceSetPushMirrorHandler := connect.NewUnaryHandler(
-		BranchSessionServiceSetPushMirrorProcedure,
-		svc.SetPushMirror,
-		connect.WithSchema(branchSessionServiceMethods.ByName("SetPushMirror")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListPushMirrorsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListPushMirrorsProcedure,
-		svc.ListPushMirrors,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListPushMirrors")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceDeletePushMirrorHandler := connect.NewUnaryHandler(
-		BranchSessionServiceDeletePushMirrorProcedure,
-		svc.DeletePushMirror,
-		connect.WithSchema(branchSessionServiceMethods.ByName("DeletePushMirror")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListMRsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListMRsProcedure,
-		svc.ListMRs,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListMRs")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceGetMRHandler := connect.NewUnaryHandler(
-		BranchSessionServiceGetMRProcedure,
-		svc.GetMR,
-		connect.WithSchema(branchSessionServiceMethods.ByName("GetMR")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceMRDiffHandler := connect.NewUnaryHandler(
-		BranchSessionServiceMRDiffProcedure,
-		svc.MRDiff,
-		connect.WithSchema(branchSessionServiceMethods.ByName("MRDiff")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListMRCommentsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListMRCommentsProcedure,
-		svc.ListMRComments,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListMRComments")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceSubmitMRHandler := connect.NewUnaryHandler(
-		BranchSessionServiceSubmitMRProcedure,
-		svc.SubmitMR,
-		connect.WithSchema(branchSessionServiceMethods.ByName("SubmitMR")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceCommentMRHandler := connect.NewUnaryHandler(
-		BranchSessionServiceCommentMRProcedure,
-		svc.CommentMR,
-		connect.WithSchema(branchSessionServiceMethods.ByName("CommentMR")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceMergeMRHandler := connect.NewUnaryHandler(
-		BranchSessionServiceMergeMRProcedure,
-		svc.MergeMR,
-		connect.WithSchema(branchSessionServiceMethods.ByName("MergeMR")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceCloseMRHandler := connect.NewUnaryHandler(
-		BranchSessionServiceCloseMRProcedure,
-		svc.CloseMR,
-		connect.WithSchema(branchSessionServiceMethods.ByName("CloseMR")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListOCIImagesHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListOCIImagesProcedure,
-		svc.ListOCIImages,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListOCIImages")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceBuildSandboxImageHandler := connect.NewUnaryHandler(
-		BranchSessionServiceBuildSandboxImageProcedure,
-		svc.BuildSandboxImage,
-		connect.WithSchema(branchSessionServiceMethods.ByName("BuildSandboxImage")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceGetBuildStatusHandler := connect.NewUnaryHandler(
-		BranchSessionServiceGetBuildStatusProcedure,
-		svc.GetBuildStatus,
-		connect.WithSchema(branchSessionServiceMethods.ByName("GetBuildStatus")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListBuildsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListBuildsProcedure,
-		svc.ListBuilds,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListBuilds")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceImportImageHandler := connect.NewUnaryHandler(
-		BranchSessionServiceImportImageProcedure,
-		svc.ImportImage,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ImportImage")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListSandboxesHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListSandboxesProcedure,
-		svc.ListSandboxes,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListSandboxes")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceCreateSandboxHandler := connect.NewUnaryHandler(
-		BranchSessionServiceCreateSandboxProcedure,
-		svc.CreateSandbox,
-		connect.WithSchema(branchSessionServiceMethods.ByName("CreateSandbox")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceGetSandboxHandler := connect.NewUnaryHandler(
-		BranchSessionServiceGetSandboxProcedure,
-		svc.GetSandbox,
-		connect.WithSchema(branchSessionServiceMethods.ByName("GetSandbox")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceDeleteSandboxHandler := connect.NewUnaryHandler(
-		BranchSessionServiceDeleteSandboxProcedure,
-		svc.DeleteSandbox,
-		connect.WithSchema(branchSessionServiceMethods.ByName("DeleteSandbox")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceResolveSandboxHandler := connect.NewUnaryHandler(
-		BranchSessionServiceResolveSandboxProcedure,
-		svc.ResolveSandbox,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ResolveSandbox")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListSandboxJobsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListSandboxJobsProcedure,
-		svc.ListSandboxJobs,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListSandboxJobs")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceGetSandboxJobOutputHandler := connect.NewUnaryHandler(
-		BranchSessionServiceGetSandboxJobOutputProcedure,
-		svc.GetSandboxJobOutput,
-		connect.WithSchema(branchSessionServiceMethods.ByName("GetSandboxJobOutput")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceWatchSandboxJobHandler := connect.NewServerStreamHandler(
-		BranchSessionServiceWatchSandboxJobProcedure,
-		svc.WatchSandboxJob,
-		connect.WithSchema(branchSessionServiceMethods.ByName("WatchSandboxJob")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListSandboxFilesHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListSandboxFilesProcedure,
-		svc.ListSandboxFiles,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListSandboxFiles")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceReadSandboxFileHandler := connect.NewUnaryHandler(
-		BranchSessionServiceReadSandboxFileProcedure,
-		svc.ReadSandboxFile,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ReadSandboxFile")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceDeployServiceHandler := connect.NewUnaryHandler(
-		BranchSessionServiceDeployServiceProcedure,
-		svc.DeployService,
-		connect.WithSchema(branchSessionServiceMethods.ByName("DeployService")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListServicesHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListServicesProcedure,
-		svc.ListServices,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListServices")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceDeleteServiceHandler := connect.NewUnaryHandler(
-		BranchSessionServiceDeleteServiceProcedure,
-		svc.DeleteService,
-		connect.WithSchema(branchSessionServiceMethods.ByName("DeleteService")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServicePauseServiceHandler := connect.NewUnaryHandler(
-		BranchSessionServicePauseServiceProcedure,
-		svc.PauseService,
-		connect.WithSchema(branchSessionServiceMethods.ByName("PauseService")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceResumeServiceHandler := connect.NewUnaryHandler(
-		BranchSessionServiceResumeServiceProcedure,
-		svc.ResumeService,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ResumeService")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceScaleServiceHandler := connect.NewUnaryHandler(
-		BranchSessionServiceScaleServiceProcedure,
-		svc.ScaleService,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ScaleService")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServicePromoteServiceHandler := connect.NewUnaryHandler(
-		BranchSessionServicePromoteServiceProcedure,
-		svc.PromoteService,
-		connect.WithSchema(branchSessionServiceMethods.ByName("PromoteService")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceRollbackServiceHandler := connect.NewUnaryHandler(
-		BranchSessionServiceRollbackServiceProcedure,
-		svc.RollbackService,
-		connect.WithSchema(branchSessionServiceMethods.ByName("RollbackService")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceGetServiceManifestHandler := connect.NewUnaryHandler(
-		BranchSessionServiceGetServiceManifestProcedure,
-		svc.GetServiceManifest,
-		connect.WithSchema(branchSessionServiceMethods.ByName("GetServiceManifest")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceApplyServiceManifestHandler := connect.NewUnaryHandler(
-		BranchSessionServiceApplyServiceManifestProcedure,
-		svc.ApplyServiceManifest,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ApplyServiceManifest")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceCreatePVCHandler := connect.NewUnaryHandler(
-		BranchSessionServiceCreatePVCProcedure,
-		svc.CreatePVC,
-		connect.WithSchema(branchSessionServiceMethods.ByName("CreatePVC")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListPVCsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListPVCsProcedure,
-		svc.ListPVCs,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListPVCs")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceDeletePVCHandler := connect.NewUnaryHandler(
-		BranchSessionServiceDeletePVCProcedure,
-		svc.DeletePVC,
-		connect.WithSchema(branchSessionServiceMethods.ByName("DeletePVC")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceServiceLogsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceServiceLogsProcedure,
-		svc.ServiceLogs,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ServiceLogs")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceWatchServiceLogsHandler := connect.NewServerStreamHandler(
-		BranchSessionServiceWatchServiceLogsProcedure,
-		svc.WatchServiceLogs,
-		connect.WithSchema(branchSessionServiceMethods.ByName("WatchServiceLogs")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceSandboxLogsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceSandboxLogsProcedure,
-		svc.SandboxLogs,
-		connect.WithSchema(branchSessionServiceMethods.ByName("SandboxLogs")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceWatchWorkspaceHandler := connect.NewServerStreamHandler(
-		BranchSessionServiceWatchWorkspaceProcedure,
-		svc.WatchWorkspace,
-		connect.WithSchema(branchSessionServiceMethods.ByName("WatchWorkspace")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceHelmDeployHandler := connect.NewUnaryHandler(
-		BranchSessionServiceHelmDeployProcedure,
-		svc.HelmDeploy,
-		connect.WithSchema(branchSessionServiceMethods.ByName("HelmDeploy")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceHelmListHandler := connect.NewUnaryHandler(
-		BranchSessionServiceHelmListProcedure,
-		svc.HelmList,
-		connect.WithSchema(branchSessionServiceMethods.ByName("HelmList")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceHelmHistoryHandler := connect.NewUnaryHandler(
-		BranchSessionServiceHelmHistoryProcedure,
-		svc.HelmHistory,
-		connect.WithSchema(branchSessionServiceMethods.ByName("HelmHistory")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceHelmRollbackHandler := connect.NewUnaryHandler(
-		BranchSessionServiceHelmRollbackProcedure,
-		svc.HelmRollback,
-		connect.WithSchema(branchSessionServiceMethods.ByName("HelmRollback")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceHelmUninstallHandler := connect.NewUnaryHandler(
-		BranchSessionServiceHelmUninstallProcedure,
-		svc.HelmUninstall,
-		connect.WithSchema(branchSessionServiceMethods.ByName("HelmUninstall")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceHelmPromoteHandler := connect.NewUnaryHandler(
-		BranchSessionServiceHelmPromoteProcedure,
-		svc.HelmPromote,
-		connect.WithSchema(branchSessionServiceMethods.ByName("HelmPromote")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceHelmRollbackReleaseHandler := connect.NewUnaryHandler(
-		BranchSessionServiceHelmRollbackReleaseProcedure,
-		svc.HelmRollbackRelease,
-		connect.WithSchema(branchSessionServiceMethods.ByName("HelmRollbackRelease")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceHelmObjectsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceHelmObjectsProcedure,
-		svc.HelmObjects,
-		connect.WithSchema(branchSessionServiceMethods.ByName("HelmObjects")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceHelmObjectLogsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceHelmObjectLogsProcedure,
-		svc.HelmObjectLogs,
-		connect.WithSchema(branchSessionServiceMethods.ByName("HelmObjectLogs")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceHealthHandler := connect.NewUnaryHandler(
-		BranchSessionServiceHealthProcedure,
-		svc.Health,
-		connect.WithSchema(branchSessionServiceMethods.ByName("Health")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceGetIdentityHandler := connect.NewUnaryHandler(
-		BranchSessionServiceGetIdentityProcedure,
-		svc.GetIdentity,
-		connect.WithSchema(branchSessionServiceMethods.ByName("GetIdentity")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListSessionsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListSessionsProcedure,
-		svc.ListSessions,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListSessions")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceGetSessionHandler := connect.NewUnaryHandler(
-		BranchSessionServiceGetSessionProcedure,
-		svc.GetSession,
-		connect.WithSchema(branchSessionServiceMethods.ByName("GetSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListMessagesHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListMessagesProcedure,
-		svc.ListMessages,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListMessages")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServicePromptHandler := connect.NewServerStreamHandler(
-		BranchSessionServicePromptProcedure,
-		svc.Prompt,
-		connect.WithSchema(branchSessionServiceMethods.ByName("Prompt")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceWatchSessionHandler := connect.NewServerStreamHandler(
-		BranchSessionServiceWatchSessionProcedure,
-		svc.WatchSession,
-		connect.WithSchema(branchSessionServiceMethods.ByName("WatchSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceWatchSessionsHandler := connect.NewServerStreamHandler(
-		BranchSessionServiceWatchSessionsProcedure,
-		svc.WatchSessions,
-		connect.WithSchema(branchSessionServiceMethods.ByName("WatchSessions")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceSetModelHandler := connect.NewUnaryHandler(
-		BranchSessionServiceSetModelProcedure,
-		svc.SetModel,
-		connect.WithSchema(branchSessionServiceMethods.ByName("SetModel")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceUndoHandler := connect.NewUnaryHandler(
-		BranchSessionServiceUndoProcedure,
-		svc.Undo,
-		connect.WithSchema(branchSessionServiceMethods.ByName("Undo")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceMarkReadHandler := connect.NewUnaryHandler(
-		BranchSessionServiceMarkReadProcedure,
-		svc.MarkRead,
-		connect.WithSchema(branchSessionServiceMethods.ByName("MarkRead")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceStateHandler := connect.NewUnaryHandler(
-		BranchSessionServiceStateProcedure,
-		svc.State,
-		connect.WithSchema(branchSessionServiceMethods.ByName("State")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceMailboxHandler := connect.NewUnaryHandler(
-		BranchSessionServiceMailboxProcedure,
-		svc.Mailbox,
-		connect.WithSchema(branchSessionServiceMethods.ByName("Mailbox")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceInterruptHandler := connect.NewUnaryHandler(
-		BranchSessionServiceInterruptProcedure,
-		svc.Interrupt,
-		connect.WithSchema(branchSessionServiceMethods.ByName("Interrupt")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceCompactHandler := connect.NewUnaryHandler(
-		BranchSessionServiceCompactProcedure,
-		svc.Compact,
-		connect.WithSchema(branchSessionServiceMethods.ByName("Compact")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceUpdateSettingsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceUpdateSettingsProcedure,
-		svc.UpdateSettings,
-		connect.WithSchema(branchSessionServiceMethods.ByName("UpdateSettings")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListProvidersHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListProvidersProcedure,
-		svc.ListProviders,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListProviders")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListProvidersCatalogHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListProvidersCatalogProcedure,
-		svc.ListProvidersCatalog,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListProvidersCatalog")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceRegisterProviderHandler := connect.NewUnaryHandler(
-		BranchSessionServiceRegisterProviderProcedure,
-		svc.RegisterProvider,
-		connect.WithSchema(branchSessionServiceMethods.ByName("RegisterProvider")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceDeleteProviderHandler := connect.NewUnaryHandler(
-		BranchSessionServiceDeleteProviderProcedure,
-		svc.DeleteProvider,
-		connect.WithSchema(branchSessionServiceMethods.ByName("DeleteProvider")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceTestProviderHandler := connect.NewUnaryHandler(
-		BranchSessionServiceTestProviderProcedure,
-		svc.TestProvider,
-		connect.WithSchema(branchSessionServiceMethods.ByName("TestProvider")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListModelsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListModelsProcedure,
-		svc.ListModels,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListModels")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListPresetsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListPresetsProcedure,
-		svc.ListPresets,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListPresets")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceGetConfigHandler := connect.NewUnaryHandler(
-		BranchSessionServiceGetConfigProcedure,
-		svc.GetConfig,
-		connect.WithSchema(branchSessionServiceMethods.ByName("GetConfig")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceSetConfigHandler := connect.NewUnaryHandler(
-		BranchSessionServiceSetConfigProcedure,
-		svc.SetConfig,
-		connect.WithSchema(branchSessionServiceMethods.ByName("SetConfig")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceListToolsHandler := connect.NewUnaryHandler(
-		BranchSessionServiceListToolsProcedure,
-		svc.ListTools,
-		connect.WithSchema(branchSessionServiceMethods.ByName("ListTools")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceGetToolConfigHandler := connect.NewUnaryHandler(
-		BranchSessionServiceGetToolConfigProcedure,
-		svc.GetToolConfig,
-		connect.WithSchema(branchSessionServiceMethods.ByName("GetToolConfig")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceSetToolConfigHandler := connect.NewUnaryHandler(
-		BranchSessionServiceSetToolConfigProcedure,
-		svc.SetToolConfig,
-		connect.WithSchema(branchSessionServiceMethods.ByName("SetToolConfig")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceSetExtensionConfigHandler := connect.NewUnaryHandler(
-		BranchSessionServiceSetExtensionConfigProcedure,
-		svc.SetExtensionConfig,
-		connect.WithSchema(branchSessionServiceMethods.ByName("SetExtensionConfig")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceUploadFileHandler := connect.NewUnaryHandler(
-		BranchSessionServiceUploadFileProcedure,
-		svc.UploadFile,
-		connect.WithSchema(branchSessionServiceMethods.ByName("UploadFile")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceIngestFileHandler := connect.NewUnaryHandler(
-		BranchSessionServiceIngestFileProcedure,
-		svc.IngestFile,
-		connect.WithSchema(branchSessionServiceMethods.ByName("IngestFile")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceGetFileHandler := connect.NewUnaryHandler(
-		BranchSessionServiceGetFileProcedure,
-		svc.GetFile,
-		connect.WithSchema(branchSessionServiceMethods.ByName("GetFile")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceGetFileMetaHandler := connect.NewUnaryHandler(
-		BranchSessionServiceGetFileMetaProcedure,
-		svc.GetFileMeta,
-		connect.WithSchema(branchSessionServiceMethods.ByName("GetFileMeta")),
-		connect.WithHandlerOptions(opts...),
-	)
-	branchSessionServiceGetFileStreamHandler := connect.NewServerStreamHandler(
-		BranchSessionServiceGetFileStreamProcedure,
-		svc.GetFileStream,
-		connect.WithSchema(branchSessionServiceMethods.ByName("GetFileStream")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/workspace.v1.BranchSessionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case BranchSessionServiceEnsureBranchSessionProcedure:
-			branchSessionServiceEnsureBranchSessionHandler.ServeHTTP(w, r)
-		case BranchSessionServiceForkBranchSessionProcedure:
-			branchSessionServiceForkBranchSessionHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListBranchSessionsProcedure:
-			branchSessionServiceListBranchSessionsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceGetBranchSessionProcedure:
-			branchSessionServiceGetBranchSessionHandler.ServeHTTP(w, r)
-		case BranchSessionServiceDeleteBranchSessionProcedure:
-			branchSessionServiceDeleteBranchSessionHandler.ServeHTTP(w, r)
-		case BranchSessionServiceDeleteBranchProcedure:
-			branchSessionServiceDeleteBranchHandler.ServeHTTP(w, r)
-		case BranchSessionServiceDeleteRepoProcedure:
-			branchSessionServiceDeleteRepoHandler.ServeHTTP(w, r)
-		case BranchSessionServiceCreateFreeSessionProcedure:
-			branchSessionServiceCreateFreeSessionHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListReposProcedure:
-			branchSessionServiceListReposHandler.ServeHTTP(w, r)
-		case BranchSessionServiceTreeProcedure:
-			branchSessionServiceTreeHandler.ServeHTTP(w, r)
-		case BranchSessionServiceReadBlobProcedure:
-			branchSessionServiceReadBlobHandler.ServeHTTP(w, r)
-		case BranchSessionServiceReadRawProcedure:
-			branchSessionServiceReadRawHandler.ServeHTTP(w, r)
-		case BranchSessionServiceLogProcedure:
-			branchSessionServiceLogHandler.ServeHTTP(w, r)
-		case BranchSessionServiceBranchesProcedure:
-			branchSessionServiceBranchesHandler.ServeHTTP(w, r)
-		case BranchSessionServiceTagsProcedure:
-			branchSessionServiceTagsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListReleasesProcedure:
-			branchSessionServiceListReleasesHandler.ServeHTTP(w, r)
-		case BranchSessionServiceGetReleaseAssetProcedure:
-			branchSessionServiceGetReleaseAssetHandler.ServeHTTP(w, r)
-		case BranchSessionServiceGetCommitProcedure:
-			branchSessionServiceGetCommitHandler.ServeHTTP(w, r)
-		case BranchSessionServiceCommitDiffProcedure:
-			branchSessionServiceCommitDiffHandler.ServeHTTP(w, r)
-		case BranchSessionServiceEnsureRepoProcedure:
-			branchSessionServiceEnsureRepoHandler.ServeHTTP(w, r)
-		case BranchSessionServiceCreateOrgProcedure:
-			branchSessionServiceCreateOrgHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListOrgsProcedure:
-			branchSessionServiceListOrgsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceRepoMetaProcedure:
-			branchSessionServiceRepoMetaHandler.ServeHTTP(w, r)
-		case BranchSessionServiceContentsProcedure:
-			branchSessionServiceContentsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceCompareProcedure:
-			branchSessionServiceCompareHandler.ServeHTTP(w, r)
-		case BranchSessionServiceBlameProcedure:
-			branchSessionServiceBlameHandler.ServeHTTP(w, r)
-		case BranchSessionServiceFileDiffProcedure:
-			branchSessionServiceFileDiffHandler.ServeHTTP(w, r)
-		case BranchSessionServiceCreateTagProcedure:
-			branchSessionServiceCreateTagHandler.ServeHTTP(w, r)
-		case BranchSessionServiceCreateBranchProcedure:
-			branchSessionServiceCreateBranchHandler.ServeHTTP(w, r)
-		case BranchSessionServiceArchiveProcedure:
-			branchSessionServiceArchiveHandler.ServeHTTP(w, r)
-		case BranchSessionServiceImportRepoProcedure:
-			branchSessionServiceImportRepoHandler.ServeHTTP(w, r)
-		case BranchSessionServiceSetPushMirrorProcedure:
-			branchSessionServiceSetPushMirrorHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListPushMirrorsProcedure:
-			branchSessionServiceListPushMirrorsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceDeletePushMirrorProcedure:
-			branchSessionServiceDeletePushMirrorHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListMRsProcedure:
-			branchSessionServiceListMRsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceGetMRProcedure:
-			branchSessionServiceGetMRHandler.ServeHTTP(w, r)
-		case BranchSessionServiceMRDiffProcedure:
-			branchSessionServiceMRDiffHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListMRCommentsProcedure:
-			branchSessionServiceListMRCommentsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceSubmitMRProcedure:
-			branchSessionServiceSubmitMRHandler.ServeHTTP(w, r)
-		case BranchSessionServiceCommentMRProcedure:
-			branchSessionServiceCommentMRHandler.ServeHTTP(w, r)
-		case BranchSessionServiceMergeMRProcedure:
-			branchSessionServiceMergeMRHandler.ServeHTTP(w, r)
-		case BranchSessionServiceCloseMRProcedure:
-			branchSessionServiceCloseMRHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListOCIImagesProcedure:
-			branchSessionServiceListOCIImagesHandler.ServeHTTP(w, r)
-		case BranchSessionServiceBuildSandboxImageProcedure:
-			branchSessionServiceBuildSandboxImageHandler.ServeHTTP(w, r)
-		case BranchSessionServiceGetBuildStatusProcedure:
-			branchSessionServiceGetBuildStatusHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListBuildsProcedure:
-			branchSessionServiceListBuildsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceImportImageProcedure:
-			branchSessionServiceImportImageHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListSandboxesProcedure:
-			branchSessionServiceListSandboxesHandler.ServeHTTP(w, r)
-		case BranchSessionServiceCreateSandboxProcedure:
-			branchSessionServiceCreateSandboxHandler.ServeHTTP(w, r)
-		case BranchSessionServiceGetSandboxProcedure:
-			branchSessionServiceGetSandboxHandler.ServeHTTP(w, r)
-		case BranchSessionServiceDeleteSandboxProcedure:
-			branchSessionServiceDeleteSandboxHandler.ServeHTTP(w, r)
-		case BranchSessionServiceResolveSandboxProcedure:
-			branchSessionServiceResolveSandboxHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListSandboxJobsProcedure:
-			branchSessionServiceListSandboxJobsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceGetSandboxJobOutputProcedure:
-			branchSessionServiceGetSandboxJobOutputHandler.ServeHTTP(w, r)
-		case BranchSessionServiceWatchSandboxJobProcedure:
-			branchSessionServiceWatchSandboxJobHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListSandboxFilesProcedure:
-			branchSessionServiceListSandboxFilesHandler.ServeHTTP(w, r)
-		case BranchSessionServiceReadSandboxFileProcedure:
-			branchSessionServiceReadSandboxFileHandler.ServeHTTP(w, r)
-		case BranchSessionServiceDeployServiceProcedure:
-			branchSessionServiceDeployServiceHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListServicesProcedure:
-			branchSessionServiceListServicesHandler.ServeHTTP(w, r)
-		case BranchSessionServiceDeleteServiceProcedure:
-			branchSessionServiceDeleteServiceHandler.ServeHTTP(w, r)
-		case BranchSessionServicePauseServiceProcedure:
-			branchSessionServicePauseServiceHandler.ServeHTTP(w, r)
-		case BranchSessionServiceResumeServiceProcedure:
-			branchSessionServiceResumeServiceHandler.ServeHTTP(w, r)
-		case BranchSessionServiceScaleServiceProcedure:
-			branchSessionServiceScaleServiceHandler.ServeHTTP(w, r)
-		case BranchSessionServicePromoteServiceProcedure:
-			branchSessionServicePromoteServiceHandler.ServeHTTP(w, r)
-		case BranchSessionServiceRollbackServiceProcedure:
-			branchSessionServiceRollbackServiceHandler.ServeHTTP(w, r)
-		case BranchSessionServiceGetServiceManifestProcedure:
-			branchSessionServiceGetServiceManifestHandler.ServeHTTP(w, r)
-		case BranchSessionServiceApplyServiceManifestProcedure:
-			branchSessionServiceApplyServiceManifestHandler.ServeHTTP(w, r)
-		case BranchSessionServiceCreatePVCProcedure:
-			branchSessionServiceCreatePVCHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListPVCsProcedure:
-			branchSessionServiceListPVCsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceDeletePVCProcedure:
-			branchSessionServiceDeletePVCHandler.ServeHTTP(w, r)
-		case BranchSessionServiceServiceLogsProcedure:
-			branchSessionServiceServiceLogsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceWatchServiceLogsProcedure:
-			branchSessionServiceWatchServiceLogsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceSandboxLogsProcedure:
-			branchSessionServiceSandboxLogsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceWatchWorkspaceProcedure:
-			branchSessionServiceWatchWorkspaceHandler.ServeHTTP(w, r)
-		case BranchSessionServiceHelmDeployProcedure:
-			branchSessionServiceHelmDeployHandler.ServeHTTP(w, r)
-		case BranchSessionServiceHelmListProcedure:
-			branchSessionServiceHelmListHandler.ServeHTTP(w, r)
-		case BranchSessionServiceHelmHistoryProcedure:
-			branchSessionServiceHelmHistoryHandler.ServeHTTP(w, r)
-		case BranchSessionServiceHelmRollbackProcedure:
-			branchSessionServiceHelmRollbackHandler.ServeHTTP(w, r)
-		case BranchSessionServiceHelmUninstallProcedure:
-			branchSessionServiceHelmUninstallHandler.ServeHTTP(w, r)
-		case BranchSessionServiceHelmPromoteProcedure:
-			branchSessionServiceHelmPromoteHandler.ServeHTTP(w, r)
-		case BranchSessionServiceHelmRollbackReleaseProcedure:
-			branchSessionServiceHelmRollbackReleaseHandler.ServeHTTP(w, r)
-		case BranchSessionServiceHelmObjectsProcedure:
-			branchSessionServiceHelmObjectsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceHelmObjectLogsProcedure:
-			branchSessionServiceHelmObjectLogsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceHealthProcedure:
-			branchSessionServiceHealthHandler.ServeHTTP(w, r)
-		case BranchSessionServiceGetIdentityProcedure:
-			branchSessionServiceGetIdentityHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListSessionsProcedure:
-			branchSessionServiceListSessionsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceGetSessionProcedure:
-			branchSessionServiceGetSessionHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListMessagesProcedure:
-			branchSessionServiceListMessagesHandler.ServeHTTP(w, r)
-		case BranchSessionServicePromptProcedure:
-			branchSessionServicePromptHandler.ServeHTTP(w, r)
-		case BranchSessionServiceWatchSessionProcedure:
-			branchSessionServiceWatchSessionHandler.ServeHTTP(w, r)
-		case BranchSessionServiceWatchSessionsProcedure:
-			branchSessionServiceWatchSessionsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceSetModelProcedure:
-			branchSessionServiceSetModelHandler.ServeHTTP(w, r)
-		case BranchSessionServiceUndoProcedure:
-			branchSessionServiceUndoHandler.ServeHTTP(w, r)
-		case BranchSessionServiceMarkReadProcedure:
-			branchSessionServiceMarkReadHandler.ServeHTTP(w, r)
-		case BranchSessionServiceStateProcedure:
-			branchSessionServiceStateHandler.ServeHTTP(w, r)
-		case BranchSessionServiceMailboxProcedure:
-			branchSessionServiceMailboxHandler.ServeHTTP(w, r)
-		case BranchSessionServiceInterruptProcedure:
-			branchSessionServiceInterruptHandler.ServeHTTP(w, r)
-		case BranchSessionServiceCompactProcedure:
-			branchSessionServiceCompactHandler.ServeHTTP(w, r)
-		case BranchSessionServiceUpdateSettingsProcedure:
-			branchSessionServiceUpdateSettingsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListProvidersProcedure:
-			branchSessionServiceListProvidersHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListProvidersCatalogProcedure:
-			branchSessionServiceListProvidersCatalogHandler.ServeHTTP(w, r)
-		case BranchSessionServiceRegisterProviderProcedure:
-			branchSessionServiceRegisterProviderHandler.ServeHTTP(w, r)
-		case BranchSessionServiceDeleteProviderProcedure:
-			branchSessionServiceDeleteProviderHandler.ServeHTTP(w, r)
-		case BranchSessionServiceTestProviderProcedure:
-			branchSessionServiceTestProviderHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListModelsProcedure:
-			branchSessionServiceListModelsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListPresetsProcedure:
-			branchSessionServiceListPresetsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceGetConfigProcedure:
-			branchSessionServiceGetConfigHandler.ServeHTTP(w, r)
-		case BranchSessionServiceSetConfigProcedure:
-			branchSessionServiceSetConfigHandler.ServeHTTP(w, r)
-		case BranchSessionServiceListToolsProcedure:
-			branchSessionServiceListToolsHandler.ServeHTTP(w, r)
-		case BranchSessionServiceGetToolConfigProcedure:
-			branchSessionServiceGetToolConfigHandler.ServeHTTP(w, r)
-		case BranchSessionServiceSetToolConfigProcedure:
-			branchSessionServiceSetToolConfigHandler.ServeHTTP(w, r)
-		case BranchSessionServiceSetExtensionConfigProcedure:
-			branchSessionServiceSetExtensionConfigHandler.ServeHTTP(w, r)
-		case BranchSessionServiceUploadFileProcedure:
-			branchSessionServiceUploadFileHandler.ServeHTTP(w, r)
-		case BranchSessionServiceIngestFileProcedure:
-			branchSessionServiceIngestFileHandler.ServeHTTP(w, r)
-		case BranchSessionServiceGetFileProcedure:
-			branchSessionServiceGetFileHandler.ServeHTTP(w, r)
-		case BranchSessionServiceGetFileMetaProcedure:
-			branchSessionServiceGetFileMetaHandler.ServeHTTP(w, r)
-		case BranchSessionServiceGetFileStreamProcedure:
-			branchSessionServiceGetFileStreamHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
+// RegisterBranchSessionServiceHandler registers svc as the workspace.v1.BranchSessionService
+// implementation on server.
+func RegisterBranchSessionServiceHandler(server *connect.Server, svc BranchSessionServiceHandler) {
+	adapter := branchSessionServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: branchSessionServiceEnsureBranchSessionSpec(), Handler: adapter.ensureBranchSession},
+		connect.Method{Spec: branchSessionServiceForkBranchSessionSpec(), Handler: adapter.forkBranchSession},
+		connect.Method{Spec: branchSessionServiceListBranchSessionsSpec(), Handler: adapter.listBranchSessions},
+		connect.Method{Spec: branchSessionServiceGetBranchSessionSpec(), Handler: adapter.getBranchSession},
+		connect.Method{Spec: branchSessionServiceDeleteBranchSessionSpec(), Handler: adapter.deleteBranchSession},
+		connect.Method{Spec: branchSessionServiceDeleteBranchSpec(), Handler: adapter.deleteBranch},
+		connect.Method{Spec: branchSessionServiceDeleteRepoSpec(), Handler: adapter.deleteRepo},
+		connect.Method{Spec: branchSessionServiceCreateFreeSessionSpec(), Handler: adapter.createFreeSession},
+		connect.Method{Spec: branchSessionServiceListReposSpec(), Handler: adapter.listRepos},
+		connect.Method{Spec: branchSessionServiceTreeSpec(), Handler: adapter.tree},
+		connect.Method{Spec: branchSessionServiceReadBlobSpec(), Handler: adapter.readBlob},
+		connect.Method{Spec: branchSessionServiceReadRawSpec(), Handler: adapter.readRaw},
+		connect.Method{Spec: branchSessionServiceLogSpec(), Handler: adapter.log},
+		connect.Method{Spec: branchSessionServiceBranchesSpec(), Handler: adapter.branches},
+		connect.Method{Spec: branchSessionServiceTagsSpec(), Handler: adapter.tags},
+		connect.Method{Spec: branchSessionServiceListReleasesSpec(), Handler: adapter.listReleases},
+		connect.Method{Spec: branchSessionServiceGetReleaseAssetSpec(), Handler: adapter.getReleaseAsset},
+		connect.Method{Spec: branchSessionServiceGetCommitSpec(), Handler: adapter.getCommit},
+		connect.Method{Spec: branchSessionServiceCommitDiffSpec(), Handler: adapter.commitDiff},
+		connect.Method{Spec: branchSessionServiceEnsureRepoSpec(), Handler: adapter.ensureRepo},
+		connect.Method{Spec: branchSessionServiceCreateOrgSpec(), Handler: adapter.createOrg},
+		connect.Method{Spec: branchSessionServiceListOrgsSpec(), Handler: adapter.listOrgs},
+		connect.Method{Spec: branchSessionServiceRepoMetaSpec(), Handler: adapter.repoMeta},
+		connect.Method{Spec: branchSessionServiceContentsSpec(), Handler: adapter.contents},
+		connect.Method{Spec: branchSessionServiceCompareSpec(), Handler: adapter.compare},
+		connect.Method{Spec: branchSessionServiceBlameSpec(), Handler: adapter.blame},
+		connect.Method{Spec: branchSessionServiceFileDiffSpec(), Handler: adapter.fileDiff},
+		connect.Method{Spec: branchSessionServiceCreateTagSpec(), Handler: adapter.createTag},
+		connect.Method{Spec: branchSessionServiceCreateBranchSpec(), Handler: adapter.createBranch},
+		connect.Method{Spec: branchSessionServiceArchiveSpec(), Handler: adapter.archive},
+		connect.Method{Spec: branchSessionServiceImportRepoSpec(), Handler: adapter.importRepo},
+		connect.Method{Spec: branchSessionServiceSetPushMirrorSpec(), Handler: adapter.setPushMirror},
+		connect.Method{Spec: branchSessionServiceListPushMirrorsSpec(), Handler: adapter.listPushMirrors},
+		connect.Method{Spec: branchSessionServiceDeletePushMirrorSpec(), Handler: adapter.deletePushMirror},
+		connect.Method{Spec: branchSessionServiceListMRsSpec(), Handler: adapter.listMRs},
+		connect.Method{Spec: branchSessionServiceGetMRSpec(), Handler: adapter.getMR},
+		connect.Method{Spec: branchSessionServiceMRDiffSpec(), Handler: adapter.mRDiff},
+		connect.Method{Spec: branchSessionServiceListMRCommentsSpec(), Handler: adapter.listMRComments},
+		connect.Method{Spec: branchSessionServiceSubmitMRSpec(), Handler: adapter.submitMR},
+		connect.Method{Spec: branchSessionServiceCommentMRSpec(), Handler: adapter.commentMR},
+		connect.Method{Spec: branchSessionServiceMergeMRSpec(), Handler: adapter.mergeMR},
+		connect.Method{Spec: branchSessionServiceCloseMRSpec(), Handler: adapter.closeMR},
+		connect.Method{Spec: branchSessionServiceListOCIImagesSpec(), Handler: adapter.listOCIImages},
+		connect.Method{Spec: branchSessionServiceBuildSandboxImageSpec(), Handler: adapter.buildSandboxImage},
+		connect.Method{Spec: branchSessionServiceGetBuildStatusSpec(), Handler: adapter.getBuildStatus},
+		connect.Method{Spec: branchSessionServiceListBuildsSpec(), Handler: adapter.listBuilds},
+		connect.Method{Spec: branchSessionServiceImportImageSpec(), Handler: adapter.importImage},
+		connect.Method{Spec: branchSessionServiceListSandboxesSpec(), Handler: adapter.listSandboxes},
+		connect.Method{Spec: branchSessionServiceCreateSandboxSpec(), Handler: adapter.createSandbox},
+		connect.Method{Spec: branchSessionServiceGetSandboxSpec(), Handler: adapter.getSandbox},
+		connect.Method{Spec: branchSessionServiceDeleteSandboxSpec(), Handler: adapter.deleteSandbox},
+		connect.Method{Spec: branchSessionServiceResolveSandboxSpec(), Handler: adapter.resolveSandbox},
+		connect.Method{Spec: branchSessionServiceListSandboxJobsSpec(), Handler: adapter.listSandboxJobs},
+		connect.Method{Spec: branchSessionServiceGetSandboxJobOutputSpec(), Handler: adapter.getSandboxJobOutput},
+		connect.Method{Spec: branchSessionServiceWatchSandboxJobSpec(), Handler: adapter.watchSandboxJob},
+		connect.Method{Spec: branchSessionServiceListSandboxFilesSpec(), Handler: adapter.listSandboxFiles},
+		connect.Method{Spec: branchSessionServiceReadSandboxFileSpec(), Handler: adapter.readSandboxFile},
+		connect.Method{Spec: branchSessionServiceDeployServiceSpec(), Handler: adapter.deployService},
+		connect.Method{Spec: branchSessionServiceListServicesSpec(), Handler: adapter.listServices},
+		connect.Method{Spec: branchSessionServiceDeleteServiceSpec(), Handler: adapter.deleteService},
+		connect.Method{Spec: branchSessionServicePauseServiceSpec(), Handler: adapter.pauseService},
+		connect.Method{Spec: branchSessionServiceResumeServiceSpec(), Handler: adapter.resumeService},
+		connect.Method{Spec: branchSessionServiceScaleServiceSpec(), Handler: adapter.scaleService},
+		connect.Method{Spec: branchSessionServicePromoteServiceSpec(), Handler: adapter.promoteService},
+		connect.Method{Spec: branchSessionServiceRollbackServiceSpec(), Handler: adapter.rollbackService},
+		connect.Method{Spec: branchSessionServiceGetServiceManifestSpec(), Handler: adapter.getServiceManifest},
+		connect.Method{Spec: branchSessionServiceApplyServiceManifestSpec(), Handler: adapter.applyServiceManifest},
+		connect.Method{Spec: branchSessionServiceCreatePVCSpec(), Handler: adapter.createPVC},
+		connect.Method{Spec: branchSessionServiceListPVCsSpec(), Handler: adapter.listPVCs},
+		connect.Method{Spec: branchSessionServiceDeletePVCSpec(), Handler: adapter.deletePVC},
+		connect.Method{Spec: branchSessionServiceServiceLogsSpec(), Handler: adapter.serviceLogs},
+		connect.Method{Spec: branchSessionServiceWatchServiceLogsSpec(), Handler: adapter.watchServiceLogs},
+		connect.Method{Spec: branchSessionServiceSandboxLogsSpec(), Handler: adapter.sandboxLogs},
+		connect.Method{Spec: branchSessionServiceWatchWorkspaceSpec(), Handler: adapter.watchWorkspace},
+		connect.Method{Spec: branchSessionServiceHelmDeploySpec(), Handler: adapter.helmDeploy},
+		connect.Method{Spec: branchSessionServiceHelmListSpec(), Handler: adapter.helmList},
+		connect.Method{Spec: branchSessionServiceHelmHistorySpec(), Handler: adapter.helmHistory},
+		connect.Method{Spec: branchSessionServiceHelmRollbackSpec(), Handler: adapter.helmRollback},
+		connect.Method{Spec: branchSessionServiceHelmUninstallSpec(), Handler: adapter.helmUninstall},
+		connect.Method{Spec: branchSessionServiceHelmPromoteSpec(), Handler: adapter.helmPromote},
+		connect.Method{Spec: branchSessionServiceHelmRollbackReleaseSpec(), Handler: adapter.helmRollbackRelease},
+		connect.Method{Spec: branchSessionServiceHelmObjectsSpec(), Handler: adapter.helmObjects},
+		connect.Method{Spec: branchSessionServiceHelmObjectLogsSpec(), Handler: adapter.helmObjectLogs},
+		connect.Method{Spec: branchSessionServiceHealthSpec(), Handler: adapter.health},
+		connect.Method{Spec: branchSessionServiceGetIdentitySpec(), Handler: adapter.getIdentity},
+		connect.Method{Spec: branchSessionServiceListSessionsSpec(), Handler: adapter.listSessions},
+		connect.Method{Spec: branchSessionServiceGetSessionSpec(), Handler: adapter.getSession},
+		connect.Method{Spec: branchSessionServiceListMessagesSpec(), Handler: adapter.listMessages},
+		connect.Method{Spec: branchSessionServicePromptSpec(), Handler: adapter.prompt},
+		connect.Method{Spec: branchSessionServiceWatchSessionSpec(), Handler: adapter.watchSession},
+		connect.Method{Spec: branchSessionServiceWatchSessionsSpec(), Handler: adapter.watchSessions},
+		connect.Method{Spec: branchSessionServiceSetModelSpec(), Handler: adapter.setModel},
+		connect.Method{Spec: branchSessionServiceUndoSpec(), Handler: adapter.undo},
+		connect.Method{Spec: branchSessionServiceMarkReadSpec(), Handler: adapter.markRead},
+		connect.Method{Spec: branchSessionServiceStateSpec(), Handler: adapter.state},
+		connect.Method{Spec: branchSessionServiceMailboxSpec(), Handler: adapter.mailbox},
+		connect.Method{Spec: branchSessionServiceInterruptSpec(), Handler: adapter.interrupt},
+		connect.Method{Spec: branchSessionServiceCompactSpec(), Handler: adapter.compact},
+		connect.Method{Spec: branchSessionServiceUpdateSettingsSpec(), Handler: adapter.updateSettings},
+		connect.Method{Spec: branchSessionServiceListProvidersSpec(), Handler: adapter.listProviders},
+		connect.Method{Spec: branchSessionServiceListProvidersCatalogSpec(), Handler: adapter.listProvidersCatalog},
+		connect.Method{Spec: branchSessionServiceRegisterProviderSpec(), Handler: adapter.registerProvider},
+		connect.Method{Spec: branchSessionServiceDeleteProviderSpec(), Handler: adapter.deleteProvider},
+		connect.Method{Spec: branchSessionServiceTestProviderSpec(), Handler: adapter.testProvider},
+		connect.Method{Spec: branchSessionServiceListModelsSpec(), Handler: adapter.listModels},
+		connect.Method{Spec: branchSessionServiceListPresetsSpec(), Handler: adapter.listPresets},
+		connect.Method{Spec: branchSessionServiceGetConfigSpec(), Handler: adapter.getConfig},
+		connect.Method{Spec: branchSessionServiceSetConfigSpec(), Handler: adapter.setConfig},
+		connect.Method{Spec: branchSessionServiceListToolsSpec(), Handler: adapter.listTools},
+		connect.Method{Spec: branchSessionServiceGetToolConfigSpec(), Handler: adapter.getToolConfig},
+		connect.Method{Spec: branchSessionServiceSetToolConfigSpec(), Handler: adapter.setToolConfig},
+		connect.Method{Spec: branchSessionServiceSetExtensionConfigSpec(), Handler: adapter.setExtensionConfig},
+		connect.Method{Spec: branchSessionServiceUploadFileSpec(), Handler: adapter.uploadFile},
+		connect.Method{Spec: branchSessionServiceIngestFileSpec(), Handler: adapter.ingestFile},
+		connect.Method{Spec: branchSessionServiceGetFileSpec(), Handler: adapter.getFile},
+		connect.Method{Spec: branchSessionServiceGetFileMetaSpec(), Handler: adapter.getFileMeta},
+		connect.Method{Spec: branchSessionServiceGetFileStreamSpec(), Handler: adapter.getFileStream},
+	)
+}
+
+// BranchSessionServiceWatchSandboxJobServerStream is the server stream for the
+// BranchSessionService's WatchSandboxJob RPC.
+type BranchSessionServiceWatchSandboxJobServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s BranchSessionServiceWatchSandboxJobServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s BranchSessionServiceWatchSandboxJobServerStream) Send(res *v1.WatchSandboxJobResponse) error {
+	return s.stream.Send(res)
+}
+
+// BranchSessionServiceWatchServiceLogsServerStream is the server stream for the
+// BranchSessionService's WatchServiceLogs RPC.
+type BranchSessionServiceWatchServiceLogsServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s BranchSessionServiceWatchServiceLogsServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s BranchSessionServiceWatchServiceLogsServerStream) Send(res *v1.WatchServiceLogsResponse) error {
+	return s.stream.Send(res)
+}
+
+// BranchSessionServiceWatchWorkspaceServerStream is the server stream for the
+// BranchSessionService's WatchWorkspace RPC.
+type BranchSessionServiceWatchWorkspaceServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s BranchSessionServiceWatchWorkspaceServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s BranchSessionServiceWatchWorkspaceServerStream) Send(res *v1.WatchWorkspaceResponse) error {
+	return s.stream.Send(res)
+}
+
+// BranchSessionServicePromptServerStream is the server stream for the BranchSessionService's Prompt
+// RPC.
+type BranchSessionServicePromptServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s BranchSessionServicePromptServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s BranchSessionServicePromptServerStream) Send(res *v11.PromptResponse) error {
+	return s.stream.Send(res)
+}
+
+// BranchSessionServiceWatchSessionServerStream is the server stream for the BranchSessionService's
+// WatchSession RPC.
+type BranchSessionServiceWatchSessionServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s BranchSessionServiceWatchSessionServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s BranchSessionServiceWatchSessionServerStream) Send(res *v11.WatchSessionResponse) error {
+	return s.stream.Send(res)
+}
+
+// BranchSessionServiceWatchSessionsServerStream is the server stream for the BranchSessionService's
+// WatchSessions RPC.
+type BranchSessionServiceWatchSessionsServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s BranchSessionServiceWatchSessionsServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s BranchSessionServiceWatchSessionsServerStream) Send(res *v11.WatchSessionsResponse) error {
+	return s.stream.Send(res)
+}
+
+// BranchSessionServiceGetFileStreamServerStream is the server stream for the BranchSessionService's
+// GetFileStream RPC.
+type BranchSessionServiceGetFileStreamServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s BranchSessionServiceGetFileStreamServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s BranchSessionServiceGetFileStreamServerStream) Send(res *v11.FileChunk) error {
+	return s.stream.Send(res)
 }
 
 // UnimplementedBranchSessionServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedBranchSessionServiceHandler struct{}
 
-func (UnimplementedBranchSessionServiceHandler) EnsureBranchSession(context.Context, *connect.Request[v1.EnsureBranchSessionRequest]) (*connect.Response[v1.EnsureBranchSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.EnsureBranchSession is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) EnsureBranchSession(context.Context, *v1.EnsureBranchSessionRequest) (*v1.EnsureBranchSessionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.EnsureBranchSession is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ForkBranchSession(context.Context, *connect.Request[v1.ForkBranchSessionRequest]) (*connect.Response[v1.ForkBranchSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ForkBranchSession is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ForkBranchSession(context.Context, *v1.ForkBranchSessionRequest) (*v1.ForkBranchSessionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ForkBranchSession is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListBranchSessions(context.Context, *connect.Request[v1.ListBranchSessionsRequest]) (*connect.Response[v1.ListBranchSessionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListBranchSessions is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListBranchSessions(context.Context, *v1.ListBranchSessionsRequest) (*v1.ListBranchSessionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListBranchSessions is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) GetBranchSession(context.Context, *connect.Request[v1.GetBranchSessionRequest]) (*connect.Response[v1.GetBranchSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetBranchSession is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetBranchSession(context.Context, *v1.GetBranchSessionRequest) (*v1.GetBranchSessionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.GetBranchSession is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) DeleteBranchSession(context.Context, *connect.Request[v1.DeleteBranchSessionRequest]) (*connect.Response[v1.DeleteBranchSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeleteBranchSession is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) DeleteBranchSession(context.Context, *v1.DeleteBranchSessionRequest) (*v1.DeleteBranchSessionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.DeleteBranchSession is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) DeleteBranch(context.Context, *connect.Request[v1.DeleteBranchRequest]) (*connect.Response[v1.DeleteBranchResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeleteBranch is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) DeleteBranch(context.Context, *v1.DeleteBranchRequest) (*v1.DeleteBranchResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.DeleteBranch is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) DeleteRepo(context.Context, *connect.Request[v1.DeleteRepoRequest]) (*connect.Response[v1.DeleteRepoResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeleteRepo is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) DeleteRepo(context.Context, *v1.DeleteRepoRequest) (*v1.DeleteRepoResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.DeleteRepo is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) CreateFreeSession(context.Context, *connect.Request[v1.CreateFreeSessionRequest]) (*connect.Response[v1.CreateFreeSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CreateFreeSession is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) CreateFreeSession(context.Context, *v1.CreateFreeSessionRequest) (*v1.CreateFreeSessionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.CreateFreeSession is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListRepos(context.Context, *connect.Request[v1.ListReposRequest]) (*connect.Response[v1.ListReposResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListRepos is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListRepos(context.Context, *v1.ListReposRequest) (*v1.ListReposResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListRepos is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) Tree(context.Context, *connect.Request[v1.TreeRequest]) (*connect.Response[v1.TreeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Tree is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Tree(context.Context, *v1.TreeRequest) (*v1.TreeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.Tree is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ReadBlob(context.Context, *connect.Request[v1.ReadBlobRequest]) (*connect.Response[v1.ReadBlobResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ReadBlob is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ReadBlob(context.Context, *v1.ReadBlobRequest) (*v1.ReadBlobResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ReadBlob is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ReadRaw(context.Context, *connect.Request[v1.ReadRawRequest]) (*connect.Response[v1.ReadRawResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ReadRaw is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ReadRaw(context.Context, *v1.ReadRawRequest) (*v1.ReadRawResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ReadRaw is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) Log(context.Context, *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Log is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Log(context.Context, *v1.LogRequest) (*v1.LogResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.Log is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) Branches(context.Context, *connect.Request[v1.BranchesRequest]) (*connect.Response[v1.BranchesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Branches is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Branches(context.Context, *v1.BranchesRequest) (*v1.BranchesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.Branches is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) Tags(context.Context, *connect.Request[v1.TagsRequest]) (*connect.Response[v1.TagsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Tags is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Tags(context.Context, *v1.TagsRequest) (*v1.TagsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.Tags is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListReleases(context.Context, *connect.Request[v1.ReleasesRequest]) (*connect.Response[v1.ReleasesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListReleases is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListReleases(context.Context, *v1.ReleasesRequest) (*v1.ReleasesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListReleases is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) GetReleaseAsset(context.Context, *connect.Request[v1.ReleaseAssetRequest]) (*connect.Response[v1.ReleaseAssetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetReleaseAsset is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetReleaseAsset(context.Context, *v1.ReleaseAssetRequest) (*v1.ReleaseAssetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.GetReleaseAsset is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) GetCommit(context.Context, *connect.Request[v1.GetCommitRequest]) (*connect.Response[v1.GetCommitResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetCommit is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetCommit(context.Context, *v1.GetCommitRequest) (*v1.GetCommitResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.GetCommit is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) CommitDiff(context.Context, *connect.Request[v1.CommitDiffRequest]) (*connect.Response[v1.DiffResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CommitDiff is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) CommitDiff(context.Context, *v1.CommitDiffRequest) (*v1.DiffResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.CommitDiff is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) EnsureRepo(context.Context, *connect.Request[v1.EnsureRepoRequest]) (*connect.Response[v1.EnsureRepoResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.EnsureRepo is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) EnsureRepo(context.Context, *v1.EnsureRepoRequest) (*v1.EnsureRepoResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.EnsureRepo is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) CreateOrg(context.Context, *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CreateOrg is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) CreateOrg(context.Context, *v1.CreateOrgRequest) (*v1.CreateOrgResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.CreateOrg is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListOrgs(context.Context, *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListOrgs is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListOrgs(context.Context, *v1.ListOrgsRequest) (*v1.ListOrgsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListOrgs is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) RepoMeta(context.Context, *connect.Request[v1.RepoMetaRequest]) (*connect.Response[v1.RepoMetaResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.RepoMeta is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) RepoMeta(context.Context, *v1.RepoMetaRequest) (*v1.RepoMetaResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.RepoMeta is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) Contents(context.Context, *connect.Request[v1.ContentsRequest]) (*connect.Response[v1.ContentsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Contents is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Contents(context.Context, *v1.ContentsRequest) (*v1.ContentsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.Contents is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) Compare(context.Context, *connect.Request[v1.CompareRequest]) (*connect.Response[v1.CompareResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Compare is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Compare(context.Context, *v1.CompareRequest) (*v1.CompareResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.Compare is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) Blame(context.Context, *connect.Request[v1.BlameRequest]) (*connect.Response[v1.BlameResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Blame is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Blame(context.Context, *v1.BlameRequest) (*v1.BlameResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.Blame is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) FileDiff(context.Context, *connect.Request[v1.FileDiffRequest]) (*connect.Response[v1.FileDiffResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.FileDiff is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) FileDiff(context.Context, *v1.FileDiffRequest) (*v1.FileDiffResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.FileDiff is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) CreateTag(context.Context, *connect.Request[v1.CreateTagRequest]) (*connect.Response[v1.CreateTagResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CreateTag is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) CreateTag(context.Context, *v1.CreateTagRequest) (*v1.CreateTagResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.CreateTag is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CreateBranch is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) CreateBranch(context.Context, *v1.CreateBranchRequest) (*v1.CreateBranchResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.CreateBranch is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) Archive(context.Context, *connect.Request[v1.ArchiveRequest]) (*connect.Response[v1.ArchiveResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Archive is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Archive(context.Context, *v1.ArchiveRequest) (*v1.ArchiveResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.Archive is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ImportRepo(context.Context, *connect.Request[v1.ImportRepoRequest]) (*connect.Response[v1.ImportRepoResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ImportRepo is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ImportRepo(context.Context, *v1.ImportRepoRequest) (*v1.ImportRepoResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ImportRepo is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) SetPushMirror(context.Context, *connect.Request[v1.SetPushMirrorRequest]) (*connect.Response[v1.SetPushMirrorResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.SetPushMirror is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) SetPushMirror(context.Context, *v1.SetPushMirrorRequest) (*v1.SetPushMirrorResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.SetPushMirror is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListPushMirrors(context.Context, *connect.Request[v1.ListPushMirrorsRequest]) (*connect.Response[v1.ListPushMirrorsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListPushMirrors is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListPushMirrors(context.Context, *v1.ListPushMirrorsRequest) (*v1.ListPushMirrorsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListPushMirrors is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) DeletePushMirror(context.Context, *connect.Request[v1.DeletePushMirrorRequest]) (*connect.Response[v1.DeletePushMirrorResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeletePushMirror is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) DeletePushMirror(context.Context, *v1.DeletePushMirrorRequest) (*v1.DeletePushMirrorResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.DeletePushMirror is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListMRs(context.Context, *connect.Request[v1.ListMRsRequest]) (*connect.Response[v1.ListMRsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListMRs is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListMRs(context.Context, *v1.ListMRsRequest) (*v1.ListMRsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListMRs is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) GetMR(context.Context, *connect.Request[v1.GetMRRequest]) (*connect.Response[v1.GetMRResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetMR is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetMR(context.Context, *v1.GetMRRequest) (*v1.GetMRResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.GetMR is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) MRDiff(context.Context, *connect.Request[v1.MRDiffRequest]) (*connect.Response[v1.MRDiffResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.MRDiff is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) MRDiff(context.Context, *v1.MRDiffRequest) (*v1.MRDiffResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.MRDiff is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListMRComments(context.Context, *connect.Request[v1.ListMRCommentsRequest]) (*connect.Response[v1.ListMRCommentsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListMRComments is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListMRComments(context.Context, *v1.ListMRCommentsRequest) (*v1.ListMRCommentsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListMRComments is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) SubmitMR(context.Context, *connect.Request[v1.SubmitMRRequest]) (*connect.Response[v1.SubmitMRResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.SubmitMR is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) SubmitMR(context.Context, *v1.SubmitMRRequest) (*v1.SubmitMRResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.SubmitMR is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) CommentMR(context.Context, *connect.Request[v1.CommentMRRequest]) (*connect.Response[v1.CommentMRResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CommentMR is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) CommentMR(context.Context, *v1.CommentMRRequest) (*v1.CommentMRResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.CommentMR is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) MergeMR(context.Context, *connect.Request[v1.MergeMRRequest]) (*connect.Response[v1.MergeMRResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.MergeMR is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) MergeMR(context.Context, *v1.MergeMRRequest) (*v1.MergeMRResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.MergeMR is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) CloseMR(context.Context, *connect.Request[v1.CloseMRRequest]) (*connect.Response[v1.CloseMRResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CloseMR is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) CloseMR(context.Context, *v1.CloseMRRequest) (*v1.CloseMRResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.CloseMR is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListOCIImages(context.Context, *connect.Request[v1.ListOCIImagesRequest]) (*connect.Response[v1.ListOCIImagesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListOCIImages is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListOCIImages(context.Context, *v1.ListOCIImagesRequest) (*v1.ListOCIImagesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListOCIImages is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) BuildSandboxImage(context.Context, *connect.Request[v1.BuildSandboxImageRequest]) (*connect.Response[v1.BuildSandboxImageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.BuildSandboxImage is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) BuildSandboxImage(context.Context, *v1.BuildSandboxImageRequest) (*v1.BuildSandboxImageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.BuildSandboxImage is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) GetBuildStatus(context.Context, *connect.Request[v1.GetBuildStatusRequest]) (*connect.Response[v1.GetBuildStatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetBuildStatus is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetBuildStatus(context.Context, *v1.GetBuildStatusRequest) (*v1.GetBuildStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.GetBuildStatus is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListBuilds(context.Context, *connect.Request[v1.ListBuildsRequest]) (*connect.Response[v1.ListBuildsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListBuilds is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListBuilds(context.Context, *v1.ListBuildsRequest) (*v1.ListBuildsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListBuilds is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ImportImage(context.Context, *connect.Request[v1.ImportImageRequest]) (*connect.Response[v1.ImportImageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ImportImage is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ImportImage(context.Context, *v1.ImportImageRequest) (*v1.ImportImageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ImportImage is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListSandboxes(context.Context, *connect.Request[v1.ListSandboxesRequest]) (*connect.Response[v1.ListSandboxesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListSandboxes is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListSandboxes(context.Context, *v1.ListSandboxesRequest) (*v1.ListSandboxesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListSandboxes is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) CreateSandbox(context.Context, *connect.Request[v1.CreateSandboxRequest]) (*connect.Response[v1.CreateSandboxResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CreateSandbox is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) CreateSandbox(context.Context, *v1.CreateSandboxRequest) (*v1.CreateSandboxResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.CreateSandbox is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) GetSandbox(context.Context, *connect.Request[v1.GetSandboxRequest]) (*connect.Response[v1.GetSandboxResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetSandbox is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetSandbox(context.Context, *v1.GetSandboxRequest) (*v1.GetSandboxResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.GetSandbox is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) DeleteSandbox(context.Context, *connect.Request[v1.DeleteSandboxRequest]) (*connect.Response[v1.DeleteSandboxResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeleteSandbox is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) DeleteSandbox(context.Context, *v1.DeleteSandboxRequest) (*v1.DeleteSandboxResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.DeleteSandbox is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ResolveSandbox(context.Context, *connect.Request[v1.ResolveSandboxRequest]) (*connect.Response[v1.ResolveSandboxResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ResolveSandbox is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ResolveSandbox(context.Context, *v1.ResolveSandboxRequest) (*v1.ResolveSandboxResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ResolveSandbox is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListSandboxJobs(context.Context, *connect.Request[v1.ListSandboxJobsRequest]) (*connect.Response[v1.ListSandboxJobsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListSandboxJobs is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListSandboxJobs(context.Context, *v1.ListSandboxJobsRequest) (*v1.ListSandboxJobsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListSandboxJobs is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) GetSandboxJobOutput(context.Context, *connect.Request[v1.GetSandboxJobOutputRequest]) (*connect.Response[v1.GetSandboxJobOutputResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetSandboxJobOutput is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetSandboxJobOutput(context.Context, *v1.GetSandboxJobOutputRequest) (*v1.GetSandboxJobOutputResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.GetSandboxJobOutput is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) WatchSandboxJob(context.Context, *connect.Request[v1.WatchSandboxJobRequest], *connect.ServerStream[v1.WatchSandboxJobResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.WatchSandboxJob is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) WatchSandboxJob(context.Context, *v1.WatchSandboxJobRequest, BranchSessionServiceWatchSandboxJobServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.WatchSandboxJob is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListSandboxFiles(context.Context, *connect.Request[v1.ListSandboxFilesRequest]) (*connect.Response[v1.ListSandboxFilesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListSandboxFiles is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListSandboxFiles(context.Context, *v1.ListSandboxFilesRequest) (*v1.ListSandboxFilesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListSandboxFiles is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ReadSandboxFile(context.Context, *connect.Request[v1.ReadSandboxFileRequest]) (*connect.Response[v1.ReadSandboxFileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ReadSandboxFile is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ReadSandboxFile(context.Context, *v1.ReadSandboxFileRequest) (*v1.ReadSandboxFileResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ReadSandboxFile is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) DeployService(context.Context, *connect.Request[v1.DeployServiceRequest]) (*connect.Response[v1.DeployServiceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeployService is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) DeployService(context.Context, *v1.DeployServiceRequest) (*v1.DeployServiceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.DeployService is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListServices(context.Context, *connect.Request[v1.ListServicesRequest]) (*connect.Response[v1.ListServicesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListServices is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListServices(context.Context, *v1.ListServicesRequest) (*v1.ListServicesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListServices is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) DeleteService(context.Context, *connect.Request[v1.DeleteServiceRequest]) (*connect.Response[v1.DeleteServiceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeleteService is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) DeleteService(context.Context, *v1.DeleteServiceRequest) (*v1.DeleteServiceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.DeleteService is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) PauseService(context.Context, *connect.Request[v1.PauseServiceRequest]) (*connect.Response[v1.PauseServiceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.PauseService is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) PauseService(context.Context, *v1.PauseServiceRequest) (*v1.PauseServiceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.PauseService is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ResumeService(context.Context, *connect.Request[v1.ResumeServiceRequest]) (*connect.Response[v1.ResumeServiceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ResumeService is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ResumeService(context.Context, *v1.ResumeServiceRequest) (*v1.ResumeServiceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ResumeService is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ScaleService(context.Context, *connect.Request[v1.ScaleServiceRequest]) (*connect.Response[v1.ScaleServiceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ScaleService is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ScaleService(context.Context, *v1.ScaleServiceRequest) (*v1.ScaleServiceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ScaleService is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) PromoteService(context.Context, *connect.Request[v1.PromoteServiceRequest]) (*connect.Response[v1.PromoteServiceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.PromoteService is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) PromoteService(context.Context, *v1.PromoteServiceRequest) (*v1.PromoteServiceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.PromoteService is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) RollbackService(context.Context, *connect.Request[v1.RollbackServiceRequest]) (*connect.Response[v1.RollbackServiceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.RollbackService is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) RollbackService(context.Context, *v1.RollbackServiceRequest) (*v1.RollbackServiceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.RollbackService is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) GetServiceManifest(context.Context, *connect.Request[v1.GetServiceManifestRequest]) (*connect.Response[v1.GetServiceManifestResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetServiceManifest is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetServiceManifest(context.Context, *v1.GetServiceManifestRequest) (*v1.GetServiceManifestResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.GetServiceManifest is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ApplyServiceManifest(context.Context, *connect.Request[v1.ApplyServiceManifestRequest]) (*connect.Response[v1.ApplyServiceManifestResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ApplyServiceManifest is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ApplyServiceManifest(context.Context, *v1.ApplyServiceManifestRequest) (*v1.ApplyServiceManifestResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ApplyServiceManifest is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) CreatePVC(context.Context, *connect.Request[v1.CreatePVCRequest]) (*connect.Response[v1.CreatePVCResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.CreatePVC is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) CreatePVC(context.Context, *v1.CreatePVCRequest) (*v1.CreatePVCResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.CreatePVC is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListPVCs(context.Context, *connect.Request[v1.ListPVCsRequest]) (*connect.Response[v1.ListPVCsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListPVCs is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListPVCs(context.Context, *v1.ListPVCsRequest) (*v1.ListPVCsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListPVCs is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) DeletePVC(context.Context, *connect.Request[v1.DeletePVCRequest]) (*connect.Response[v1.DeletePVCResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeletePVC is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) DeletePVC(context.Context, *v1.DeletePVCRequest) (*v1.DeletePVCResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.DeletePVC is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ServiceLogs(context.Context, *connect.Request[v1.ServiceLogsRequest]) (*connect.Response[v1.ServiceLogsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ServiceLogs is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ServiceLogs(context.Context, *v1.ServiceLogsRequest) (*v1.ServiceLogsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ServiceLogs is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) WatchServiceLogs(context.Context, *connect.Request[v1.WatchServiceLogsRequest], *connect.ServerStream[v1.WatchServiceLogsResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.WatchServiceLogs is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) WatchServiceLogs(context.Context, *v1.WatchServiceLogsRequest, BranchSessionServiceWatchServiceLogsServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.WatchServiceLogs is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) SandboxLogs(context.Context, *connect.Request[v1.SandboxLogsRequest]) (*connect.Response[v1.SandboxLogsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.SandboxLogs is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) SandboxLogs(context.Context, *v1.SandboxLogsRequest) (*v1.SandboxLogsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.SandboxLogs is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) WatchWorkspace(context.Context, *connect.Request[v1.WatchWorkspaceRequest], *connect.ServerStream[v1.WatchWorkspaceResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.WatchWorkspace is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) WatchWorkspace(context.Context, *v1.WatchWorkspaceRequest, BranchSessionServiceWatchWorkspaceServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.WatchWorkspace is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) HelmDeploy(context.Context, *connect.Request[v1.HelmDeployRequest]) (*connect.Response[v1.HelmDeployResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmDeploy is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) HelmDeploy(context.Context, *v1.HelmDeployRequest) (*v1.HelmDeployResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.HelmDeploy is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) HelmList(context.Context, *connect.Request[v1.HelmListRequest]) (*connect.Response[v1.HelmListResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmList is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) HelmList(context.Context, *v1.HelmListRequest) (*v1.HelmListResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.HelmList is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) HelmHistory(context.Context, *connect.Request[v1.HelmHistoryRequest]) (*connect.Response[v1.HelmHistoryResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmHistory is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) HelmHistory(context.Context, *v1.HelmHistoryRequest) (*v1.HelmHistoryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.HelmHistory is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) HelmRollback(context.Context, *connect.Request[v1.HelmRollbackRequest]) (*connect.Response[v1.HelmRollbackResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmRollback is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) HelmRollback(context.Context, *v1.HelmRollbackRequest) (*v1.HelmRollbackResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.HelmRollback is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) HelmUninstall(context.Context, *connect.Request[v1.HelmUninstallRequest]) (*connect.Response[v1.HelmUninstallResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmUninstall is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) HelmUninstall(context.Context, *v1.HelmUninstallRequest) (*v1.HelmUninstallResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.HelmUninstall is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) HelmPromote(context.Context, *connect.Request[v1.HelmPromoteRequest]) (*connect.Response[v1.HelmPromoteResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmPromote is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) HelmPromote(context.Context, *v1.HelmPromoteRequest) (*v1.HelmPromoteResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.HelmPromote is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) HelmRollbackRelease(context.Context, *connect.Request[v1.HelmRollbackReleaseRequest]) (*connect.Response[v1.HelmRollbackReleaseResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmRollbackRelease is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) HelmRollbackRelease(context.Context, *v1.HelmRollbackReleaseRequest) (*v1.HelmRollbackReleaseResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.HelmRollbackRelease is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) HelmObjects(context.Context, *connect.Request[v1.HelmObjectsRequest]) (*connect.Response[v1.HelmObjectsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmObjects is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) HelmObjects(context.Context, *v1.HelmObjectsRequest) (*v1.HelmObjectsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.HelmObjects is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) HelmObjectLogs(context.Context, *connect.Request[v1.HelmObjectLogsRequest]) (*connect.Response[v1.HelmObjectLogsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.HelmObjectLogs is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) HelmObjectLogs(context.Context, *v1.HelmObjectLogsRequest) (*v1.HelmObjectLogsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.HelmObjectLogs is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) Health(context.Context, *connect.Request[v11.HealthRequest]) (*connect.Response[v11.HealthResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Health is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Health(context.Context, *v11.HealthRequest) (*v11.HealthResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.Health is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) GetIdentity(context.Context, *connect.Request[v11.GetIdentityRequest]) (*connect.Response[v11.GetIdentityResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetIdentity is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetIdentity(context.Context, *v11.GetIdentityRequest) (*v11.GetIdentityResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.GetIdentity is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListSessions(context.Context, *connect.Request[v11.ListSessionsRequest]) (*connect.Response[v11.ListSessionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListSessions is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListSessions(context.Context, *v11.ListSessionsRequest) (*v11.ListSessionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListSessions is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) GetSession(context.Context, *connect.Request[v11.GetSessionRequest]) (*connect.Response[v11.GetSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetSession is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetSession(context.Context, *v11.GetSessionRequest) (*v11.GetSessionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.GetSession is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListMessages(context.Context, *connect.Request[v11.ListMessagesRequest]) (*connect.Response[v11.ListMessagesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListMessages is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListMessages(context.Context, *v11.ListMessagesRequest) (*v11.ListMessagesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListMessages is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) Prompt(context.Context, *connect.Request[v11.PromptRequest], *connect.ServerStream[v11.PromptResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Prompt is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Prompt(context.Context, *v11.PromptRequest, BranchSessionServicePromptServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.Prompt is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) WatchSession(context.Context, *connect.Request[v11.WatchSessionRequest], *connect.ServerStream[v11.WatchSessionResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.WatchSession is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) WatchSession(context.Context, *v11.WatchSessionRequest, BranchSessionServiceWatchSessionServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.WatchSession is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) WatchSessions(context.Context, *connect.Request[v11.WatchSessionsRequest], *connect.ServerStream[v11.WatchSessionsResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.WatchSessions is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) WatchSessions(context.Context, *v11.WatchSessionsRequest, BranchSessionServiceWatchSessionsServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.WatchSessions is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) SetModel(context.Context, *connect.Request[v11.SetModelRequest]) (*connect.Response[v11.SetModelResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.SetModel is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) SetModel(context.Context, *v11.SetModelRequest) (*v11.SetModelResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.SetModel is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) Undo(context.Context, *connect.Request[v11.UndoRequest]) (*connect.Response[v11.UndoResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Undo is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Undo(context.Context, *v11.UndoRequest) (*v11.UndoResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.Undo is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) MarkRead(context.Context, *connect.Request[v11.MarkReadRequest]) (*connect.Response[v11.MarkReadResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.MarkRead is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) MarkRead(context.Context, *v11.MarkReadRequest) (*v11.MarkReadResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.MarkRead is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) State(context.Context, *connect.Request[v11.StateRequest]) (*connect.Response[v11.StateResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.State is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) State(context.Context, *v11.StateRequest) (*v11.StateResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.State is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) Mailbox(context.Context, *connect.Request[v11.MailboxRequest]) (*connect.Response[v11.MailboxResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Mailbox is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Mailbox(context.Context, *v11.MailboxRequest) (*v11.MailboxResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.Mailbox is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) Interrupt(context.Context, *connect.Request[v11.InterruptRequest]) (*connect.Response[v11.InterruptResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Interrupt is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Interrupt(context.Context, *v11.InterruptRequest) (*v11.InterruptResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.Interrupt is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) Compact(context.Context, *connect.Request[v11.CompactRequest]) (*connect.Response[v11.CompactResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.Compact is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) Compact(context.Context, *v11.CompactRequest) (*v11.CompactResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.Compact is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) UpdateSettings(context.Context, *connect.Request[v1.UpdateSettingsRequest]) (*connect.Response[v1.UpdateSettingsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.UpdateSettings is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) UpdateSettings(context.Context, *v1.UpdateSettingsRequest) (*v1.UpdateSettingsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.UpdateSettings is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListProviders(context.Context, *connect.Request[v11.ListProvidersRequest]) (*connect.Response[v11.ListProvidersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListProviders is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListProviders(context.Context, *v11.ListProvidersRequest) (*v11.ListProvidersResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListProviders is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListProvidersCatalog(context.Context, *connect.Request[v11.ListProvidersCatalogRequest]) (*connect.Response[v11.ListProvidersCatalogResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListProvidersCatalog is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListProvidersCatalog(context.Context, *v11.ListProvidersCatalogRequest) (*v11.ListProvidersCatalogResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListProvidersCatalog is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) RegisterProvider(context.Context, *connect.Request[v11.RegisterProviderRequest]) (*connect.Response[v11.RegisterProviderResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.RegisterProvider is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) RegisterProvider(context.Context, *v11.RegisterProviderRequest) (*v11.RegisterProviderResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.RegisterProvider is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) DeleteProvider(context.Context, *connect.Request[v11.DeleteProviderRequest]) (*connect.Response[v11.DeleteProviderResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.DeleteProvider is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) DeleteProvider(context.Context, *v11.DeleteProviderRequest) (*v11.DeleteProviderResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.DeleteProvider is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) TestProvider(context.Context, *connect.Request[v11.TestProviderRequest]) (*connect.Response[v11.TestProviderResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.TestProvider is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) TestProvider(context.Context, *v11.TestProviderRequest) (*v11.TestProviderResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.TestProvider is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListModels(context.Context, *connect.Request[v11.ListModelsRequest]) (*connect.Response[v11.ListModelsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListModels is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListModels(context.Context, *v11.ListModelsRequest) (*v11.ListModelsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListModels is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListPresets(context.Context, *connect.Request[v11.ListPresetsRequest]) (*connect.Response[v11.ListPresetsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListPresets is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListPresets(context.Context, *v11.ListPresetsRequest) (*v11.ListPresetsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListPresets is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) GetConfig(context.Context, *connect.Request[v11.GetConfigRequest]) (*connect.Response[v11.GetConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetConfig is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetConfig(context.Context, *v11.GetConfigRequest) (*v11.GetConfigResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.GetConfig is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) SetConfig(context.Context, *connect.Request[v11.SetConfigRequest]) (*connect.Response[v11.SetConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.SetConfig is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) SetConfig(context.Context, *v11.SetConfigRequest) (*v11.SetConfigResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.SetConfig is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) ListTools(context.Context, *connect.Request[v11.ListToolsRequest]) (*connect.Response[v11.ListToolsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.ListTools is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) ListTools(context.Context, *v11.ListToolsRequest) (*v11.ListToolsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.ListTools is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) GetToolConfig(context.Context, *connect.Request[v11.GetToolConfigRequest]) (*connect.Response[v11.GetToolConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetToolConfig is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetToolConfig(context.Context, *v11.GetToolConfigRequest) (*v11.GetToolConfigResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.GetToolConfig is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) SetToolConfig(context.Context, *connect.Request[v11.SetToolConfigRequest]) (*connect.Response[v11.SetToolConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.SetToolConfig is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) SetToolConfig(context.Context, *v11.SetToolConfigRequest) (*v11.SetToolConfigResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.SetToolConfig is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) SetExtensionConfig(context.Context, *connect.Request[v11.SetExtensionConfigRequest]) (*connect.Response[v11.SetExtensionConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.SetExtensionConfig is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) SetExtensionConfig(context.Context, *v11.SetExtensionConfigRequest) (*v11.SetExtensionConfigResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.SetExtensionConfig is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) UploadFile(context.Context, *connect.Request[v11.UploadFileRequest]) (*connect.Response[v11.UploadFileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.UploadFile is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) UploadFile(context.Context, *v11.UploadFileRequest) (*v11.UploadFileResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.UploadFile is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) IngestFile(context.Context, *connect.Request[v11.IngestFileRequest]) (*connect.Response[v11.IngestFileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.IngestFile is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) IngestFile(context.Context, *v11.IngestFileRequest) (*v11.IngestFileResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.IngestFile is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) GetFile(context.Context, *connect.Request[v11.GetFileRequest]) (*connect.Response[v11.GetFileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetFile is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetFile(context.Context, *v11.GetFileRequest) (*v11.GetFileResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.GetFile is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) GetFileMeta(context.Context, *connect.Request[v11.GetFileMetaRequest]) (*connect.Response[v11.GetFileMetaResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetFileMeta is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetFileMeta(context.Context, *v11.GetFileMetaRequest) (*v11.GetFileMetaResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.GetFileMeta is not implemented")
 }
 
-func (UnimplementedBranchSessionServiceHandler) GetFileStream(context.Context, *connect.Request[v11.GetFileRequest], *connect.ServerStream[v11.FileChunk]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("workspace.v1.BranchSessionService.GetFileStream is not implemented"))
+func (UnimplementedBranchSessionServiceHandler) GetFileStream(context.Context, *v11.GetFileRequest, BranchSessionServiceGetFileStreamServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "workspace.v1.BranchSessionService.GetFileStream is not implemented")
+}
+
+type branchSessionServiceClient struct {
+	client *connect.Client
+}
+
+func (c *branchSessionServiceClient) EnsureBranchSession(ctx context.Context, req *v1.EnsureBranchSessionRequest) (*v1.EnsureBranchSessionResponse, error) {
+	var res v1.EnsureBranchSessionResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceEnsureBranchSessionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ForkBranchSession(ctx context.Context, req *v1.ForkBranchSessionRequest) (*v1.ForkBranchSessionResponse, error) {
+	var res v1.ForkBranchSessionResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceForkBranchSessionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListBranchSessions(ctx context.Context, req *v1.ListBranchSessionsRequest) (*v1.ListBranchSessionsResponse, error) {
+	var res v1.ListBranchSessionsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListBranchSessionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) GetBranchSession(ctx context.Context, req *v1.GetBranchSessionRequest) (*v1.GetBranchSessionResponse, error) {
+	var res v1.GetBranchSessionResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceGetBranchSessionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) DeleteBranchSession(ctx context.Context, req *v1.DeleteBranchSessionRequest) (*v1.DeleteBranchSessionResponse, error) {
+	var res v1.DeleteBranchSessionResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceDeleteBranchSessionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) DeleteBranch(ctx context.Context, req *v1.DeleteBranchRequest) (*v1.DeleteBranchResponse, error) {
+	var res v1.DeleteBranchResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceDeleteBranchSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) DeleteRepo(ctx context.Context, req *v1.DeleteRepoRequest) (*v1.DeleteRepoResponse, error) {
+	var res v1.DeleteRepoResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceDeleteRepoSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) CreateFreeSession(ctx context.Context, req *v1.CreateFreeSessionRequest) (*v1.CreateFreeSessionResponse, error) {
+	var res v1.CreateFreeSessionResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceCreateFreeSessionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListRepos(ctx context.Context, req *v1.ListReposRequest) (*v1.ListReposResponse, error) {
+	var res v1.ListReposResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListReposSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) Tree(ctx context.Context, req *v1.TreeRequest) (*v1.TreeResponse, error) {
+	var res v1.TreeResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceTreeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ReadBlob(ctx context.Context, req *v1.ReadBlobRequest) (*v1.ReadBlobResponse, error) {
+	var res v1.ReadBlobResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceReadBlobSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ReadRaw(ctx context.Context, req *v1.ReadRawRequest) (*v1.ReadRawResponse, error) {
+	var res v1.ReadRawResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceReadRawSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) Log(ctx context.Context, req *v1.LogRequest) (*v1.LogResponse, error) {
+	var res v1.LogResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceLogSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) Branches(ctx context.Context, req *v1.BranchesRequest) (*v1.BranchesResponse, error) {
+	var res v1.BranchesResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceBranchesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) Tags(ctx context.Context, req *v1.TagsRequest) (*v1.TagsResponse, error) {
+	var res v1.TagsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceTagsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListReleases(ctx context.Context, req *v1.ReleasesRequest) (*v1.ReleasesResponse, error) {
+	var res v1.ReleasesResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListReleasesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) GetReleaseAsset(ctx context.Context, req *v1.ReleaseAssetRequest) (*v1.ReleaseAssetResponse, error) {
+	var res v1.ReleaseAssetResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceGetReleaseAssetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) GetCommit(ctx context.Context, req *v1.GetCommitRequest) (*v1.GetCommitResponse, error) {
+	var res v1.GetCommitResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceGetCommitSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) CommitDiff(ctx context.Context, req *v1.CommitDiffRequest) (*v1.DiffResponse, error) {
+	var res v1.DiffResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceCommitDiffSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) EnsureRepo(ctx context.Context, req *v1.EnsureRepoRequest) (*v1.EnsureRepoResponse, error) {
+	var res v1.EnsureRepoResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceEnsureRepoSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) CreateOrg(ctx context.Context, req *v1.CreateOrgRequest) (*v1.CreateOrgResponse, error) {
+	var res v1.CreateOrgResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceCreateOrgSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListOrgs(ctx context.Context, req *v1.ListOrgsRequest) (*v1.ListOrgsResponse, error) {
+	var res v1.ListOrgsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListOrgsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) RepoMeta(ctx context.Context, req *v1.RepoMetaRequest) (*v1.RepoMetaResponse, error) {
+	var res v1.RepoMetaResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceRepoMetaSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) Contents(ctx context.Context, req *v1.ContentsRequest) (*v1.ContentsResponse, error) {
+	var res v1.ContentsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceContentsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) Compare(ctx context.Context, req *v1.CompareRequest) (*v1.CompareResponse, error) {
+	var res v1.CompareResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceCompareSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) Blame(ctx context.Context, req *v1.BlameRequest) (*v1.BlameResponse, error) {
+	var res v1.BlameResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceBlameSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) FileDiff(ctx context.Context, req *v1.FileDiffRequest) (*v1.FileDiffResponse, error) {
+	var res v1.FileDiffResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceFileDiffSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) CreateTag(ctx context.Context, req *v1.CreateTagRequest) (*v1.CreateTagResponse, error) {
+	var res v1.CreateTagResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceCreateTagSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) CreateBranch(ctx context.Context, req *v1.CreateBranchRequest) (*v1.CreateBranchResponse, error) {
+	var res v1.CreateBranchResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceCreateBranchSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) Archive(ctx context.Context, req *v1.ArchiveRequest) (*v1.ArchiveResponse, error) {
+	var res v1.ArchiveResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceArchiveSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ImportRepo(ctx context.Context, req *v1.ImportRepoRequest) (*v1.ImportRepoResponse, error) {
+	var res v1.ImportRepoResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceImportRepoSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) SetPushMirror(ctx context.Context, req *v1.SetPushMirrorRequest) (*v1.SetPushMirrorResponse, error) {
+	var res v1.SetPushMirrorResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceSetPushMirrorSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListPushMirrors(ctx context.Context, req *v1.ListPushMirrorsRequest) (*v1.ListPushMirrorsResponse, error) {
+	var res v1.ListPushMirrorsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListPushMirrorsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) DeletePushMirror(ctx context.Context, req *v1.DeletePushMirrorRequest) (*v1.DeletePushMirrorResponse, error) {
+	var res v1.DeletePushMirrorResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceDeletePushMirrorSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListMRs(ctx context.Context, req *v1.ListMRsRequest) (*v1.ListMRsResponse, error) {
+	var res v1.ListMRsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListMRsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) GetMR(ctx context.Context, req *v1.GetMRRequest) (*v1.GetMRResponse, error) {
+	var res v1.GetMRResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceGetMRSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) MRDiff(ctx context.Context, req *v1.MRDiffRequest) (*v1.MRDiffResponse, error) {
+	var res v1.MRDiffResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceMRDiffSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListMRComments(ctx context.Context, req *v1.ListMRCommentsRequest) (*v1.ListMRCommentsResponse, error) {
+	var res v1.ListMRCommentsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListMRCommentsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) SubmitMR(ctx context.Context, req *v1.SubmitMRRequest) (*v1.SubmitMRResponse, error) {
+	var res v1.SubmitMRResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceSubmitMRSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) CommentMR(ctx context.Context, req *v1.CommentMRRequest) (*v1.CommentMRResponse, error) {
+	var res v1.CommentMRResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceCommentMRSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) MergeMR(ctx context.Context, req *v1.MergeMRRequest) (*v1.MergeMRResponse, error) {
+	var res v1.MergeMRResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceMergeMRSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) CloseMR(ctx context.Context, req *v1.CloseMRRequest) (*v1.CloseMRResponse, error) {
+	var res v1.CloseMRResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceCloseMRSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListOCIImages(ctx context.Context, req *v1.ListOCIImagesRequest) (*v1.ListOCIImagesResponse, error) {
+	var res v1.ListOCIImagesResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListOCIImagesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) BuildSandboxImage(ctx context.Context, req *v1.BuildSandboxImageRequest) (*v1.BuildSandboxImageResponse, error) {
+	var res v1.BuildSandboxImageResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceBuildSandboxImageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) GetBuildStatus(ctx context.Context, req *v1.GetBuildStatusRequest) (*v1.GetBuildStatusResponse, error) {
+	var res v1.GetBuildStatusResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceGetBuildStatusSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListBuilds(ctx context.Context, req *v1.ListBuildsRequest) (*v1.ListBuildsResponse, error) {
+	var res v1.ListBuildsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListBuildsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ImportImage(ctx context.Context, req *v1.ImportImageRequest) (*v1.ImportImageResponse, error) {
+	var res v1.ImportImageResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceImportImageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListSandboxes(ctx context.Context, req *v1.ListSandboxesRequest) (*v1.ListSandboxesResponse, error) {
+	var res v1.ListSandboxesResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListSandboxesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) CreateSandbox(ctx context.Context, req *v1.CreateSandboxRequest) (*v1.CreateSandboxResponse, error) {
+	var res v1.CreateSandboxResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceCreateSandboxSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) GetSandbox(ctx context.Context, req *v1.GetSandboxRequest) (*v1.GetSandboxResponse, error) {
+	var res v1.GetSandboxResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceGetSandboxSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) DeleteSandbox(ctx context.Context, req *v1.DeleteSandboxRequest) (*v1.DeleteSandboxResponse, error) {
+	var res v1.DeleteSandboxResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceDeleteSandboxSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ResolveSandbox(ctx context.Context, req *v1.ResolveSandboxRequest) (*v1.ResolveSandboxResponse, error) {
+	var res v1.ResolveSandboxResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceResolveSandboxSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListSandboxJobs(ctx context.Context, req *v1.ListSandboxJobsRequest) (*v1.ListSandboxJobsResponse, error) {
+	var res v1.ListSandboxJobsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListSandboxJobsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) GetSandboxJobOutput(ctx context.Context, req *v1.GetSandboxJobOutputRequest) (*v1.GetSandboxJobOutputResponse, error) {
+	var res v1.GetSandboxJobOutputResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceGetSandboxJobOutputSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) WatchSandboxJob(ctx context.Context, req *v1.WatchSandboxJobRequest) (BranchSessionServiceWatchSandboxJobClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, branchSessionServiceWatchSandboxJobSpec(), req)
+	if err != nil {
+		return BranchSessionServiceWatchSandboxJobClientStream{}, err
+	}
+	return BranchSessionServiceWatchSandboxJobClientStream{stream: stream}, nil
+}
+
+func (c *branchSessionServiceClient) ListSandboxFiles(ctx context.Context, req *v1.ListSandboxFilesRequest) (*v1.ListSandboxFilesResponse, error) {
+	var res v1.ListSandboxFilesResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListSandboxFilesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ReadSandboxFile(ctx context.Context, req *v1.ReadSandboxFileRequest) (*v1.ReadSandboxFileResponse, error) {
+	var res v1.ReadSandboxFileResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceReadSandboxFileSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) DeployService(ctx context.Context, req *v1.DeployServiceRequest) (*v1.DeployServiceResponse, error) {
+	var res v1.DeployServiceResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceDeployServiceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListServices(ctx context.Context, req *v1.ListServicesRequest) (*v1.ListServicesResponse, error) {
+	var res v1.ListServicesResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListServicesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) DeleteService(ctx context.Context, req *v1.DeleteServiceRequest) (*v1.DeleteServiceResponse, error) {
+	var res v1.DeleteServiceResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceDeleteServiceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) PauseService(ctx context.Context, req *v1.PauseServiceRequest) (*v1.PauseServiceResponse, error) {
+	var res v1.PauseServiceResponse
+	if err := c.client.CallUnary(ctx, branchSessionServicePauseServiceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ResumeService(ctx context.Context, req *v1.ResumeServiceRequest) (*v1.ResumeServiceResponse, error) {
+	var res v1.ResumeServiceResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceResumeServiceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ScaleService(ctx context.Context, req *v1.ScaleServiceRequest) (*v1.ScaleServiceResponse, error) {
+	var res v1.ScaleServiceResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceScaleServiceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) PromoteService(ctx context.Context, req *v1.PromoteServiceRequest) (*v1.PromoteServiceResponse, error) {
+	var res v1.PromoteServiceResponse
+	if err := c.client.CallUnary(ctx, branchSessionServicePromoteServiceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) RollbackService(ctx context.Context, req *v1.RollbackServiceRequest) (*v1.RollbackServiceResponse, error) {
+	var res v1.RollbackServiceResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceRollbackServiceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) GetServiceManifest(ctx context.Context, req *v1.GetServiceManifestRequest) (*v1.GetServiceManifestResponse, error) {
+	var res v1.GetServiceManifestResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceGetServiceManifestSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ApplyServiceManifest(ctx context.Context, req *v1.ApplyServiceManifestRequest) (*v1.ApplyServiceManifestResponse, error) {
+	var res v1.ApplyServiceManifestResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceApplyServiceManifestSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) CreatePVC(ctx context.Context, req *v1.CreatePVCRequest) (*v1.CreatePVCResponse, error) {
+	var res v1.CreatePVCResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceCreatePVCSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListPVCs(ctx context.Context, req *v1.ListPVCsRequest) (*v1.ListPVCsResponse, error) {
+	var res v1.ListPVCsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListPVCsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) DeletePVC(ctx context.Context, req *v1.DeletePVCRequest) (*v1.DeletePVCResponse, error) {
+	var res v1.DeletePVCResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceDeletePVCSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ServiceLogs(ctx context.Context, req *v1.ServiceLogsRequest) (*v1.ServiceLogsResponse, error) {
+	var res v1.ServiceLogsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceServiceLogsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) WatchServiceLogs(ctx context.Context, req *v1.WatchServiceLogsRequest) (BranchSessionServiceWatchServiceLogsClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, branchSessionServiceWatchServiceLogsSpec(), req)
+	if err != nil {
+		return BranchSessionServiceWatchServiceLogsClientStream{}, err
+	}
+	return BranchSessionServiceWatchServiceLogsClientStream{stream: stream}, nil
+}
+
+func (c *branchSessionServiceClient) SandboxLogs(ctx context.Context, req *v1.SandboxLogsRequest) (*v1.SandboxLogsResponse, error) {
+	var res v1.SandboxLogsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceSandboxLogsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) WatchWorkspace(ctx context.Context, req *v1.WatchWorkspaceRequest) (BranchSessionServiceWatchWorkspaceClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, branchSessionServiceWatchWorkspaceSpec(), req)
+	if err != nil {
+		return BranchSessionServiceWatchWorkspaceClientStream{}, err
+	}
+	return BranchSessionServiceWatchWorkspaceClientStream{stream: stream}, nil
+}
+
+func (c *branchSessionServiceClient) HelmDeploy(ctx context.Context, req *v1.HelmDeployRequest) (*v1.HelmDeployResponse, error) {
+	var res v1.HelmDeployResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceHelmDeploySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) HelmList(ctx context.Context, req *v1.HelmListRequest) (*v1.HelmListResponse, error) {
+	var res v1.HelmListResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceHelmListSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) HelmHistory(ctx context.Context, req *v1.HelmHistoryRequest) (*v1.HelmHistoryResponse, error) {
+	var res v1.HelmHistoryResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceHelmHistorySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) HelmRollback(ctx context.Context, req *v1.HelmRollbackRequest) (*v1.HelmRollbackResponse, error) {
+	var res v1.HelmRollbackResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceHelmRollbackSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) HelmUninstall(ctx context.Context, req *v1.HelmUninstallRequest) (*v1.HelmUninstallResponse, error) {
+	var res v1.HelmUninstallResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceHelmUninstallSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) HelmPromote(ctx context.Context, req *v1.HelmPromoteRequest) (*v1.HelmPromoteResponse, error) {
+	var res v1.HelmPromoteResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceHelmPromoteSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) HelmRollbackRelease(ctx context.Context, req *v1.HelmRollbackReleaseRequest) (*v1.HelmRollbackReleaseResponse, error) {
+	var res v1.HelmRollbackReleaseResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceHelmRollbackReleaseSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) HelmObjects(ctx context.Context, req *v1.HelmObjectsRequest) (*v1.HelmObjectsResponse, error) {
+	var res v1.HelmObjectsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceHelmObjectsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) HelmObjectLogs(ctx context.Context, req *v1.HelmObjectLogsRequest) (*v1.HelmObjectLogsResponse, error) {
+	var res v1.HelmObjectLogsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceHelmObjectLogsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) Health(ctx context.Context, req *v11.HealthRequest) (*v11.HealthResponse, error) {
+	var res v11.HealthResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceHealthSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) GetIdentity(ctx context.Context, req *v11.GetIdentityRequest) (*v11.GetIdentityResponse, error) {
+	var res v11.GetIdentityResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceGetIdentitySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListSessions(ctx context.Context, req *v11.ListSessionsRequest) (*v11.ListSessionsResponse, error) {
+	var res v11.ListSessionsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListSessionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) GetSession(ctx context.Context, req *v11.GetSessionRequest) (*v11.GetSessionResponse, error) {
+	var res v11.GetSessionResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceGetSessionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListMessages(ctx context.Context, req *v11.ListMessagesRequest) (*v11.ListMessagesResponse, error) {
+	var res v11.ListMessagesResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListMessagesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) Prompt(ctx context.Context, req *v11.PromptRequest) (BranchSessionServicePromptClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, branchSessionServicePromptSpec(), req)
+	if err != nil {
+		return BranchSessionServicePromptClientStream{}, err
+	}
+	return BranchSessionServicePromptClientStream{stream: stream}, nil
+}
+
+func (c *branchSessionServiceClient) WatchSession(ctx context.Context, req *v11.WatchSessionRequest) (BranchSessionServiceWatchSessionClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, branchSessionServiceWatchSessionSpec(), req)
+	if err != nil {
+		return BranchSessionServiceWatchSessionClientStream{}, err
+	}
+	return BranchSessionServiceWatchSessionClientStream{stream: stream}, nil
+}
+
+func (c *branchSessionServiceClient) WatchSessions(ctx context.Context, req *v11.WatchSessionsRequest) (BranchSessionServiceWatchSessionsClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, branchSessionServiceWatchSessionsSpec(), req)
+	if err != nil {
+		return BranchSessionServiceWatchSessionsClientStream{}, err
+	}
+	return BranchSessionServiceWatchSessionsClientStream{stream: stream}, nil
+}
+
+func (c *branchSessionServiceClient) SetModel(ctx context.Context, req *v11.SetModelRequest) (*v11.SetModelResponse, error) {
+	var res v11.SetModelResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceSetModelSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) Undo(ctx context.Context, req *v11.UndoRequest) (*v11.UndoResponse, error) {
+	var res v11.UndoResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceUndoSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) MarkRead(ctx context.Context, req *v11.MarkReadRequest) (*v11.MarkReadResponse, error) {
+	var res v11.MarkReadResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceMarkReadSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) State(ctx context.Context, req *v11.StateRequest) (*v11.StateResponse, error) {
+	var res v11.StateResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceStateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) Mailbox(ctx context.Context, req *v11.MailboxRequest) (*v11.MailboxResponse, error) {
+	var res v11.MailboxResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceMailboxSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) Interrupt(ctx context.Context, req *v11.InterruptRequest) (*v11.InterruptResponse, error) {
+	var res v11.InterruptResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceInterruptSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) Compact(ctx context.Context, req *v11.CompactRequest) (*v11.CompactResponse, error) {
+	var res v11.CompactResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceCompactSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) UpdateSettings(ctx context.Context, req *v1.UpdateSettingsRequest) (*v1.UpdateSettingsResponse, error) {
+	var res v1.UpdateSettingsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceUpdateSettingsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListProviders(ctx context.Context, req *v11.ListProvidersRequest) (*v11.ListProvidersResponse, error) {
+	var res v11.ListProvidersResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListProvidersSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListProvidersCatalog(ctx context.Context, req *v11.ListProvidersCatalogRequest) (*v11.ListProvidersCatalogResponse, error) {
+	var res v11.ListProvidersCatalogResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListProvidersCatalogSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) RegisterProvider(ctx context.Context, req *v11.RegisterProviderRequest) (*v11.RegisterProviderResponse, error) {
+	var res v11.RegisterProviderResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceRegisterProviderSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) DeleteProvider(ctx context.Context, req *v11.DeleteProviderRequest) (*v11.DeleteProviderResponse, error) {
+	var res v11.DeleteProviderResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceDeleteProviderSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) TestProvider(ctx context.Context, req *v11.TestProviderRequest) (*v11.TestProviderResponse, error) {
+	var res v11.TestProviderResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceTestProviderSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListModels(ctx context.Context, req *v11.ListModelsRequest) (*v11.ListModelsResponse, error) {
+	var res v11.ListModelsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListModelsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListPresets(ctx context.Context, req *v11.ListPresetsRequest) (*v11.ListPresetsResponse, error) {
+	var res v11.ListPresetsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListPresetsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) GetConfig(ctx context.Context, req *v11.GetConfigRequest) (*v11.GetConfigResponse, error) {
+	var res v11.GetConfigResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceGetConfigSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) SetConfig(ctx context.Context, req *v11.SetConfigRequest) (*v11.SetConfigResponse, error) {
+	var res v11.SetConfigResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceSetConfigSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) ListTools(ctx context.Context, req *v11.ListToolsRequest) (*v11.ListToolsResponse, error) {
+	var res v11.ListToolsResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceListToolsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) GetToolConfig(ctx context.Context, req *v11.GetToolConfigRequest) (*v11.GetToolConfigResponse, error) {
+	var res v11.GetToolConfigResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceGetToolConfigSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) SetToolConfig(ctx context.Context, req *v11.SetToolConfigRequest) (*v11.SetToolConfigResponse, error) {
+	var res v11.SetToolConfigResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceSetToolConfigSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) SetExtensionConfig(ctx context.Context, req *v11.SetExtensionConfigRequest) (*v11.SetExtensionConfigResponse, error) {
+	var res v11.SetExtensionConfigResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceSetExtensionConfigSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) UploadFile(ctx context.Context, req *v11.UploadFileRequest) (*v11.UploadFileResponse, error) {
+	var res v11.UploadFileResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceUploadFileSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) IngestFile(ctx context.Context, req *v11.IngestFileRequest) (*v11.IngestFileResponse, error) {
+	var res v11.IngestFileResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceIngestFileSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) GetFile(ctx context.Context, req *v11.GetFileRequest) (*v11.GetFileResponse, error) {
+	var res v11.GetFileResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceGetFileSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) GetFileMeta(ctx context.Context, req *v11.GetFileMetaRequest) (*v11.GetFileMetaResponse, error) {
+	var res v11.GetFileMetaResponse
+	if err := c.client.CallUnary(ctx, branchSessionServiceGetFileMetaSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *branchSessionServiceClient) GetFileStream(ctx context.Context, req *v11.GetFileRequest) (BranchSessionServiceGetFileStreamClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, branchSessionServiceGetFileStreamSpec(), req)
+	if err != nil {
+		return BranchSessionServiceGetFileStreamClientStream{}, err
+	}
+	return BranchSessionServiceGetFileStreamClientStream{stream: stream}, nil
+}
+
+type branchSessionServiceHandler struct{ svc BranchSessionServiceHandler }
+
+func (h branchSessionServiceHandler) ensureBranchSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.EnsureBranchSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.EnsureBranchSession(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) forkBranchSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ForkBranchSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ForkBranchSession(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listBranchSessions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListBranchSessionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListBranchSessions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) getBranchSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetBranchSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetBranchSession(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) deleteBranchSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteBranchSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteBranchSession(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) deleteBranch(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteBranchRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteBranch(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) deleteRepo(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteRepoRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteRepo(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) createFreeSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateFreeSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateFreeSession(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listRepos(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListReposRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListRepos(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) tree(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.TreeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Tree(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) readBlob(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReadBlobRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReadBlob(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) readRaw(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReadRawRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReadRaw(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) log(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.LogRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Log(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) branches(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.BranchesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Branches(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) tags(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.TagsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Tags(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listReleases(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReleasesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListReleases(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) getReleaseAsset(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReleaseAssetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetReleaseAsset(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) getCommit(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCommitRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCommit(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) commitDiff(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CommitDiffRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CommitDiff(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) ensureRepo(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.EnsureRepoRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.EnsureRepo(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) createOrg(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateOrgRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateOrg(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listOrgs(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListOrgsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListOrgs(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) repoMeta(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RepoMetaRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RepoMeta(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) contents(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ContentsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Contents(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) compare(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CompareRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Compare(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) blame(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.BlameRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Blame(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) fileDiff(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.FileDiffRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.FileDiff(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) createTag(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateTagRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateTag(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) createBranch(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateBranchRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateBranch(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) archive(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ArchiveRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Archive(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) importRepo(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ImportRepoRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ImportRepo(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) setPushMirror(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetPushMirrorRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetPushMirror(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listPushMirrors(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPushMirrorsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListPushMirrors(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) deletePushMirror(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeletePushMirrorRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeletePushMirror(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listMRs(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListMRsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListMRs(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) getMR(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetMRRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetMR(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) mRDiff(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.MRDiffRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.MRDiff(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listMRComments(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListMRCommentsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListMRComments(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) submitMR(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SubmitMRRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SubmitMR(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) commentMR(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CommentMRRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CommentMR(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) mergeMR(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.MergeMRRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.MergeMR(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) closeMR(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CloseMRRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CloseMR(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listOCIImages(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListOCIImagesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListOCIImages(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) buildSandboxImage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.BuildSandboxImageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.BuildSandboxImage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) getBuildStatus(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetBuildStatusRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetBuildStatus(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listBuilds(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListBuildsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListBuilds(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) importImage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ImportImageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ImportImage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listSandboxes(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSandboxesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSandboxes(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) createSandbox(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateSandboxRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateSandbox(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) getSandbox(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetSandboxRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetSandbox(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) deleteSandbox(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteSandboxRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteSandbox(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) resolveSandbox(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResolveSandboxRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResolveSandbox(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listSandboxJobs(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSandboxJobsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSandboxJobs(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) getSandboxJobOutput(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetSandboxJobOutputRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetSandboxJobOutput(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) watchSandboxJob(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.WatchSandboxJobRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.WatchSandboxJob(ctx, &req, BranchSessionServiceWatchSandboxJobServerStream{stream: stream})
+}
+
+func (h branchSessionServiceHandler) listSandboxFiles(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSandboxFilesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSandboxFiles(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) readSandboxFile(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReadSandboxFileRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReadSandboxFile(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) deployService(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeployServiceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeployService(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listServices(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListServicesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListServices(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) deleteService(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteServiceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteService(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) pauseService(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PauseServiceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PauseService(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) resumeService(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResumeServiceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResumeService(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) scaleService(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ScaleServiceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ScaleService(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) promoteService(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PromoteServiceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PromoteService(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) rollbackService(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RollbackServiceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RollbackService(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) getServiceManifest(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetServiceManifestRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetServiceManifest(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) applyServiceManifest(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ApplyServiceManifestRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ApplyServiceManifest(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) createPVC(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreatePVCRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreatePVC(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listPVCs(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPVCsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListPVCs(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) deletePVC(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeletePVCRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeletePVC(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) serviceLogs(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ServiceLogsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ServiceLogs(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) watchServiceLogs(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.WatchServiceLogsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.WatchServiceLogs(ctx, &req, BranchSessionServiceWatchServiceLogsServerStream{stream: stream})
+}
+
+func (h branchSessionServiceHandler) sandboxLogs(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SandboxLogsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SandboxLogs(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) watchWorkspace(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.WatchWorkspaceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.WatchWorkspace(ctx, &req, BranchSessionServiceWatchWorkspaceServerStream{stream: stream})
+}
+
+func (h branchSessionServiceHandler) helmDeploy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.HelmDeployRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.HelmDeploy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) helmList(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.HelmListRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.HelmList(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) helmHistory(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.HelmHistoryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.HelmHistory(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) helmRollback(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.HelmRollbackRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.HelmRollback(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) helmUninstall(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.HelmUninstallRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.HelmUninstall(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) helmPromote(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.HelmPromoteRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.HelmPromote(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) helmRollbackRelease(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.HelmRollbackReleaseRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.HelmRollbackRelease(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) helmObjects(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.HelmObjectsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.HelmObjects(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) helmObjectLogs(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.HelmObjectLogsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.HelmObjectLogs(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) health(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.HealthRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Health(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) getIdentity(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.GetIdentityRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetIdentity(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listSessions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.ListSessionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSessions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) getSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.GetSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetSession(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listMessages(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.ListMessagesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListMessages(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) prompt(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.PromptRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.Prompt(ctx, &req, BranchSessionServicePromptServerStream{stream: stream})
+}
+
+func (h branchSessionServiceHandler) watchSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.WatchSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.WatchSession(ctx, &req, BranchSessionServiceWatchSessionServerStream{stream: stream})
+}
+
+func (h branchSessionServiceHandler) watchSessions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.WatchSessionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.WatchSessions(ctx, &req, BranchSessionServiceWatchSessionsServerStream{stream: stream})
+}
+
+func (h branchSessionServiceHandler) setModel(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.SetModelRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetModel(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) undo(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.UndoRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Undo(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) markRead(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.MarkReadRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.MarkRead(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) state(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.StateRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.State(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) mailbox(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.MailboxRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Mailbox(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) interrupt(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.InterruptRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Interrupt(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) compact(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.CompactRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Compact(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) updateSettings(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateSettingsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateSettings(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listProviders(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.ListProvidersRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListProviders(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listProvidersCatalog(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.ListProvidersCatalogRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListProvidersCatalog(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) registerProvider(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.RegisterProviderRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RegisterProvider(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) deleteProvider(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.DeleteProviderRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteProvider(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) testProvider(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.TestProviderRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.TestProvider(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listModels(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.ListModelsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListModels(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listPresets(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.ListPresetsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListPresets(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) getConfig(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.GetConfigRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetConfig(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) setConfig(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.SetConfigRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetConfig(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) listTools(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.ListToolsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListTools(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) getToolConfig(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.GetToolConfigRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetToolConfig(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) setToolConfig(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.SetToolConfigRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetToolConfig(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) setExtensionConfig(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.SetExtensionConfigRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetExtensionConfig(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) uploadFile(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.UploadFileRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UploadFile(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) ingestFile(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.IngestFileRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.IngestFile(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) getFile(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.GetFileRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetFile(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) getFileMeta(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.GetFileMetaRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetFileMeta(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h branchSessionServiceHandler) getFileStream(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v11.GetFileRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.GetFileStream(ctx, &req, BranchSessionServiceGetFileStreamServerStream{stream: stream})
 }

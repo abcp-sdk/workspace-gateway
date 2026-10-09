@@ -9,20 +9,11 @@
 package agentv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/abcp-sdk/workspace-gateway/gen/agent/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// AgentServiceName is the fully-qualified name of the AgentService service.
@@ -31,1531 +22,2018 @@ const (
 	AdminServiceName = "agent.v1.AdminService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// AgentServiceHealthProcedure is the fully-qualified name of the AgentService's Health RPC.
+	// AgentServiceHealthProcedure is the procedure name of the AgentService's Health RPC.
 	AgentServiceHealthProcedure = "/agent.v1.AgentService/Health"
-	// AgentServiceGetIdentityProcedure is the fully-qualified name of the AgentService's GetIdentity
-	// RPC.
+	// AgentServiceGetIdentityProcedure is the procedure name of the AgentService's GetIdentity RPC.
 	AgentServiceGetIdentityProcedure = "/agent.v1.AgentService/GetIdentity"
-	// AgentServiceListSessionsProcedure is the fully-qualified name of the AgentService's ListSessions
-	// RPC.
+	// AgentServiceListSessionsProcedure is the procedure name of the AgentService's ListSessions RPC.
 	AgentServiceListSessionsProcedure = "/agent.v1.AgentService/ListSessions"
-	// AgentServiceCreateSessionProcedure is the fully-qualified name of the AgentService's
-	// CreateSession RPC.
+	// AgentServiceCreateSessionProcedure is the procedure name of the AgentService's CreateSession RPC.
 	AgentServiceCreateSessionProcedure = "/agent.v1.AgentService/CreateSession"
-	// AgentServiceGetSessionProcedure is the fully-qualified name of the AgentService's GetSession RPC.
+	// AgentServiceGetSessionProcedure is the procedure name of the AgentService's GetSession RPC.
 	AgentServiceGetSessionProcedure = "/agent.v1.AgentService/GetSession"
-	// AgentServiceDeleteSessionProcedure is the fully-qualified name of the AgentService's
-	// DeleteSession RPC.
+	// AgentServiceDeleteSessionProcedure is the procedure name of the AgentService's DeleteSession RPC.
 	AgentServiceDeleteSessionProcedure = "/agent.v1.AgentService/DeleteSession"
-	// AgentServiceListMessagesProcedure is the fully-qualified name of the AgentService's ListMessages
-	// RPC.
+	// AgentServiceListMessagesProcedure is the procedure name of the AgentService's ListMessages RPC.
 	AgentServiceListMessagesProcedure = "/agent.v1.AgentService/ListMessages"
-	// AgentServicePromptProcedure is the fully-qualified name of the AgentService's Prompt RPC.
+	// AgentServicePromptProcedure is the procedure name of the AgentService's Prompt RPC.
 	AgentServicePromptProcedure = "/agent.v1.AgentService/Prompt"
-	// AgentServiceWatchSessionProcedure is the fully-qualified name of the AgentService's WatchSession
-	// RPC.
+	// AgentServiceWatchSessionProcedure is the procedure name of the AgentService's WatchSession RPC.
 	AgentServiceWatchSessionProcedure = "/agent.v1.AgentService/WatchSession"
-	// AgentServiceWatchSessionsProcedure is the fully-qualified name of the AgentService's
-	// WatchSessions RPC.
+	// AgentServiceWatchSessionsProcedure is the procedure name of the AgentService's WatchSessions RPC.
 	AgentServiceWatchSessionsProcedure = "/agent.v1.AgentService/WatchSessions"
-	// AgentServiceForkProcedure is the fully-qualified name of the AgentService's Fork RPC.
+	// AgentServiceForkProcedure is the procedure name of the AgentService's Fork RPC.
 	AgentServiceForkProcedure = "/agent.v1.AgentService/Fork"
-	// AgentServiceRenameProcedure is the fully-qualified name of the AgentService's Rename RPC.
+	// AgentServiceRenameProcedure is the procedure name of the AgentService's Rename RPC.
 	AgentServiceRenameProcedure = "/agent.v1.AgentService/Rename"
-	// AgentServiceSetModelProcedure is the fully-qualified name of the AgentService's SetModel RPC.
+	// AgentServiceSetModelProcedure is the procedure name of the AgentService's SetModel RPC.
 	AgentServiceSetModelProcedure = "/agent.v1.AgentService/SetModel"
-	// AgentServiceUndoProcedure is the fully-qualified name of the AgentService's Undo RPC.
+	// AgentServiceUndoProcedure is the procedure name of the AgentService's Undo RPC.
 	AgentServiceUndoProcedure = "/agent.v1.AgentService/Undo"
-	// AgentServiceMarkReadProcedure is the fully-qualified name of the AgentService's MarkRead RPC.
+	// AgentServiceMarkReadProcedure is the procedure name of the AgentService's MarkRead RPC.
 	AgentServiceMarkReadProcedure = "/agent.v1.AgentService/MarkRead"
-	// AgentServiceStateProcedure is the fully-qualified name of the AgentService's State RPC.
+	// AgentServiceStateProcedure is the procedure name of the AgentService's State RPC.
 	AgentServiceStateProcedure = "/agent.v1.AgentService/State"
-	// AgentServiceMailboxProcedure is the fully-qualified name of the AgentService's Mailbox RPC.
+	// AgentServiceMailboxProcedure is the procedure name of the AgentService's Mailbox RPC.
 	AgentServiceMailboxProcedure = "/agent.v1.AgentService/Mailbox"
-	// AgentServiceUpdateSettingsProcedure is the fully-qualified name of the AgentService's
-	// UpdateSettings RPC.
+	// AgentServiceUpdateSettingsProcedure is the procedure name of the AgentService's UpdateSettings
+	// RPC.
 	AgentServiceUpdateSettingsProcedure = "/agent.v1.AgentService/UpdateSettings"
-	// AgentServiceInterruptProcedure is the fully-qualified name of the AgentService's Interrupt RPC.
+	// AgentServiceInterruptProcedure is the procedure name of the AgentService's Interrupt RPC.
 	AgentServiceInterruptProcedure = "/agent.v1.AgentService/Interrupt"
-	// AgentServiceCompactProcedure is the fully-qualified name of the AgentService's Compact RPC.
+	// AgentServiceCompactProcedure is the procedure name of the AgentService's Compact RPC.
 	AgentServiceCompactProcedure = "/agent.v1.AgentService/Compact"
-	// AgentServiceListProvidersProcedure is the fully-qualified name of the AgentService's
-	// ListProviders RPC.
+	// AgentServiceListProvidersProcedure is the procedure name of the AgentService's ListProviders RPC.
 	AgentServiceListProvidersProcedure = "/agent.v1.AgentService/ListProviders"
-	// AgentServiceListProvidersCatalogProcedure is the fully-qualified name of the AgentService's
+	// AgentServiceListProvidersCatalogProcedure is the procedure name of the AgentService's
 	// ListProvidersCatalog RPC.
 	AgentServiceListProvidersCatalogProcedure = "/agent.v1.AgentService/ListProvidersCatalog"
-	// AgentServiceRegisterProviderProcedure is the fully-qualified name of the AgentService's
+	// AgentServiceRegisterProviderProcedure is the procedure name of the AgentService's
 	// RegisterProvider RPC.
 	AgentServiceRegisterProviderProcedure = "/agent.v1.AgentService/RegisterProvider"
-	// AgentServiceDeleteProviderProcedure is the fully-qualified name of the AgentService's
-	// DeleteProvider RPC.
+	// AgentServiceDeleteProviderProcedure is the procedure name of the AgentService's DeleteProvider
+	// RPC.
 	AgentServiceDeleteProviderProcedure = "/agent.v1.AgentService/DeleteProvider"
-	// AgentServiceTestProviderProcedure is the fully-qualified name of the AgentService's TestProvider
-	// RPC.
+	// AgentServiceTestProviderProcedure is the procedure name of the AgentService's TestProvider RPC.
 	AgentServiceTestProviderProcedure = "/agent.v1.AgentService/TestProvider"
-	// AgentServiceListModelsProcedure is the fully-qualified name of the AgentService's ListModels RPC.
+	// AgentServiceListModelsProcedure is the procedure name of the AgentService's ListModels RPC.
 	AgentServiceListModelsProcedure = "/agent.v1.AgentService/ListModels"
-	// AgentServiceListPresetsProcedure is the fully-qualified name of the AgentService's ListPresets
-	// RPC.
+	// AgentServiceListPresetsProcedure is the procedure name of the AgentService's ListPresets RPC.
 	AgentServiceListPresetsProcedure = "/agent.v1.AgentService/ListPresets"
-	// AgentServiceUpsertPresetProcedure is the fully-qualified name of the AgentService's UpsertPreset
-	// RPC.
+	// AgentServiceUpsertPresetProcedure is the procedure name of the AgentService's UpsertPreset RPC.
 	AgentServiceUpsertPresetProcedure = "/agent.v1.AgentService/UpsertPreset"
-	// AgentServiceDeletePresetProcedure is the fully-qualified name of the AgentService's DeletePreset
-	// RPC.
+	// AgentServiceDeletePresetProcedure is the procedure name of the AgentService's DeletePreset RPC.
 	AgentServiceDeletePresetProcedure = "/agent.v1.AgentService/DeletePreset"
-	// AgentServicePreviewPresetProcedure is the fully-qualified name of the AgentService's
-	// PreviewPreset RPC.
+	// AgentServicePreviewPresetProcedure is the procedure name of the AgentService's PreviewPreset RPC.
 	AgentServicePreviewPresetProcedure = "/agent.v1.AgentService/PreviewPreset"
-	// AgentServiceGetConfigProcedure is the fully-qualified name of the AgentService's GetConfig RPC.
+	// AgentServiceGetConfigProcedure is the procedure name of the AgentService's GetConfig RPC.
 	AgentServiceGetConfigProcedure = "/agent.v1.AgentService/GetConfig"
-	// AgentServiceSetConfigProcedure is the fully-qualified name of the AgentService's SetConfig RPC.
+	// AgentServiceSetConfigProcedure is the procedure name of the AgentService's SetConfig RPC.
 	AgentServiceSetConfigProcedure = "/agent.v1.AgentService/SetConfig"
-	// AgentServiceListToolsProcedure is the fully-qualified name of the AgentService's ListTools RPC.
+	// AgentServiceListToolsProcedure is the procedure name of the AgentService's ListTools RPC.
 	AgentServiceListToolsProcedure = "/agent.v1.AgentService/ListTools"
-	// AgentServiceGetToolConfigProcedure is the fully-qualified name of the AgentService's
-	// GetToolConfig RPC.
+	// AgentServiceGetToolConfigProcedure is the procedure name of the AgentService's GetToolConfig RPC.
 	AgentServiceGetToolConfigProcedure = "/agent.v1.AgentService/GetToolConfig"
-	// AgentServiceSetToolConfigProcedure is the fully-qualified name of the AgentService's
-	// SetToolConfig RPC.
+	// AgentServiceSetToolConfigProcedure is the procedure name of the AgentService's SetToolConfig RPC.
 	AgentServiceSetToolConfigProcedure = "/agent.v1.AgentService/SetToolConfig"
-	// AgentServiceSetExtensionConfigProcedure is the fully-qualified name of the AgentService's
+	// AgentServiceSetExtensionConfigProcedure is the procedure name of the AgentService's
 	// SetExtensionConfig RPC.
 	AgentServiceSetExtensionConfigProcedure = "/agent.v1.AgentService/SetExtensionConfig"
-	// AgentServiceUploadFileProcedure is the fully-qualified name of the AgentService's UploadFile RPC.
+	// AgentServiceUploadFileProcedure is the procedure name of the AgentService's UploadFile RPC.
 	AgentServiceUploadFileProcedure = "/agent.v1.AgentService/UploadFile"
-	// AgentServiceIngestFileProcedure is the fully-qualified name of the AgentService's IngestFile RPC.
+	// AgentServiceIngestFileProcedure is the procedure name of the AgentService's IngestFile RPC.
 	AgentServiceIngestFileProcedure = "/agent.v1.AgentService/IngestFile"
-	// AgentServiceGetFileProcedure is the fully-qualified name of the AgentService's GetFile RPC.
+	// AgentServiceGetFileProcedure is the procedure name of the AgentService's GetFile RPC.
 	AgentServiceGetFileProcedure = "/agent.v1.AgentService/GetFile"
-	// AgentServiceGetFileMetaProcedure is the fully-qualified name of the AgentService's GetFileMeta
-	// RPC.
+	// AgentServiceGetFileMetaProcedure is the procedure name of the AgentService's GetFileMeta RPC.
 	AgentServiceGetFileMetaProcedure = "/agent.v1.AgentService/GetFileMeta"
-	// AgentServiceGetFileStreamProcedure is the fully-qualified name of the AgentService's
-	// GetFileStream RPC.
+	// AgentServiceGetFileStreamProcedure is the procedure name of the AgentService's GetFileStream RPC.
 	AgentServiceGetFileStreamProcedure = "/agent.v1.AgentService/GetFileStream"
-	// AgentServiceGetAgentConfigProcedure is the fully-qualified name of the AgentService's
-	// GetAgentConfig RPC.
+	// AgentServiceGetAgentConfigProcedure is the procedure name of the AgentService's GetAgentConfig
+	// RPC.
 	AgentServiceGetAgentConfigProcedure = "/agent.v1.AgentService/GetAgentConfig"
-	// AdminServiceListTenantsProcedure is the fully-qualified name of the AdminService's ListTenants
-	// RPC.
+	// AdminServiceListTenantsProcedure is the procedure name of the AdminService's ListTenants RPC.
 	AdminServiceListTenantsProcedure = "/agent.v1.AdminService/ListTenants"
-	// AdminServiceCreateTenantProcedure is the fully-qualified name of the AdminService's CreateTenant
-	// RPC.
+	// AdminServiceCreateTenantProcedure is the procedure name of the AdminService's CreateTenant RPC.
 	AdminServiceCreateTenantProcedure = "/agent.v1.AdminService/CreateTenant"
-	// AdminServiceUpdateTenantProcedure is the fully-qualified name of the AdminService's UpdateTenant
-	// RPC.
+	// AdminServiceUpdateTenantProcedure is the procedure name of the AdminService's UpdateTenant RPC.
 	AdminServiceUpdateTenantProcedure = "/agent.v1.AdminService/UpdateTenant"
-	// AdminServiceDeleteTenantProcedure is the fully-qualified name of the AdminService's DeleteTenant
-	// RPC.
+	// AdminServiceDeleteTenantProcedure is the procedure name of the AdminService's DeleteTenant RPC.
 	AdminServiceDeleteTenantProcedure = "/agent.v1.AdminService/DeleteTenant"
-	// AdminServiceIssueTenantTokenProcedure is the fully-qualified name of the AdminService's
+	// AdminServiceIssueTenantTokenProcedure is the procedure name of the AdminService's
 	// IssueTenantToken RPC.
 	AdminServiceIssueTenantTokenProcedure = "/agent.v1.AdminService/IssueTenantToken"
-	// AdminServiceListTenantTokensProcedure is the fully-qualified name of the AdminService's
+	// AdminServiceListTenantTokensProcedure is the procedure name of the AdminService's
 	// ListTenantTokens RPC.
 	AdminServiceListTenantTokensProcedure = "/agent.v1.AdminService/ListTenantTokens"
-	// AdminServiceRevokeTenantTokenProcedure is the fully-qualified name of the AdminService's
+	// AdminServiceRevokeTenantTokenProcedure is the procedure name of the AdminService's
 	// RevokeTenantToken RPC.
 	AdminServiceRevokeTenantTokenProcedure = "/agent.v1.AdminService/RevokeTenantToken"
-	// AdminServiceRotateTenantTokenProcedure is the fully-qualified name of the AdminService's
+	// AdminServiceRotateTenantTokenProcedure is the procedure name of the AdminService's
 	// RotateTenantToken RPC.
 	AdminServiceRotateTenantTokenProcedure = "/agent.v1.AdminService/RotateTenantToken"
 )
 
+var (
+	agentServiceHealthSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("Health"),
+			Procedure:  AgentServiceHealthProcedure,
+		}
+	})
+	agentServiceGetIdentitySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("GetIdentity"),
+			Procedure:  AgentServiceGetIdentityProcedure,
+		}
+	})
+	agentServiceListSessionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("ListSessions"),
+			Procedure:  AgentServiceListSessionsProcedure,
+		}
+	})
+	agentServiceCreateSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("CreateSession"),
+			Procedure:  AgentServiceCreateSessionProcedure,
+		}
+	})
+	agentServiceGetSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("GetSession"),
+			Procedure:  AgentServiceGetSessionProcedure,
+		}
+	})
+	agentServiceDeleteSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("DeleteSession"),
+			Procedure:  AgentServiceDeleteSessionProcedure,
+		}
+	})
+	agentServiceListMessagesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("ListMessages"),
+			Procedure:  AgentServiceListMessagesProcedure,
+		}
+	})
+	agentServicePromptSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("Prompt"),
+			Procedure:  AgentServicePromptProcedure,
+		}
+	})
+	agentServiceWatchSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("WatchSession"),
+			Procedure:  AgentServiceWatchSessionProcedure,
+		}
+	})
+	agentServiceWatchSessionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("WatchSessions"),
+			Procedure:  AgentServiceWatchSessionsProcedure,
+		}
+	})
+	agentServiceForkSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("Fork"),
+			Procedure:  AgentServiceForkProcedure,
+		}
+	})
+	agentServiceRenameSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("Rename"),
+			Procedure:  AgentServiceRenameProcedure,
+		}
+	})
+	agentServiceSetModelSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("SetModel"),
+			Procedure:  AgentServiceSetModelProcedure,
+		}
+	})
+	agentServiceUndoSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("Undo"),
+			Procedure:  AgentServiceUndoProcedure,
+		}
+	})
+	agentServiceMarkReadSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("MarkRead"),
+			Procedure:  AgentServiceMarkReadProcedure,
+		}
+	})
+	agentServiceStateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("State"),
+			Procedure:  AgentServiceStateProcedure,
+		}
+	})
+	agentServiceMailboxSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("Mailbox"),
+			Procedure:  AgentServiceMailboxProcedure,
+		}
+	})
+	agentServiceUpdateSettingsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("UpdateSettings"),
+			Procedure:  AgentServiceUpdateSettingsProcedure,
+		}
+	})
+	agentServiceInterruptSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("Interrupt"),
+			Procedure:  AgentServiceInterruptProcedure,
+		}
+	})
+	agentServiceCompactSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("Compact"),
+			Procedure:  AgentServiceCompactProcedure,
+		}
+	})
+	agentServiceListProvidersSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("ListProviders"),
+			Procedure:  AgentServiceListProvidersProcedure,
+		}
+	})
+	agentServiceListProvidersCatalogSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("ListProvidersCatalog"),
+			Procedure:  AgentServiceListProvidersCatalogProcedure,
+		}
+	})
+	agentServiceRegisterProviderSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("RegisterProvider"),
+			Procedure:  AgentServiceRegisterProviderProcedure,
+		}
+	})
+	agentServiceDeleteProviderSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("DeleteProvider"),
+			Procedure:  AgentServiceDeleteProviderProcedure,
+		}
+	})
+	agentServiceTestProviderSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("TestProvider"),
+			Procedure:  AgentServiceTestProviderProcedure,
+		}
+	})
+	agentServiceListModelsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("ListModels"),
+			Procedure:  AgentServiceListModelsProcedure,
+		}
+	})
+	agentServiceListPresetsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("ListPresets"),
+			Procedure:  AgentServiceListPresetsProcedure,
+		}
+	})
+	agentServiceUpsertPresetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("UpsertPreset"),
+			Procedure:  AgentServiceUpsertPresetProcedure,
+		}
+	})
+	agentServiceDeletePresetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("DeletePreset"),
+			Procedure:  AgentServiceDeletePresetProcedure,
+		}
+	})
+	agentServicePreviewPresetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("PreviewPreset"),
+			Procedure:  AgentServicePreviewPresetProcedure,
+		}
+	})
+	agentServiceGetConfigSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("GetConfig"),
+			Procedure:  AgentServiceGetConfigProcedure,
+		}
+	})
+	agentServiceSetConfigSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("SetConfig"),
+			Procedure:  AgentServiceSetConfigProcedure,
+		}
+	})
+	agentServiceListToolsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("ListTools"),
+			Procedure:  AgentServiceListToolsProcedure,
+		}
+	})
+	agentServiceGetToolConfigSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("GetToolConfig"),
+			Procedure:  AgentServiceGetToolConfigProcedure,
+		}
+	})
+	agentServiceSetToolConfigSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("SetToolConfig"),
+			Procedure:  AgentServiceSetToolConfigProcedure,
+		}
+	})
+	agentServiceSetExtensionConfigSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("SetExtensionConfig"),
+			Procedure:  AgentServiceSetExtensionConfigProcedure,
+		}
+	})
+	agentServiceUploadFileSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("UploadFile"),
+			Procedure:  AgentServiceUploadFileProcedure,
+		}
+	})
+	agentServiceIngestFileSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("IngestFile"),
+			Procedure:  AgentServiceIngestFileProcedure,
+		}
+	})
+	agentServiceGetFileSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("GetFile"),
+			Procedure:  AgentServiceGetFileProcedure,
+		}
+	})
+	agentServiceGetFileMetaSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("GetFileMeta"),
+			Procedure:  AgentServiceGetFileMetaProcedure,
+		}
+	})
+	agentServiceGetFileStreamSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("GetFileStream"),
+			Procedure:  AgentServiceGetFileStreamProcedure,
+		}
+	})
+	agentServiceGetAgentConfigSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods().ByName("GetAgentConfig"),
+			Procedure:  AgentServiceGetAgentConfigProcedure,
+		}
+	})
+)
+
 // AgentServiceClient is a client for the agent.v1.AgentService service.
 type AgentServiceClient interface {
-	Health(context.Context, *connect.Request[v1.HealthRequest]) (*connect.Response[v1.HealthResponse], error)
-	GetIdentity(context.Context, *connect.Request[v1.GetIdentityRequest]) (*connect.Response[v1.GetIdentityResponse], error)
-	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
-	CreateSession(context.Context, *connect.Request[v1.CreateSessionRequest]) (*connect.Response[v1.CreateSessionResponse], error)
-	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
-	DeleteSession(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.DeleteSessionResponse], error)
-	ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error)
-	Prompt(context.Context, *connect.Request[v1.PromptRequest]) (*connect.ServerStreamForClient[v1.PromptResponse], error)
-	WatchSession(context.Context, *connect.Request[v1.WatchSessionRequest]) (*connect.ServerStreamForClient[v1.WatchSessionResponse], error)
-	WatchSessions(context.Context, *connect.Request[v1.WatchSessionsRequest]) (*connect.ServerStreamForClient[v1.WatchSessionsResponse], error)
-	Fork(context.Context, *connect.Request[v1.ForkRequest]) (*connect.Response[v1.ForkResponse], error)
-	Rename(context.Context, *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error)
-	SetModel(context.Context, *connect.Request[v1.SetModelRequest]) (*connect.Response[v1.SetModelResponse], error)
-	Undo(context.Context, *connect.Request[v1.UndoRequest]) (*connect.Response[v1.UndoResponse], error)
-	MarkRead(context.Context, *connect.Request[v1.MarkReadRequest]) (*connect.Response[v1.MarkReadResponse], error)
-	State(context.Context, *connect.Request[v1.StateRequest]) (*connect.Response[v1.StateResponse], error)
-	Mailbox(context.Context, *connect.Request[v1.MailboxRequest]) (*connect.Response[v1.MailboxResponse], error)
-	UpdateSettings(context.Context, *connect.Request[v1.UpdateSettingsRequest]) (*connect.Response[v1.UpdateSettingsResponse], error)
-	Interrupt(context.Context, *connect.Request[v1.InterruptRequest]) (*connect.Response[v1.InterruptResponse], error)
-	Compact(context.Context, *connect.Request[v1.CompactRequest]) (*connect.Response[v1.CompactResponse], error)
-	ListProviders(context.Context, *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error)
-	ListProvidersCatalog(context.Context, *connect.Request[v1.ListProvidersCatalogRequest]) (*connect.Response[v1.ListProvidersCatalogResponse], error)
-	RegisterProvider(context.Context, *connect.Request[v1.RegisterProviderRequest]) (*connect.Response[v1.RegisterProviderResponse], error)
-	DeleteProvider(context.Context, *connect.Request[v1.DeleteProviderRequest]) (*connect.Response[v1.DeleteProviderResponse], error)
-	TestProvider(context.Context, *connect.Request[v1.TestProviderRequest]) (*connect.Response[v1.TestProviderResponse], error)
-	ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error)
-	ListPresets(context.Context, *connect.Request[v1.ListPresetsRequest]) (*connect.Response[v1.ListPresetsResponse], error)
-	UpsertPreset(context.Context, *connect.Request[v1.UpsertPresetRequest]) (*connect.Response[v1.UpsertPresetResponse], error)
-	DeletePreset(context.Context, *connect.Request[v1.DeletePresetRequest]) (*connect.Response[v1.DeletePresetResponse], error)
-	PreviewPreset(context.Context, *connect.Request[v1.PreviewPresetRequest]) (*connect.Response[v1.PreviewPresetResponse], error)
-	GetConfig(context.Context, *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.GetConfigResponse], error)
-	SetConfig(context.Context, *connect.Request[v1.SetConfigRequest]) (*connect.Response[v1.SetConfigResponse], error)
-	ListTools(context.Context, *connect.Request[v1.ListToolsRequest]) (*connect.Response[v1.ListToolsResponse], error)
-	GetToolConfig(context.Context, *connect.Request[v1.GetToolConfigRequest]) (*connect.Response[v1.GetToolConfigResponse], error)
-	SetToolConfig(context.Context, *connect.Request[v1.SetToolConfigRequest]) (*connect.Response[v1.SetToolConfigResponse], error)
-	SetExtensionConfig(context.Context, *connect.Request[v1.SetExtensionConfigRequest]) (*connect.Response[v1.SetExtensionConfigResponse], error)
-	UploadFile(context.Context, *connect.Request[v1.UploadFileRequest]) (*connect.Response[v1.UploadFileResponse], error)
-	IngestFile(context.Context, *connect.Request[v1.IngestFileRequest]) (*connect.Response[v1.IngestFileResponse], error)
-	GetFile(context.Context, *connect.Request[v1.GetFileRequest]) (*connect.Response[v1.GetFileResponse], error)
-	GetFileMeta(context.Context, *connect.Request[v1.GetFileMetaRequest]) (*connect.Response[v1.GetFileMetaResponse], error)
-	GetFileStream(context.Context, *connect.Request[v1.GetFileRequest]) (*connect.ServerStreamForClient[v1.FileChunk], error)
-	GetAgentConfig(context.Context, *connect.Request[v1.GetAgentConfigRequest]) (*connect.Response[v1.GetAgentConfigResponse], error)
+	Health(context.Context, *v1.HealthRequest) (*v1.HealthResponse, error)
+	GetIdentity(context.Context, *v1.GetIdentityRequest) (*v1.GetIdentityResponse, error)
+	ListSessions(context.Context, *v1.ListSessionsRequest) (*v1.ListSessionsResponse, error)
+	CreateSession(context.Context, *v1.CreateSessionRequest) (*v1.CreateSessionResponse, error)
+	GetSession(context.Context, *v1.GetSessionRequest) (*v1.GetSessionResponse, error)
+	DeleteSession(context.Context, *v1.DeleteSessionRequest) (*v1.DeleteSessionResponse, error)
+	ListMessages(context.Context, *v1.ListMessagesRequest) (*v1.ListMessagesResponse, error)
+	Prompt(context.Context, *v1.PromptRequest) (AgentServicePromptClientStream, error)
+	WatchSession(context.Context, *v1.WatchSessionRequest) (AgentServiceWatchSessionClientStream, error)
+	WatchSessions(context.Context, *v1.WatchSessionsRequest) (AgentServiceWatchSessionsClientStream, error)
+	Fork(context.Context, *v1.ForkRequest) (*v1.ForkResponse, error)
+	Rename(context.Context, *v1.RenameRequest) (*v1.RenameResponse, error)
+	SetModel(context.Context, *v1.SetModelRequest) (*v1.SetModelResponse, error)
+	Undo(context.Context, *v1.UndoRequest) (*v1.UndoResponse, error)
+	MarkRead(context.Context, *v1.MarkReadRequest) (*v1.MarkReadResponse, error)
+	State(context.Context, *v1.StateRequest) (*v1.StateResponse, error)
+	Mailbox(context.Context, *v1.MailboxRequest) (*v1.MailboxResponse, error)
+	UpdateSettings(context.Context, *v1.UpdateSettingsRequest) (*v1.UpdateSettingsResponse, error)
+	Interrupt(context.Context, *v1.InterruptRequest) (*v1.InterruptResponse, error)
+	Compact(context.Context, *v1.CompactRequest) (*v1.CompactResponse, error)
+	ListProviders(context.Context, *v1.ListProvidersRequest) (*v1.ListProvidersResponse, error)
+	ListProvidersCatalog(context.Context, *v1.ListProvidersCatalogRequest) (*v1.ListProvidersCatalogResponse, error)
+	RegisterProvider(context.Context, *v1.RegisterProviderRequest) (*v1.RegisterProviderResponse, error)
+	DeleteProvider(context.Context, *v1.DeleteProviderRequest) (*v1.DeleteProviderResponse, error)
+	TestProvider(context.Context, *v1.TestProviderRequest) (*v1.TestProviderResponse, error)
+	ListModels(context.Context, *v1.ListModelsRequest) (*v1.ListModelsResponse, error)
+	ListPresets(context.Context, *v1.ListPresetsRequest) (*v1.ListPresetsResponse, error)
+	UpsertPreset(context.Context, *v1.UpsertPresetRequest) (*v1.UpsertPresetResponse, error)
+	DeletePreset(context.Context, *v1.DeletePresetRequest) (*v1.DeletePresetResponse, error)
+	PreviewPreset(context.Context, *v1.PreviewPresetRequest) (*v1.PreviewPresetResponse, error)
+	GetConfig(context.Context, *v1.GetConfigRequest) (*v1.GetConfigResponse, error)
+	SetConfig(context.Context, *v1.SetConfigRequest) (*v1.SetConfigResponse, error)
+	ListTools(context.Context, *v1.ListToolsRequest) (*v1.ListToolsResponse, error)
+	GetToolConfig(context.Context, *v1.GetToolConfigRequest) (*v1.GetToolConfigResponse, error)
+	SetToolConfig(context.Context, *v1.SetToolConfigRequest) (*v1.SetToolConfigResponse, error)
+	SetExtensionConfig(context.Context, *v1.SetExtensionConfigRequest) (*v1.SetExtensionConfigResponse, error)
+	UploadFile(context.Context, *v1.UploadFileRequest) (*v1.UploadFileResponse, error)
+	IngestFile(context.Context, *v1.IngestFileRequest) (*v1.IngestFileResponse, error)
+	GetFile(context.Context, *v1.GetFileRequest) (*v1.GetFileResponse, error)
+	GetFileMeta(context.Context, *v1.GetFileMetaRequest) (*v1.GetFileMetaResponse, error)
+	GetFileStream(context.Context, *v1.GetFileRequest) (AgentServiceGetFileStreamClientStream, error)
+	GetAgentConfig(context.Context, *v1.GetAgentConfigRequest) (*v1.GetAgentConfigResponse, error)
 }
 
-// NewAgentServiceClient constructs a client for the agent.v1.AgentService service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewAgentServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AgentServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	agentServiceMethods := v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods()
-	return &agentServiceClient{
-		health: connect.NewClient[v1.HealthRequest, v1.HealthResponse](
-			httpClient,
-			baseURL+AgentServiceHealthProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("Health")),
-			connect.WithClientOptions(opts...),
-		),
-		getIdentity: connect.NewClient[v1.GetIdentityRequest, v1.GetIdentityResponse](
-			httpClient,
-			baseURL+AgentServiceGetIdentityProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("GetIdentity")),
-			connect.WithClientOptions(opts...),
-		),
-		listSessions: connect.NewClient[v1.ListSessionsRequest, v1.ListSessionsResponse](
-			httpClient,
-			baseURL+AgentServiceListSessionsProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("ListSessions")),
-			connect.WithClientOptions(opts...),
-		),
-		createSession: connect.NewClient[v1.CreateSessionRequest, v1.CreateSessionResponse](
-			httpClient,
-			baseURL+AgentServiceCreateSessionProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("CreateSession")),
-			connect.WithClientOptions(opts...),
-		),
-		getSession: connect.NewClient[v1.GetSessionRequest, v1.GetSessionResponse](
-			httpClient,
-			baseURL+AgentServiceGetSessionProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("GetSession")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteSession: connect.NewClient[v1.DeleteSessionRequest, v1.DeleteSessionResponse](
-			httpClient,
-			baseURL+AgentServiceDeleteSessionProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("DeleteSession")),
-			connect.WithClientOptions(opts...),
-		),
-		listMessages: connect.NewClient[v1.ListMessagesRequest, v1.ListMessagesResponse](
-			httpClient,
-			baseURL+AgentServiceListMessagesProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("ListMessages")),
-			connect.WithClientOptions(opts...),
-		),
-		prompt: connect.NewClient[v1.PromptRequest, v1.PromptResponse](
-			httpClient,
-			baseURL+AgentServicePromptProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("Prompt")),
-			connect.WithClientOptions(opts...),
-		),
-		watchSession: connect.NewClient[v1.WatchSessionRequest, v1.WatchSessionResponse](
-			httpClient,
-			baseURL+AgentServiceWatchSessionProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("WatchSession")),
-			connect.WithClientOptions(opts...),
-		),
-		watchSessions: connect.NewClient[v1.WatchSessionsRequest, v1.WatchSessionsResponse](
-			httpClient,
-			baseURL+AgentServiceWatchSessionsProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("WatchSessions")),
-			connect.WithClientOptions(opts...),
-		),
-		fork: connect.NewClient[v1.ForkRequest, v1.ForkResponse](
-			httpClient,
-			baseURL+AgentServiceForkProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("Fork")),
-			connect.WithClientOptions(opts...),
-		),
-		rename: connect.NewClient[v1.RenameRequest, v1.RenameResponse](
-			httpClient,
-			baseURL+AgentServiceRenameProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("Rename")),
-			connect.WithClientOptions(opts...),
-		),
-		setModel: connect.NewClient[v1.SetModelRequest, v1.SetModelResponse](
-			httpClient,
-			baseURL+AgentServiceSetModelProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("SetModel")),
-			connect.WithClientOptions(opts...),
-		),
-		undo: connect.NewClient[v1.UndoRequest, v1.UndoResponse](
-			httpClient,
-			baseURL+AgentServiceUndoProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("Undo")),
-			connect.WithClientOptions(opts...),
-		),
-		markRead: connect.NewClient[v1.MarkReadRequest, v1.MarkReadResponse](
-			httpClient,
-			baseURL+AgentServiceMarkReadProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("MarkRead")),
-			connect.WithClientOptions(opts...),
-		),
-		state: connect.NewClient[v1.StateRequest, v1.StateResponse](
-			httpClient,
-			baseURL+AgentServiceStateProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("State")),
-			connect.WithClientOptions(opts...),
-		),
-		mailbox: connect.NewClient[v1.MailboxRequest, v1.MailboxResponse](
-			httpClient,
-			baseURL+AgentServiceMailboxProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("Mailbox")),
-			connect.WithClientOptions(opts...),
-		),
-		updateSettings: connect.NewClient[v1.UpdateSettingsRequest, v1.UpdateSettingsResponse](
-			httpClient,
-			baseURL+AgentServiceUpdateSettingsProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("UpdateSettings")),
-			connect.WithClientOptions(opts...),
-		),
-		interrupt: connect.NewClient[v1.InterruptRequest, v1.InterruptResponse](
-			httpClient,
-			baseURL+AgentServiceInterruptProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("Interrupt")),
-			connect.WithClientOptions(opts...),
-		),
-		compact: connect.NewClient[v1.CompactRequest, v1.CompactResponse](
-			httpClient,
-			baseURL+AgentServiceCompactProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("Compact")),
-			connect.WithClientOptions(opts...),
-		),
-		listProviders: connect.NewClient[v1.ListProvidersRequest, v1.ListProvidersResponse](
-			httpClient,
-			baseURL+AgentServiceListProvidersProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("ListProviders")),
-			connect.WithClientOptions(opts...),
-		),
-		listProvidersCatalog: connect.NewClient[v1.ListProvidersCatalogRequest, v1.ListProvidersCatalogResponse](
-			httpClient,
-			baseURL+AgentServiceListProvidersCatalogProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("ListProvidersCatalog")),
-			connect.WithClientOptions(opts...),
-		),
-		registerProvider: connect.NewClient[v1.RegisterProviderRequest, v1.RegisterProviderResponse](
-			httpClient,
-			baseURL+AgentServiceRegisterProviderProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("RegisterProvider")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteProvider: connect.NewClient[v1.DeleteProviderRequest, v1.DeleteProviderResponse](
-			httpClient,
-			baseURL+AgentServiceDeleteProviderProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("DeleteProvider")),
-			connect.WithClientOptions(opts...),
-		),
-		testProvider: connect.NewClient[v1.TestProviderRequest, v1.TestProviderResponse](
-			httpClient,
-			baseURL+AgentServiceTestProviderProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("TestProvider")),
-			connect.WithClientOptions(opts...),
-		),
-		listModels: connect.NewClient[v1.ListModelsRequest, v1.ListModelsResponse](
-			httpClient,
-			baseURL+AgentServiceListModelsProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("ListModels")),
-			connect.WithClientOptions(opts...),
-		),
-		listPresets: connect.NewClient[v1.ListPresetsRequest, v1.ListPresetsResponse](
-			httpClient,
-			baseURL+AgentServiceListPresetsProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("ListPresets")),
-			connect.WithClientOptions(opts...),
-		),
-		upsertPreset: connect.NewClient[v1.UpsertPresetRequest, v1.UpsertPresetResponse](
-			httpClient,
-			baseURL+AgentServiceUpsertPresetProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("UpsertPreset")),
-			connect.WithClientOptions(opts...),
-		),
-		deletePreset: connect.NewClient[v1.DeletePresetRequest, v1.DeletePresetResponse](
-			httpClient,
-			baseURL+AgentServiceDeletePresetProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("DeletePreset")),
-			connect.WithClientOptions(opts...),
-		),
-		previewPreset: connect.NewClient[v1.PreviewPresetRequest, v1.PreviewPresetResponse](
-			httpClient,
-			baseURL+AgentServicePreviewPresetProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("PreviewPreset")),
-			connect.WithClientOptions(opts...),
-		),
-		getConfig: connect.NewClient[v1.GetConfigRequest, v1.GetConfigResponse](
-			httpClient,
-			baseURL+AgentServiceGetConfigProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("GetConfig")),
-			connect.WithClientOptions(opts...),
-		),
-		setConfig: connect.NewClient[v1.SetConfigRequest, v1.SetConfigResponse](
-			httpClient,
-			baseURL+AgentServiceSetConfigProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("SetConfig")),
-			connect.WithClientOptions(opts...),
-		),
-		listTools: connect.NewClient[v1.ListToolsRequest, v1.ListToolsResponse](
-			httpClient,
-			baseURL+AgentServiceListToolsProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("ListTools")),
-			connect.WithClientOptions(opts...),
-		),
-		getToolConfig: connect.NewClient[v1.GetToolConfigRequest, v1.GetToolConfigResponse](
-			httpClient,
-			baseURL+AgentServiceGetToolConfigProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("GetToolConfig")),
-			connect.WithClientOptions(opts...),
-		),
-		setToolConfig: connect.NewClient[v1.SetToolConfigRequest, v1.SetToolConfigResponse](
-			httpClient,
-			baseURL+AgentServiceSetToolConfigProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("SetToolConfig")),
-			connect.WithClientOptions(opts...),
-		),
-		setExtensionConfig: connect.NewClient[v1.SetExtensionConfigRequest, v1.SetExtensionConfigResponse](
-			httpClient,
-			baseURL+AgentServiceSetExtensionConfigProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("SetExtensionConfig")),
-			connect.WithClientOptions(opts...),
-		),
-		uploadFile: connect.NewClient[v1.UploadFileRequest, v1.UploadFileResponse](
-			httpClient,
-			baseURL+AgentServiceUploadFileProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("UploadFile")),
-			connect.WithClientOptions(opts...),
-		),
-		ingestFile: connect.NewClient[v1.IngestFileRequest, v1.IngestFileResponse](
-			httpClient,
-			baseURL+AgentServiceIngestFileProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("IngestFile")),
-			connect.WithClientOptions(opts...),
-		),
-		getFile: connect.NewClient[v1.GetFileRequest, v1.GetFileResponse](
-			httpClient,
-			baseURL+AgentServiceGetFileProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("GetFile")),
-			connect.WithClientOptions(opts...),
-		),
-		getFileMeta: connect.NewClient[v1.GetFileMetaRequest, v1.GetFileMetaResponse](
-			httpClient,
-			baseURL+AgentServiceGetFileMetaProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("GetFileMeta")),
-			connect.WithClientOptions(opts...),
-		),
-		getFileStream: connect.NewClient[v1.GetFileRequest, v1.FileChunk](
-			httpClient,
-			baseURL+AgentServiceGetFileStreamProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("GetFileStream")),
-			connect.WithClientOptions(opts...),
-		),
-		getAgentConfig: connect.NewClient[v1.GetAgentConfigRequest, v1.GetAgentConfigResponse](
-			httpClient,
-			baseURL+AgentServiceGetAgentConfigProcedure,
-			connect.WithSchema(agentServiceMethods.ByName("GetAgentConfig")),
-			connect.WithClientOptions(opts...),
-		),
+// NewAgentServiceClient constructs a client for the agent.v1.AgentService service. Multiple service
+// clients may share a single connect.Client.
+func NewAgentServiceClient(client *connect.Client) AgentServiceClient {
+	return &agentServiceClient{client: client}
+}
+
+// AgentServicePromptClientStream is the client stream for the AgentService's Prompt RPC.
+type AgentServicePromptClientStream struct {
+	stream connect.ClientStream
+}
+
+// Receive returns the next response message from the server.
+func (s AgentServicePromptClientStream) Receive() (*v1.PromptResponse, error) {
+	var res v1.PromptResponse
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
 	}
+	return &res, nil
 }
 
-// agentServiceClient implements AgentServiceClient.
-type agentServiceClient struct {
-	health               *connect.Client[v1.HealthRequest, v1.HealthResponse]
-	getIdentity          *connect.Client[v1.GetIdentityRequest, v1.GetIdentityResponse]
-	listSessions         *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
-	createSession        *connect.Client[v1.CreateSessionRequest, v1.CreateSessionResponse]
-	getSession           *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
-	deleteSession        *connect.Client[v1.DeleteSessionRequest, v1.DeleteSessionResponse]
-	listMessages         *connect.Client[v1.ListMessagesRequest, v1.ListMessagesResponse]
-	prompt               *connect.Client[v1.PromptRequest, v1.PromptResponse]
-	watchSession         *connect.Client[v1.WatchSessionRequest, v1.WatchSessionResponse]
-	watchSessions        *connect.Client[v1.WatchSessionsRequest, v1.WatchSessionsResponse]
-	fork                 *connect.Client[v1.ForkRequest, v1.ForkResponse]
-	rename               *connect.Client[v1.RenameRequest, v1.RenameResponse]
-	setModel             *connect.Client[v1.SetModelRequest, v1.SetModelResponse]
-	undo                 *connect.Client[v1.UndoRequest, v1.UndoResponse]
-	markRead             *connect.Client[v1.MarkReadRequest, v1.MarkReadResponse]
-	state                *connect.Client[v1.StateRequest, v1.StateResponse]
-	mailbox              *connect.Client[v1.MailboxRequest, v1.MailboxResponse]
-	updateSettings       *connect.Client[v1.UpdateSettingsRequest, v1.UpdateSettingsResponse]
-	interrupt            *connect.Client[v1.InterruptRequest, v1.InterruptResponse]
-	compact              *connect.Client[v1.CompactRequest, v1.CompactResponse]
-	listProviders        *connect.Client[v1.ListProvidersRequest, v1.ListProvidersResponse]
-	listProvidersCatalog *connect.Client[v1.ListProvidersCatalogRequest, v1.ListProvidersCatalogResponse]
-	registerProvider     *connect.Client[v1.RegisterProviderRequest, v1.RegisterProviderResponse]
-	deleteProvider       *connect.Client[v1.DeleteProviderRequest, v1.DeleteProviderResponse]
-	testProvider         *connect.Client[v1.TestProviderRequest, v1.TestProviderResponse]
-	listModels           *connect.Client[v1.ListModelsRequest, v1.ListModelsResponse]
-	listPresets          *connect.Client[v1.ListPresetsRequest, v1.ListPresetsResponse]
-	upsertPreset         *connect.Client[v1.UpsertPresetRequest, v1.UpsertPresetResponse]
-	deletePreset         *connect.Client[v1.DeletePresetRequest, v1.DeletePresetResponse]
-	previewPreset        *connect.Client[v1.PreviewPresetRequest, v1.PreviewPresetResponse]
-	getConfig            *connect.Client[v1.GetConfigRequest, v1.GetConfigResponse]
-	setConfig            *connect.Client[v1.SetConfigRequest, v1.SetConfigResponse]
-	listTools            *connect.Client[v1.ListToolsRequest, v1.ListToolsResponse]
-	getToolConfig        *connect.Client[v1.GetToolConfigRequest, v1.GetToolConfigResponse]
-	setToolConfig        *connect.Client[v1.SetToolConfigRequest, v1.SetToolConfigResponse]
-	setExtensionConfig   *connect.Client[v1.SetExtensionConfigRequest, v1.SetExtensionConfigResponse]
-	uploadFile           *connect.Client[v1.UploadFileRequest, v1.UploadFileResponse]
-	ingestFile           *connect.Client[v1.IngestFileRequest, v1.IngestFileResponse]
-	getFile              *connect.Client[v1.GetFileRequest, v1.GetFileResponse]
-	getFileMeta          *connect.Client[v1.GetFileMetaRequest, v1.GetFileMetaResponse]
-	getFileStream        *connect.Client[v1.GetFileRequest, v1.FileChunk]
-	getAgentConfig       *connect.Client[v1.GetAgentConfigRequest, v1.GetAgentConfigResponse]
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s AgentServicePromptClientStream) Close() error {
+	return s.stream.Close()
 }
 
-// Health calls agent.v1.AgentService.Health.
-func (c *agentServiceClient) Health(ctx context.Context, req *connect.Request[v1.HealthRequest]) (*connect.Response[v1.HealthResponse], error) {
-	return c.health.CallUnary(ctx, req)
+// AgentServiceWatchSessionClientStream is the client stream for the AgentService's WatchSession
+// RPC.
+type AgentServiceWatchSessionClientStream struct {
+	stream connect.ClientStream
 }
 
-// GetIdentity calls agent.v1.AgentService.GetIdentity.
-func (c *agentServiceClient) GetIdentity(ctx context.Context, req *connect.Request[v1.GetIdentityRequest]) (*connect.Response[v1.GetIdentityResponse], error) {
-	return c.getIdentity.CallUnary(ctx, req)
+// Receive returns the next response message from the server.
+func (s AgentServiceWatchSessionClientStream) Receive() (*v1.WatchSessionResponse, error) {
+	var res v1.WatchSessionResponse
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
-// ListSessions calls agent.v1.AgentService.ListSessions.
-func (c *agentServiceClient) ListSessions(ctx context.Context, req *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
-	return c.listSessions.CallUnary(ctx, req)
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s AgentServiceWatchSessionClientStream) Close() error {
+	return s.stream.Close()
 }
 
-// CreateSession calls agent.v1.AgentService.CreateSession.
-func (c *agentServiceClient) CreateSession(ctx context.Context, req *connect.Request[v1.CreateSessionRequest]) (*connect.Response[v1.CreateSessionResponse], error) {
-	return c.createSession.CallUnary(ctx, req)
+// AgentServiceWatchSessionsClientStream is the client stream for the AgentService's WatchSessions
+// RPC.
+type AgentServiceWatchSessionsClientStream struct {
+	stream connect.ClientStream
 }
 
-// GetSession calls agent.v1.AgentService.GetSession.
-func (c *agentServiceClient) GetSession(ctx context.Context, req *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error) {
-	return c.getSession.CallUnary(ctx, req)
+// Receive returns the next response message from the server.
+func (s AgentServiceWatchSessionsClientStream) Receive() (*v1.WatchSessionsResponse, error) {
+	var res v1.WatchSessionsResponse
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
-// DeleteSession calls agent.v1.AgentService.DeleteSession.
-func (c *agentServiceClient) DeleteSession(ctx context.Context, req *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.DeleteSessionResponse], error) {
-	return c.deleteSession.CallUnary(ctx, req)
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s AgentServiceWatchSessionsClientStream) Close() error {
+	return s.stream.Close()
 }
 
-// ListMessages calls agent.v1.AgentService.ListMessages.
-func (c *agentServiceClient) ListMessages(ctx context.Context, req *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error) {
-	return c.listMessages.CallUnary(ctx, req)
+// AgentServiceGetFileStreamClientStream is the client stream for the AgentService's GetFileStream
+// RPC.
+type AgentServiceGetFileStreamClientStream struct {
+	stream connect.ClientStream
 }
 
-// Prompt calls agent.v1.AgentService.Prompt.
-func (c *agentServiceClient) Prompt(ctx context.Context, req *connect.Request[v1.PromptRequest]) (*connect.ServerStreamForClient[v1.PromptResponse], error) {
-	return c.prompt.CallServerStream(ctx, req)
+// Receive returns the next response message from the server.
+func (s AgentServiceGetFileStreamClientStream) Receive() (*v1.FileChunk, error) {
+	var res v1.FileChunk
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
-// WatchSession calls agent.v1.AgentService.WatchSession.
-func (c *agentServiceClient) WatchSession(ctx context.Context, req *connect.Request[v1.WatchSessionRequest]) (*connect.ServerStreamForClient[v1.WatchSessionResponse], error) {
-	return c.watchSession.CallServerStream(ctx, req)
-}
-
-// WatchSessions calls agent.v1.AgentService.WatchSessions.
-func (c *agentServiceClient) WatchSessions(ctx context.Context, req *connect.Request[v1.WatchSessionsRequest]) (*connect.ServerStreamForClient[v1.WatchSessionsResponse], error) {
-	return c.watchSessions.CallServerStream(ctx, req)
-}
-
-// Fork calls agent.v1.AgentService.Fork.
-func (c *agentServiceClient) Fork(ctx context.Context, req *connect.Request[v1.ForkRequest]) (*connect.Response[v1.ForkResponse], error) {
-	return c.fork.CallUnary(ctx, req)
-}
-
-// Rename calls agent.v1.AgentService.Rename.
-func (c *agentServiceClient) Rename(ctx context.Context, req *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error) {
-	return c.rename.CallUnary(ctx, req)
-}
-
-// SetModel calls agent.v1.AgentService.SetModel.
-func (c *agentServiceClient) SetModel(ctx context.Context, req *connect.Request[v1.SetModelRequest]) (*connect.Response[v1.SetModelResponse], error) {
-	return c.setModel.CallUnary(ctx, req)
-}
-
-// Undo calls agent.v1.AgentService.Undo.
-func (c *agentServiceClient) Undo(ctx context.Context, req *connect.Request[v1.UndoRequest]) (*connect.Response[v1.UndoResponse], error) {
-	return c.undo.CallUnary(ctx, req)
-}
-
-// MarkRead calls agent.v1.AgentService.MarkRead.
-func (c *agentServiceClient) MarkRead(ctx context.Context, req *connect.Request[v1.MarkReadRequest]) (*connect.Response[v1.MarkReadResponse], error) {
-	return c.markRead.CallUnary(ctx, req)
-}
-
-// State calls agent.v1.AgentService.State.
-func (c *agentServiceClient) State(ctx context.Context, req *connect.Request[v1.StateRequest]) (*connect.Response[v1.StateResponse], error) {
-	return c.state.CallUnary(ctx, req)
-}
-
-// Mailbox calls agent.v1.AgentService.Mailbox.
-func (c *agentServiceClient) Mailbox(ctx context.Context, req *connect.Request[v1.MailboxRequest]) (*connect.Response[v1.MailboxResponse], error) {
-	return c.mailbox.CallUnary(ctx, req)
-}
-
-// UpdateSettings calls agent.v1.AgentService.UpdateSettings.
-func (c *agentServiceClient) UpdateSettings(ctx context.Context, req *connect.Request[v1.UpdateSettingsRequest]) (*connect.Response[v1.UpdateSettingsResponse], error) {
-	return c.updateSettings.CallUnary(ctx, req)
-}
-
-// Interrupt calls agent.v1.AgentService.Interrupt.
-func (c *agentServiceClient) Interrupt(ctx context.Context, req *connect.Request[v1.InterruptRequest]) (*connect.Response[v1.InterruptResponse], error) {
-	return c.interrupt.CallUnary(ctx, req)
-}
-
-// Compact calls agent.v1.AgentService.Compact.
-func (c *agentServiceClient) Compact(ctx context.Context, req *connect.Request[v1.CompactRequest]) (*connect.Response[v1.CompactResponse], error) {
-	return c.compact.CallUnary(ctx, req)
-}
-
-// ListProviders calls agent.v1.AgentService.ListProviders.
-func (c *agentServiceClient) ListProviders(ctx context.Context, req *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error) {
-	return c.listProviders.CallUnary(ctx, req)
-}
-
-// ListProvidersCatalog calls agent.v1.AgentService.ListProvidersCatalog.
-func (c *agentServiceClient) ListProvidersCatalog(ctx context.Context, req *connect.Request[v1.ListProvidersCatalogRequest]) (*connect.Response[v1.ListProvidersCatalogResponse], error) {
-	return c.listProvidersCatalog.CallUnary(ctx, req)
-}
-
-// RegisterProvider calls agent.v1.AgentService.RegisterProvider.
-func (c *agentServiceClient) RegisterProvider(ctx context.Context, req *connect.Request[v1.RegisterProviderRequest]) (*connect.Response[v1.RegisterProviderResponse], error) {
-	return c.registerProvider.CallUnary(ctx, req)
-}
-
-// DeleteProvider calls agent.v1.AgentService.DeleteProvider.
-func (c *agentServiceClient) DeleteProvider(ctx context.Context, req *connect.Request[v1.DeleteProviderRequest]) (*connect.Response[v1.DeleteProviderResponse], error) {
-	return c.deleteProvider.CallUnary(ctx, req)
-}
-
-// TestProvider calls agent.v1.AgentService.TestProvider.
-func (c *agentServiceClient) TestProvider(ctx context.Context, req *connect.Request[v1.TestProviderRequest]) (*connect.Response[v1.TestProviderResponse], error) {
-	return c.testProvider.CallUnary(ctx, req)
-}
-
-// ListModels calls agent.v1.AgentService.ListModels.
-func (c *agentServiceClient) ListModels(ctx context.Context, req *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error) {
-	return c.listModels.CallUnary(ctx, req)
-}
-
-// ListPresets calls agent.v1.AgentService.ListPresets.
-func (c *agentServiceClient) ListPresets(ctx context.Context, req *connect.Request[v1.ListPresetsRequest]) (*connect.Response[v1.ListPresetsResponse], error) {
-	return c.listPresets.CallUnary(ctx, req)
-}
-
-// UpsertPreset calls agent.v1.AgentService.UpsertPreset.
-func (c *agentServiceClient) UpsertPreset(ctx context.Context, req *connect.Request[v1.UpsertPresetRequest]) (*connect.Response[v1.UpsertPresetResponse], error) {
-	return c.upsertPreset.CallUnary(ctx, req)
-}
-
-// DeletePreset calls agent.v1.AgentService.DeletePreset.
-func (c *agentServiceClient) DeletePreset(ctx context.Context, req *connect.Request[v1.DeletePresetRequest]) (*connect.Response[v1.DeletePresetResponse], error) {
-	return c.deletePreset.CallUnary(ctx, req)
-}
-
-// PreviewPreset calls agent.v1.AgentService.PreviewPreset.
-func (c *agentServiceClient) PreviewPreset(ctx context.Context, req *connect.Request[v1.PreviewPresetRequest]) (*connect.Response[v1.PreviewPresetResponse], error) {
-	return c.previewPreset.CallUnary(ctx, req)
-}
-
-// GetConfig calls agent.v1.AgentService.GetConfig.
-func (c *agentServiceClient) GetConfig(ctx context.Context, req *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.GetConfigResponse], error) {
-	return c.getConfig.CallUnary(ctx, req)
-}
-
-// SetConfig calls agent.v1.AgentService.SetConfig.
-func (c *agentServiceClient) SetConfig(ctx context.Context, req *connect.Request[v1.SetConfigRequest]) (*connect.Response[v1.SetConfigResponse], error) {
-	return c.setConfig.CallUnary(ctx, req)
-}
-
-// ListTools calls agent.v1.AgentService.ListTools.
-func (c *agentServiceClient) ListTools(ctx context.Context, req *connect.Request[v1.ListToolsRequest]) (*connect.Response[v1.ListToolsResponse], error) {
-	return c.listTools.CallUnary(ctx, req)
-}
-
-// GetToolConfig calls agent.v1.AgentService.GetToolConfig.
-func (c *agentServiceClient) GetToolConfig(ctx context.Context, req *connect.Request[v1.GetToolConfigRequest]) (*connect.Response[v1.GetToolConfigResponse], error) {
-	return c.getToolConfig.CallUnary(ctx, req)
-}
-
-// SetToolConfig calls agent.v1.AgentService.SetToolConfig.
-func (c *agentServiceClient) SetToolConfig(ctx context.Context, req *connect.Request[v1.SetToolConfigRequest]) (*connect.Response[v1.SetToolConfigResponse], error) {
-	return c.setToolConfig.CallUnary(ctx, req)
-}
-
-// SetExtensionConfig calls agent.v1.AgentService.SetExtensionConfig.
-func (c *agentServiceClient) SetExtensionConfig(ctx context.Context, req *connect.Request[v1.SetExtensionConfigRequest]) (*connect.Response[v1.SetExtensionConfigResponse], error) {
-	return c.setExtensionConfig.CallUnary(ctx, req)
-}
-
-// UploadFile calls agent.v1.AgentService.UploadFile.
-func (c *agentServiceClient) UploadFile(ctx context.Context, req *connect.Request[v1.UploadFileRequest]) (*connect.Response[v1.UploadFileResponse], error) {
-	return c.uploadFile.CallUnary(ctx, req)
-}
-
-// IngestFile calls agent.v1.AgentService.IngestFile.
-func (c *agentServiceClient) IngestFile(ctx context.Context, req *connect.Request[v1.IngestFileRequest]) (*connect.Response[v1.IngestFileResponse], error) {
-	return c.ingestFile.CallUnary(ctx, req)
-}
-
-// GetFile calls agent.v1.AgentService.GetFile.
-func (c *agentServiceClient) GetFile(ctx context.Context, req *connect.Request[v1.GetFileRequest]) (*connect.Response[v1.GetFileResponse], error) {
-	return c.getFile.CallUnary(ctx, req)
-}
-
-// GetFileMeta calls agent.v1.AgentService.GetFileMeta.
-func (c *agentServiceClient) GetFileMeta(ctx context.Context, req *connect.Request[v1.GetFileMetaRequest]) (*connect.Response[v1.GetFileMetaResponse], error) {
-	return c.getFileMeta.CallUnary(ctx, req)
-}
-
-// GetFileStream calls agent.v1.AgentService.GetFileStream.
-func (c *agentServiceClient) GetFileStream(ctx context.Context, req *connect.Request[v1.GetFileRequest]) (*connect.ServerStreamForClient[v1.FileChunk], error) {
-	return c.getFileStream.CallServerStream(ctx, req)
-}
-
-// GetAgentConfig calls agent.v1.AgentService.GetAgentConfig.
-func (c *agentServiceClient) GetAgentConfig(ctx context.Context, req *connect.Request[v1.GetAgentConfigRequest]) (*connect.Response[v1.GetAgentConfigResponse], error) {
-	return c.getAgentConfig.CallUnary(ctx, req)
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s AgentServiceGetFileStreamClientStream) Close() error {
+	return s.stream.Close()
 }
 
 // AgentServiceHandler is an implementation of the agent.v1.AgentService service.
 type AgentServiceHandler interface {
-	Health(context.Context, *connect.Request[v1.HealthRequest]) (*connect.Response[v1.HealthResponse], error)
-	GetIdentity(context.Context, *connect.Request[v1.GetIdentityRequest]) (*connect.Response[v1.GetIdentityResponse], error)
-	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
-	CreateSession(context.Context, *connect.Request[v1.CreateSessionRequest]) (*connect.Response[v1.CreateSessionResponse], error)
-	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
-	DeleteSession(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.DeleteSessionResponse], error)
-	ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error)
-	Prompt(context.Context, *connect.Request[v1.PromptRequest], *connect.ServerStream[v1.PromptResponse]) error
-	WatchSession(context.Context, *connect.Request[v1.WatchSessionRequest], *connect.ServerStream[v1.WatchSessionResponse]) error
-	WatchSessions(context.Context, *connect.Request[v1.WatchSessionsRequest], *connect.ServerStream[v1.WatchSessionsResponse]) error
-	Fork(context.Context, *connect.Request[v1.ForkRequest]) (*connect.Response[v1.ForkResponse], error)
-	Rename(context.Context, *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error)
-	SetModel(context.Context, *connect.Request[v1.SetModelRequest]) (*connect.Response[v1.SetModelResponse], error)
-	Undo(context.Context, *connect.Request[v1.UndoRequest]) (*connect.Response[v1.UndoResponse], error)
-	MarkRead(context.Context, *connect.Request[v1.MarkReadRequest]) (*connect.Response[v1.MarkReadResponse], error)
-	State(context.Context, *connect.Request[v1.StateRequest]) (*connect.Response[v1.StateResponse], error)
-	Mailbox(context.Context, *connect.Request[v1.MailboxRequest]) (*connect.Response[v1.MailboxResponse], error)
-	UpdateSettings(context.Context, *connect.Request[v1.UpdateSettingsRequest]) (*connect.Response[v1.UpdateSettingsResponse], error)
-	Interrupt(context.Context, *connect.Request[v1.InterruptRequest]) (*connect.Response[v1.InterruptResponse], error)
-	Compact(context.Context, *connect.Request[v1.CompactRequest]) (*connect.Response[v1.CompactResponse], error)
-	ListProviders(context.Context, *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error)
-	ListProvidersCatalog(context.Context, *connect.Request[v1.ListProvidersCatalogRequest]) (*connect.Response[v1.ListProvidersCatalogResponse], error)
-	RegisterProvider(context.Context, *connect.Request[v1.RegisterProviderRequest]) (*connect.Response[v1.RegisterProviderResponse], error)
-	DeleteProvider(context.Context, *connect.Request[v1.DeleteProviderRequest]) (*connect.Response[v1.DeleteProviderResponse], error)
-	TestProvider(context.Context, *connect.Request[v1.TestProviderRequest]) (*connect.Response[v1.TestProviderResponse], error)
-	ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error)
-	ListPresets(context.Context, *connect.Request[v1.ListPresetsRequest]) (*connect.Response[v1.ListPresetsResponse], error)
-	UpsertPreset(context.Context, *connect.Request[v1.UpsertPresetRequest]) (*connect.Response[v1.UpsertPresetResponse], error)
-	DeletePreset(context.Context, *connect.Request[v1.DeletePresetRequest]) (*connect.Response[v1.DeletePresetResponse], error)
-	PreviewPreset(context.Context, *connect.Request[v1.PreviewPresetRequest]) (*connect.Response[v1.PreviewPresetResponse], error)
-	GetConfig(context.Context, *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.GetConfigResponse], error)
-	SetConfig(context.Context, *connect.Request[v1.SetConfigRequest]) (*connect.Response[v1.SetConfigResponse], error)
-	ListTools(context.Context, *connect.Request[v1.ListToolsRequest]) (*connect.Response[v1.ListToolsResponse], error)
-	GetToolConfig(context.Context, *connect.Request[v1.GetToolConfigRequest]) (*connect.Response[v1.GetToolConfigResponse], error)
-	SetToolConfig(context.Context, *connect.Request[v1.SetToolConfigRequest]) (*connect.Response[v1.SetToolConfigResponse], error)
-	SetExtensionConfig(context.Context, *connect.Request[v1.SetExtensionConfigRequest]) (*connect.Response[v1.SetExtensionConfigResponse], error)
-	UploadFile(context.Context, *connect.Request[v1.UploadFileRequest]) (*connect.Response[v1.UploadFileResponse], error)
-	IngestFile(context.Context, *connect.Request[v1.IngestFileRequest]) (*connect.Response[v1.IngestFileResponse], error)
-	GetFile(context.Context, *connect.Request[v1.GetFileRequest]) (*connect.Response[v1.GetFileResponse], error)
-	GetFileMeta(context.Context, *connect.Request[v1.GetFileMetaRequest]) (*connect.Response[v1.GetFileMetaResponse], error)
-	GetFileStream(context.Context, *connect.Request[v1.GetFileRequest], *connect.ServerStream[v1.FileChunk]) error
-	GetAgentConfig(context.Context, *connect.Request[v1.GetAgentConfigRequest]) (*connect.Response[v1.GetAgentConfigResponse], error)
+	Health(context.Context, *v1.HealthRequest) (*v1.HealthResponse, error)
+	GetIdentity(context.Context, *v1.GetIdentityRequest) (*v1.GetIdentityResponse, error)
+	ListSessions(context.Context, *v1.ListSessionsRequest) (*v1.ListSessionsResponse, error)
+	CreateSession(context.Context, *v1.CreateSessionRequest) (*v1.CreateSessionResponse, error)
+	GetSession(context.Context, *v1.GetSessionRequest) (*v1.GetSessionResponse, error)
+	DeleteSession(context.Context, *v1.DeleteSessionRequest) (*v1.DeleteSessionResponse, error)
+	ListMessages(context.Context, *v1.ListMessagesRequest) (*v1.ListMessagesResponse, error)
+	Prompt(context.Context, *v1.PromptRequest, AgentServicePromptServerStream) error
+	WatchSession(context.Context, *v1.WatchSessionRequest, AgentServiceWatchSessionServerStream) error
+	WatchSessions(context.Context, *v1.WatchSessionsRequest, AgentServiceWatchSessionsServerStream) error
+	Fork(context.Context, *v1.ForkRequest) (*v1.ForkResponse, error)
+	Rename(context.Context, *v1.RenameRequest) (*v1.RenameResponse, error)
+	SetModel(context.Context, *v1.SetModelRequest) (*v1.SetModelResponse, error)
+	Undo(context.Context, *v1.UndoRequest) (*v1.UndoResponse, error)
+	MarkRead(context.Context, *v1.MarkReadRequest) (*v1.MarkReadResponse, error)
+	State(context.Context, *v1.StateRequest) (*v1.StateResponse, error)
+	Mailbox(context.Context, *v1.MailboxRequest) (*v1.MailboxResponse, error)
+	UpdateSettings(context.Context, *v1.UpdateSettingsRequest) (*v1.UpdateSettingsResponse, error)
+	Interrupt(context.Context, *v1.InterruptRequest) (*v1.InterruptResponse, error)
+	Compact(context.Context, *v1.CompactRequest) (*v1.CompactResponse, error)
+	ListProviders(context.Context, *v1.ListProvidersRequest) (*v1.ListProvidersResponse, error)
+	ListProvidersCatalog(context.Context, *v1.ListProvidersCatalogRequest) (*v1.ListProvidersCatalogResponse, error)
+	RegisterProvider(context.Context, *v1.RegisterProviderRequest) (*v1.RegisterProviderResponse, error)
+	DeleteProvider(context.Context, *v1.DeleteProviderRequest) (*v1.DeleteProviderResponse, error)
+	TestProvider(context.Context, *v1.TestProviderRequest) (*v1.TestProviderResponse, error)
+	ListModels(context.Context, *v1.ListModelsRequest) (*v1.ListModelsResponse, error)
+	ListPresets(context.Context, *v1.ListPresetsRequest) (*v1.ListPresetsResponse, error)
+	UpsertPreset(context.Context, *v1.UpsertPresetRequest) (*v1.UpsertPresetResponse, error)
+	DeletePreset(context.Context, *v1.DeletePresetRequest) (*v1.DeletePresetResponse, error)
+	PreviewPreset(context.Context, *v1.PreviewPresetRequest) (*v1.PreviewPresetResponse, error)
+	GetConfig(context.Context, *v1.GetConfigRequest) (*v1.GetConfigResponse, error)
+	SetConfig(context.Context, *v1.SetConfigRequest) (*v1.SetConfigResponse, error)
+	ListTools(context.Context, *v1.ListToolsRequest) (*v1.ListToolsResponse, error)
+	GetToolConfig(context.Context, *v1.GetToolConfigRequest) (*v1.GetToolConfigResponse, error)
+	SetToolConfig(context.Context, *v1.SetToolConfigRequest) (*v1.SetToolConfigResponse, error)
+	SetExtensionConfig(context.Context, *v1.SetExtensionConfigRequest) (*v1.SetExtensionConfigResponse, error)
+	UploadFile(context.Context, *v1.UploadFileRequest) (*v1.UploadFileResponse, error)
+	IngestFile(context.Context, *v1.IngestFileRequest) (*v1.IngestFileResponse, error)
+	GetFile(context.Context, *v1.GetFileRequest) (*v1.GetFileResponse, error)
+	GetFileMeta(context.Context, *v1.GetFileMetaRequest) (*v1.GetFileMetaResponse, error)
+	GetFileStream(context.Context, *v1.GetFileRequest, AgentServiceGetFileStreamServerStream) error
+	GetAgentConfig(context.Context, *v1.GetAgentConfigRequest) (*v1.GetAgentConfigResponse, error)
 }
 
-// NewAgentServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewAgentServiceHandler(svc AgentServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	agentServiceMethods := v1.File_agent_v1_agent_proto.Services().ByName("AgentService").Methods()
-	agentServiceHealthHandler := connect.NewUnaryHandler(
-		AgentServiceHealthProcedure,
-		svc.Health,
-		connect.WithSchema(agentServiceMethods.ByName("Health")),
-		connect.WithHandlerOptions(opts...),
+// RegisterAgentServiceHandler registers svc as the agent.v1.AgentService implementation on server.
+func RegisterAgentServiceHandler(server *connect.Server, svc AgentServiceHandler) {
+	adapter := agentServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: agentServiceHealthSpec(), Handler: adapter.health},
+		connect.Method{Spec: agentServiceGetIdentitySpec(), Handler: adapter.getIdentity},
+		connect.Method{Spec: agentServiceListSessionsSpec(), Handler: adapter.listSessions},
+		connect.Method{Spec: agentServiceCreateSessionSpec(), Handler: adapter.createSession},
+		connect.Method{Spec: agentServiceGetSessionSpec(), Handler: adapter.getSession},
+		connect.Method{Spec: agentServiceDeleteSessionSpec(), Handler: adapter.deleteSession},
+		connect.Method{Spec: agentServiceListMessagesSpec(), Handler: adapter.listMessages},
+		connect.Method{Spec: agentServicePromptSpec(), Handler: adapter.prompt},
+		connect.Method{Spec: agentServiceWatchSessionSpec(), Handler: adapter.watchSession},
+		connect.Method{Spec: agentServiceWatchSessionsSpec(), Handler: adapter.watchSessions},
+		connect.Method{Spec: agentServiceForkSpec(), Handler: adapter.fork},
+		connect.Method{Spec: agentServiceRenameSpec(), Handler: adapter.rename},
+		connect.Method{Spec: agentServiceSetModelSpec(), Handler: adapter.setModel},
+		connect.Method{Spec: agentServiceUndoSpec(), Handler: adapter.undo},
+		connect.Method{Spec: agentServiceMarkReadSpec(), Handler: adapter.markRead},
+		connect.Method{Spec: agentServiceStateSpec(), Handler: adapter.state},
+		connect.Method{Spec: agentServiceMailboxSpec(), Handler: adapter.mailbox},
+		connect.Method{Spec: agentServiceUpdateSettingsSpec(), Handler: adapter.updateSettings},
+		connect.Method{Spec: agentServiceInterruptSpec(), Handler: adapter.interrupt},
+		connect.Method{Spec: agentServiceCompactSpec(), Handler: adapter.compact},
+		connect.Method{Spec: agentServiceListProvidersSpec(), Handler: adapter.listProviders},
+		connect.Method{Spec: agentServiceListProvidersCatalogSpec(), Handler: adapter.listProvidersCatalog},
+		connect.Method{Spec: agentServiceRegisterProviderSpec(), Handler: adapter.registerProvider},
+		connect.Method{Spec: agentServiceDeleteProviderSpec(), Handler: adapter.deleteProvider},
+		connect.Method{Spec: agentServiceTestProviderSpec(), Handler: adapter.testProvider},
+		connect.Method{Spec: agentServiceListModelsSpec(), Handler: adapter.listModels},
+		connect.Method{Spec: agentServiceListPresetsSpec(), Handler: adapter.listPresets},
+		connect.Method{Spec: agentServiceUpsertPresetSpec(), Handler: adapter.upsertPreset},
+		connect.Method{Spec: agentServiceDeletePresetSpec(), Handler: adapter.deletePreset},
+		connect.Method{Spec: agentServicePreviewPresetSpec(), Handler: adapter.previewPreset},
+		connect.Method{Spec: agentServiceGetConfigSpec(), Handler: adapter.getConfig},
+		connect.Method{Spec: agentServiceSetConfigSpec(), Handler: adapter.setConfig},
+		connect.Method{Spec: agentServiceListToolsSpec(), Handler: adapter.listTools},
+		connect.Method{Spec: agentServiceGetToolConfigSpec(), Handler: adapter.getToolConfig},
+		connect.Method{Spec: agentServiceSetToolConfigSpec(), Handler: adapter.setToolConfig},
+		connect.Method{Spec: agentServiceSetExtensionConfigSpec(), Handler: adapter.setExtensionConfig},
+		connect.Method{Spec: agentServiceUploadFileSpec(), Handler: adapter.uploadFile},
+		connect.Method{Spec: agentServiceIngestFileSpec(), Handler: adapter.ingestFile},
+		connect.Method{Spec: agentServiceGetFileSpec(), Handler: adapter.getFile},
+		connect.Method{Spec: agentServiceGetFileMetaSpec(), Handler: adapter.getFileMeta},
+		connect.Method{Spec: agentServiceGetFileStreamSpec(), Handler: adapter.getFileStream},
+		connect.Method{Spec: agentServiceGetAgentConfigSpec(), Handler: adapter.getAgentConfig},
 	)
-	agentServiceGetIdentityHandler := connect.NewUnaryHandler(
-		AgentServiceGetIdentityProcedure,
-		svc.GetIdentity,
-		connect.WithSchema(agentServiceMethods.ByName("GetIdentity")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceListSessionsHandler := connect.NewUnaryHandler(
-		AgentServiceListSessionsProcedure,
-		svc.ListSessions,
-		connect.WithSchema(agentServiceMethods.ByName("ListSessions")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceCreateSessionHandler := connect.NewUnaryHandler(
-		AgentServiceCreateSessionProcedure,
-		svc.CreateSession,
-		connect.WithSchema(agentServiceMethods.ByName("CreateSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceGetSessionHandler := connect.NewUnaryHandler(
-		AgentServiceGetSessionProcedure,
-		svc.GetSession,
-		connect.WithSchema(agentServiceMethods.ByName("GetSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceDeleteSessionHandler := connect.NewUnaryHandler(
-		AgentServiceDeleteSessionProcedure,
-		svc.DeleteSession,
-		connect.WithSchema(agentServiceMethods.ByName("DeleteSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceListMessagesHandler := connect.NewUnaryHandler(
-		AgentServiceListMessagesProcedure,
-		svc.ListMessages,
-		connect.WithSchema(agentServiceMethods.ByName("ListMessages")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServicePromptHandler := connect.NewServerStreamHandler(
-		AgentServicePromptProcedure,
-		svc.Prompt,
-		connect.WithSchema(agentServiceMethods.ByName("Prompt")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceWatchSessionHandler := connect.NewServerStreamHandler(
-		AgentServiceWatchSessionProcedure,
-		svc.WatchSession,
-		connect.WithSchema(agentServiceMethods.ByName("WatchSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceWatchSessionsHandler := connect.NewServerStreamHandler(
-		AgentServiceWatchSessionsProcedure,
-		svc.WatchSessions,
-		connect.WithSchema(agentServiceMethods.ByName("WatchSessions")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceForkHandler := connect.NewUnaryHandler(
-		AgentServiceForkProcedure,
-		svc.Fork,
-		connect.WithSchema(agentServiceMethods.ByName("Fork")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceRenameHandler := connect.NewUnaryHandler(
-		AgentServiceRenameProcedure,
-		svc.Rename,
-		connect.WithSchema(agentServiceMethods.ByName("Rename")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceSetModelHandler := connect.NewUnaryHandler(
-		AgentServiceSetModelProcedure,
-		svc.SetModel,
-		connect.WithSchema(agentServiceMethods.ByName("SetModel")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceUndoHandler := connect.NewUnaryHandler(
-		AgentServiceUndoProcedure,
-		svc.Undo,
-		connect.WithSchema(agentServiceMethods.ByName("Undo")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceMarkReadHandler := connect.NewUnaryHandler(
-		AgentServiceMarkReadProcedure,
-		svc.MarkRead,
-		connect.WithSchema(agentServiceMethods.ByName("MarkRead")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceStateHandler := connect.NewUnaryHandler(
-		AgentServiceStateProcedure,
-		svc.State,
-		connect.WithSchema(agentServiceMethods.ByName("State")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceMailboxHandler := connect.NewUnaryHandler(
-		AgentServiceMailboxProcedure,
-		svc.Mailbox,
-		connect.WithSchema(agentServiceMethods.ByName("Mailbox")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceUpdateSettingsHandler := connect.NewUnaryHandler(
-		AgentServiceUpdateSettingsProcedure,
-		svc.UpdateSettings,
-		connect.WithSchema(agentServiceMethods.ByName("UpdateSettings")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceInterruptHandler := connect.NewUnaryHandler(
-		AgentServiceInterruptProcedure,
-		svc.Interrupt,
-		connect.WithSchema(agentServiceMethods.ByName("Interrupt")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceCompactHandler := connect.NewUnaryHandler(
-		AgentServiceCompactProcedure,
-		svc.Compact,
-		connect.WithSchema(agentServiceMethods.ByName("Compact")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceListProvidersHandler := connect.NewUnaryHandler(
-		AgentServiceListProvidersProcedure,
-		svc.ListProviders,
-		connect.WithSchema(agentServiceMethods.ByName("ListProviders")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceListProvidersCatalogHandler := connect.NewUnaryHandler(
-		AgentServiceListProvidersCatalogProcedure,
-		svc.ListProvidersCatalog,
-		connect.WithSchema(agentServiceMethods.ByName("ListProvidersCatalog")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceRegisterProviderHandler := connect.NewUnaryHandler(
-		AgentServiceRegisterProviderProcedure,
-		svc.RegisterProvider,
-		connect.WithSchema(agentServiceMethods.ByName("RegisterProvider")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceDeleteProviderHandler := connect.NewUnaryHandler(
-		AgentServiceDeleteProviderProcedure,
-		svc.DeleteProvider,
-		connect.WithSchema(agentServiceMethods.ByName("DeleteProvider")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceTestProviderHandler := connect.NewUnaryHandler(
-		AgentServiceTestProviderProcedure,
-		svc.TestProvider,
-		connect.WithSchema(agentServiceMethods.ByName("TestProvider")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceListModelsHandler := connect.NewUnaryHandler(
-		AgentServiceListModelsProcedure,
-		svc.ListModels,
-		connect.WithSchema(agentServiceMethods.ByName("ListModels")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceListPresetsHandler := connect.NewUnaryHandler(
-		AgentServiceListPresetsProcedure,
-		svc.ListPresets,
-		connect.WithSchema(agentServiceMethods.ByName("ListPresets")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceUpsertPresetHandler := connect.NewUnaryHandler(
-		AgentServiceUpsertPresetProcedure,
-		svc.UpsertPreset,
-		connect.WithSchema(agentServiceMethods.ByName("UpsertPreset")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceDeletePresetHandler := connect.NewUnaryHandler(
-		AgentServiceDeletePresetProcedure,
-		svc.DeletePreset,
-		connect.WithSchema(agentServiceMethods.ByName("DeletePreset")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServicePreviewPresetHandler := connect.NewUnaryHandler(
-		AgentServicePreviewPresetProcedure,
-		svc.PreviewPreset,
-		connect.WithSchema(agentServiceMethods.ByName("PreviewPreset")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceGetConfigHandler := connect.NewUnaryHandler(
-		AgentServiceGetConfigProcedure,
-		svc.GetConfig,
-		connect.WithSchema(agentServiceMethods.ByName("GetConfig")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceSetConfigHandler := connect.NewUnaryHandler(
-		AgentServiceSetConfigProcedure,
-		svc.SetConfig,
-		connect.WithSchema(agentServiceMethods.ByName("SetConfig")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceListToolsHandler := connect.NewUnaryHandler(
-		AgentServiceListToolsProcedure,
-		svc.ListTools,
-		connect.WithSchema(agentServiceMethods.ByName("ListTools")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceGetToolConfigHandler := connect.NewUnaryHandler(
-		AgentServiceGetToolConfigProcedure,
-		svc.GetToolConfig,
-		connect.WithSchema(agentServiceMethods.ByName("GetToolConfig")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceSetToolConfigHandler := connect.NewUnaryHandler(
-		AgentServiceSetToolConfigProcedure,
-		svc.SetToolConfig,
-		connect.WithSchema(agentServiceMethods.ByName("SetToolConfig")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceSetExtensionConfigHandler := connect.NewUnaryHandler(
-		AgentServiceSetExtensionConfigProcedure,
-		svc.SetExtensionConfig,
-		connect.WithSchema(agentServiceMethods.ByName("SetExtensionConfig")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceUploadFileHandler := connect.NewUnaryHandler(
-		AgentServiceUploadFileProcedure,
-		svc.UploadFile,
-		connect.WithSchema(agentServiceMethods.ByName("UploadFile")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceIngestFileHandler := connect.NewUnaryHandler(
-		AgentServiceIngestFileProcedure,
-		svc.IngestFile,
-		connect.WithSchema(agentServiceMethods.ByName("IngestFile")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceGetFileHandler := connect.NewUnaryHandler(
-		AgentServiceGetFileProcedure,
-		svc.GetFile,
-		connect.WithSchema(agentServiceMethods.ByName("GetFile")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceGetFileMetaHandler := connect.NewUnaryHandler(
-		AgentServiceGetFileMetaProcedure,
-		svc.GetFileMeta,
-		connect.WithSchema(agentServiceMethods.ByName("GetFileMeta")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceGetFileStreamHandler := connect.NewServerStreamHandler(
-		AgentServiceGetFileStreamProcedure,
-		svc.GetFileStream,
-		connect.WithSchema(agentServiceMethods.ByName("GetFileStream")),
-		connect.WithHandlerOptions(opts...),
-	)
-	agentServiceGetAgentConfigHandler := connect.NewUnaryHandler(
-		AgentServiceGetAgentConfigProcedure,
-		svc.GetAgentConfig,
-		connect.WithSchema(agentServiceMethods.ByName("GetAgentConfig")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/agent.v1.AgentService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case AgentServiceHealthProcedure:
-			agentServiceHealthHandler.ServeHTTP(w, r)
-		case AgentServiceGetIdentityProcedure:
-			agentServiceGetIdentityHandler.ServeHTTP(w, r)
-		case AgentServiceListSessionsProcedure:
-			agentServiceListSessionsHandler.ServeHTTP(w, r)
-		case AgentServiceCreateSessionProcedure:
-			agentServiceCreateSessionHandler.ServeHTTP(w, r)
-		case AgentServiceGetSessionProcedure:
-			agentServiceGetSessionHandler.ServeHTTP(w, r)
-		case AgentServiceDeleteSessionProcedure:
-			agentServiceDeleteSessionHandler.ServeHTTP(w, r)
-		case AgentServiceListMessagesProcedure:
-			agentServiceListMessagesHandler.ServeHTTP(w, r)
-		case AgentServicePromptProcedure:
-			agentServicePromptHandler.ServeHTTP(w, r)
-		case AgentServiceWatchSessionProcedure:
-			agentServiceWatchSessionHandler.ServeHTTP(w, r)
-		case AgentServiceWatchSessionsProcedure:
-			agentServiceWatchSessionsHandler.ServeHTTP(w, r)
-		case AgentServiceForkProcedure:
-			agentServiceForkHandler.ServeHTTP(w, r)
-		case AgentServiceRenameProcedure:
-			agentServiceRenameHandler.ServeHTTP(w, r)
-		case AgentServiceSetModelProcedure:
-			agentServiceSetModelHandler.ServeHTTP(w, r)
-		case AgentServiceUndoProcedure:
-			agentServiceUndoHandler.ServeHTTP(w, r)
-		case AgentServiceMarkReadProcedure:
-			agentServiceMarkReadHandler.ServeHTTP(w, r)
-		case AgentServiceStateProcedure:
-			agentServiceStateHandler.ServeHTTP(w, r)
-		case AgentServiceMailboxProcedure:
-			agentServiceMailboxHandler.ServeHTTP(w, r)
-		case AgentServiceUpdateSettingsProcedure:
-			agentServiceUpdateSettingsHandler.ServeHTTP(w, r)
-		case AgentServiceInterruptProcedure:
-			agentServiceInterruptHandler.ServeHTTP(w, r)
-		case AgentServiceCompactProcedure:
-			agentServiceCompactHandler.ServeHTTP(w, r)
-		case AgentServiceListProvidersProcedure:
-			agentServiceListProvidersHandler.ServeHTTP(w, r)
-		case AgentServiceListProvidersCatalogProcedure:
-			agentServiceListProvidersCatalogHandler.ServeHTTP(w, r)
-		case AgentServiceRegisterProviderProcedure:
-			agentServiceRegisterProviderHandler.ServeHTTP(w, r)
-		case AgentServiceDeleteProviderProcedure:
-			agentServiceDeleteProviderHandler.ServeHTTP(w, r)
-		case AgentServiceTestProviderProcedure:
-			agentServiceTestProviderHandler.ServeHTTP(w, r)
-		case AgentServiceListModelsProcedure:
-			agentServiceListModelsHandler.ServeHTTP(w, r)
-		case AgentServiceListPresetsProcedure:
-			agentServiceListPresetsHandler.ServeHTTP(w, r)
-		case AgentServiceUpsertPresetProcedure:
-			agentServiceUpsertPresetHandler.ServeHTTP(w, r)
-		case AgentServiceDeletePresetProcedure:
-			agentServiceDeletePresetHandler.ServeHTTP(w, r)
-		case AgentServicePreviewPresetProcedure:
-			agentServicePreviewPresetHandler.ServeHTTP(w, r)
-		case AgentServiceGetConfigProcedure:
-			agentServiceGetConfigHandler.ServeHTTP(w, r)
-		case AgentServiceSetConfigProcedure:
-			agentServiceSetConfigHandler.ServeHTTP(w, r)
-		case AgentServiceListToolsProcedure:
-			agentServiceListToolsHandler.ServeHTTP(w, r)
-		case AgentServiceGetToolConfigProcedure:
-			agentServiceGetToolConfigHandler.ServeHTTP(w, r)
-		case AgentServiceSetToolConfigProcedure:
-			agentServiceSetToolConfigHandler.ServeHTTP(w, r)
-		case AgentServiceSetExtensionConfigProcedure:
-			agentServiceSetExtensionConfigHandler.ServeHTTP(w, r)
-		case AgentServiceUploadFileProcedure:
-			agentServiceUploadFileHandler.ServeHTTP(w, r)
-		case AgentServiceIngestFileProcedure:
-			agentServiceIngestFileHandler.ServeHTTP(w, r)
-		case AgentServiceGetFileProcedure:
-			agentServiceGetFileHandler.ServeHTTP(w, r)
-		case AgentServiceGetFileMetaProcedure:
-			agentServiceGetFileMetaHandler.ServeHTTP(w, r)
-		case AgentServiceGetFileStreamProcedure:
-			agentServiceGetFileStreamHandler.ServeHTTP(w, r)
-		case AgentServiceGetAgentConfigProcedure:
-			agentServiceGetAgentConfigHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
+}
+
+// AgentServicePromptServerStream is the server stream for the AgentService's Prompt RPC.
+type AgentServicePromptServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s AgentServicePromptServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s AgentServicePromptServerStream) Send(res *v1.PromptResponse) error {
+	return s.stream.Send(res)
+}
+
+// AgentServiceWatchSessionServerStream is the server stream for the AgentService's WatchSession
+// RPC.
+type AgentServiceWatchSessionServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s AgentServiceWatchSessionServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s AgentServiceWatchSessionServerStream) Send(res *v1.WatchSessionResponse) error {
+	return s.stream.Send(res)
+}
+
+// AgentServiceWatchSessionsServerStream is the server stream for the AgentService's WatchSessions
+// RPC.
+type AgentServiceWatchSessionsServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s AgentServiceWatchSessionsServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s AgentServiceWatchSessionsServerStream) Send(res *v1.WatchSessionsResponse) error {
+	return s.stream.Send(res)
+}
+
+// AgentServiceGetFileStreamServerStream is the server stream for the AgentService's GetFileStream
+// RPC.
+type AgentServiceGetFileStreamServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s AgentServiceGetFileStreamServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s AgentServiceGetFileStreamServerStream) Send(res *v1.FileChunk) error {
+	return s.stream.Send(res)
 }
 
 // UnimplementedAgentServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAgentServiceHandler struct{}
 
-func (UnimplementedAgentServiceHandler) Health(context.Context, *connect.Request[v1.HealthRequest]) (*connect.Response[v1.HealthResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.Health is not implemented"))
+func (UnimplementedAgentServiceHandler) Health(context.Context, *v1.HealthRequest) (*v1.HealthResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.Health is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) GetIdentity(context.Context, *connect.Request[v1.GetIdentityRequest]) (*connect.Response[v1.GetIdentityResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.GetIdentity is not implemented"))
+func (UnimplementedAgentServiceHandler) GetIdentity(context.Context, *v1.GetIdentityRequest) (*v1.GetIdentityResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.GetIdentity is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.ListSessions is not implemented"))
+func (UnimplementedAgentServiceHandler) ListSessions(context.Context, *v1.ListSessionsRequest) (*v1.ListSessionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.ListSessions is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) CreateSession(context.Context, *connect.Request[v1.CreateSessionRequest]) (*connect.Response[v1.CreateSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.CreateSession is not implemented"))
+func (UnimplementedAgentServiceHandler) CreateSession(context.Context, *v1.CreateSessionRequest) (*v1.CreateSessionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.CreateSession is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.GetSession is not implemented"))
+func (UnimplementedAgentServiceHandler) GetSession(context.Context, *v1.GetSessionRequest) (*v1.GetSessionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.GetSession is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) DeleteSession(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.DeleteSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.DeleteSession is not implemented"))
+func (UnimplementedAgentServiceHandler) DeleteSession(context.Context, *v1.DeleteSessionRequest) (*v1.DeleteSessionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.DeleteSession is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.ListMessages is not implemented"))
+func (UnimplementedAgentServiceHandler) ListMessages(context.Context, *v1.ListMessagesRequest) (*v1.ListMessagesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.ListMessages is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) Prompt(context.Context, *connect.Request[v1.PromptRequest], *connect.ServerStream[v1.PromptResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.Prompt is not implemented"))
+func (UnimplementedAgentServiceHandler) Prompt(context.Context, *v1.PromptRequest, AgentServicePromptServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.Prompt is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) WatchSession(context.Context, *connect.Request[v1.WatchSessionRequest], *connect.ServerStream[v1.WatchSessionResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.WatchSession is not implemented"))
+func (UnimplementedAgentServiceHandler) WatchSession(context.Context, *v1.WatchSessionRequest, AgentServiceWatchSessionServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.WatchSession is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) WatchSessions(context.Context, *connect.Request[v1.WatchSessionsRequest], *connect.ServerStream[v1.WatchSessionsResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.WatchSessions is not implemented"))
+func (UnimplementedAgentServiceHandler) WatchSessions(context.Context, *v1.WatchSessionsRequest, AgentServiceWatchSessionsServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.WatchSessions is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) Fork(context.Context, *connect.Request[v1.ForkRequest]) (*connect.Response[v1.ForkResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.Fork is not implemented"))
+func (UnimplementedAgentServiceHandler) Fork(context.Context, *v1.ForkRequest) (*v1.ForkResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.Fork is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) Rename(context.Context, *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.Rename is not implemented"))
+func (UnimplementedAgentServiceHandler) Rename(context.Context, *v1.RenameRequest) (*v1.RenameResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.Rename is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) SetModel(context.Context, *connect.Request[v1.SetModelRequest]) (*connect.Response[v1.SetModelResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.SetModel is not implemented"))
+func (UnimplementedAgentServiceHandler) SetModel(context.Context, *v1.SetModelRequest) (*v1.SetModelResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.SetModel is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) Undo(context.Context, *connect.Request[v1.UndoRequest]) (*connect.Response[v1.UndoResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.Undo is not implemented"))
+func (UnimplementedAgentServiceHandler) Undo(context.Context, *v1.UndoRequest) (*v1.UndoResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.Undo is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) MarkRead(context.Context, *connect.Request[v1.MarkReadRequest]) (*connect.Response[v1.MarkReadResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.MarkRead is not implemented"))
+func (UnimplementedAgentServiceHandler) MarkRead(context.Context, *v1.MarkReadRequest) (*v1.MarkReadResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.MarkRead is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) State(context.Context, *connect.Request[v1.StateRequest]) (*connect.Response[v1.StateResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.State is not implemented"))
+func (UnimplementedAgentServiceHandler) State(context.Context, *v1.StateRequest) (*v1.StateResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.State is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) Mailbox(context.Context, *connect.Request[v1.MailboxRequest]) (*connect.Response[v1.MailboxResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.Mailbox is not implemented"))
+func (UnimplementedAgentServiceHandler) Mailbox(context.Context, *v1.MailboxRequest) (*v1.MailboxResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.Mailbox is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) UpdateSettings(context.Context, *connect.Request[v1.UpdateSettingsRequest]) (*connect.Response[v1.UpdateSettingsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.UpdateSettings is not implemented"))
+func (UnimplementedAgentServiceHandler) UpdateSettings(context.Context, *v1.UpdateSettingsRequest) (*v1.UpdateSettingsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.UpdateSettings is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) Interrupt(context.Context, *connect.Request[v1.InterruptRequest]) (*connect.Response[v1.InterruptResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.Interrupt is not implemented"))
+func (UnimplementedAgentServiceHandler) Interrupt(context.Context, *v1.InterruptRequest) (*v1.InterruptResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.Interrupt is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) Compact(context.Context, *connect.Request[v1.CompactRequest]) (*connect.Response[v1.CompactResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.Compact is not implemented"))
+func (UnimplementedAgentServiceHandler) Compact(context.Context, *v1.CompactRequest) (*v1.CompactResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.Compact is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) ListProviders(context.Context, *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.ListProviders is not implemented"))
+func (UnimplementedAgentServiceHandler) ListProviders(context.Context, *v1.ListProvidersRequest) (*v1.ListProvidersResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.ListProviders is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) ListProvidersCatalog(context.Context, *connect.Request[v1.ListProvidersCatalogRequest]) (*connect.Response[v1.ListProvidersCatalogResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.ListProvidersCatalog is not implemented"))
+func (UnimplementedAgentServiceHandler) ListProvidersCatalog(context.Context, *v1.ListProvidersCatalogRequest) (*v1.ListProvidersCatalogResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.ListProvidersCatalog is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) RegisterProvider(context.Context, *connect.Request[v1.RegisterProviderRequest]) (*connect.Response[v1.RegisterProviderResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.RegisterProvider is not implemented"))
+func (UnimplementedAgentServiceHandler) RegisterProvider(context.Context, *v1.RegisterProviderRequest) (*v1.RegisterProviderResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.RegisterProvider is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) DeleteProvider(context.Context, *connect.Request[v1.DeleteProviderRequest]) (*connect.Response[v1.DeleteProviderResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.DeleteProvider is not implemented"))
+func (UnimplementedAgentServiceHandler) DeleteProvider(context.Context, *v1.DeleteProviderRequest) (*v1.DeleteProviderResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.DeleteProvider is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) TestProvider(context.Context, *connect.Request[v1.TestProviderRequest]) (*connect.Response[v1.TestProviderResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.TestProvider is not implemented"))
+func (UnimplementedAgentServiceHandler) TestProvider(context.Context, *v1.TestProviderRequest) (*v1.TestProviderResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.TestProvider is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.ListModels is not implemented"))
+func (UnimplementedAgentServiceHandler) ListModels(context.Context, *v1.ListModelsRequest) (*v1.ListModelsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.ListModels is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) ListPresets(context.Context, *connect.Request[v1.ListPresetsRequest]) (*connect.Response[v1.ListPresetsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.ListPresets is not implemented"))
+func (UnimplementedAgentServiceHandler) ListPresets(context.Context, *v1.ListPresetsRequest) (*v1.ListPresetsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.ListPresets is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) UpsertPreset(context.Context, *connect.Request[v1.UpsertPresetRequest]) (*connect.Response[v1.UpsertPresetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.UpsertPreset is not implemented"))
+func (UnimplementedAgentServiceHandler) UpsertPreset(context.Context, *v1.UpsertPresetRequest) (*v1.UpsertPresetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.UpsertPreset is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) DeletePreset(context.Context, *connect.Request[v1.DeletePresetRequest]) (*connect.Response[v1.DeletePresetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.DeletePreset is not implemented"))
+func (UnimplementedAgentServiceHandler) DeletePreset(context.Context, *v1.DeletePresetRequest) (*v1.DeletePresetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.DeletePreset is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) PreviewPreset(context.Context, *connect.Request[v1.PreviewPresetRequest]) (*connect.Response[v1.PreviewPresetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.PreviewPreset is not implemented"))
+func (UnimplementedAgentServiceHandler) PreviewPreset(context.Context, *v1.PreviewPresetRequest) (*v1.PreviewPresetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.PreviewPreset is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) GetConfig(context.Context, *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.GetConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.GetConfig is not implemented"))
+func (UnimplementedAgentServiceHandler) GetConfig(context.Context, *v1.GetConfigRequest) (*v1.GetConfigResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.GetConfig is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) SetConfig(context.Context, *connect.Request[v1.SetConfigRequest]) (*connect.Response[v1.SetConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.SetConfig is not implemented"))
+func (UnimplementedAgentServiceHandler) SetConfig(context.Context, *v1.SetConfigRequest) (*v1.SetConfigResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.SetConfig is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) ListTools(context.Context, *connect.Request[v1.ListToolsRequest]) (*connect.Response[v1.ListToolsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.ListTools is not implemented"))
+func (UnimplementedAgentServiceHandler) ListTools(context.Context, *v1.ListToolsRequest) (*v1.ListToolsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.ListTools is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) GetToolConfig(context.Context, *connect.Request[v1.GetToolConfigRequest]) (*connect.Response[v1.GetToolConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.GetToolConfig is not implemented"))
+func (UnimplementedAgentServiceHandler) GetToolConfig(context.Context, *v1.GetToolConfigRequest) (*v1.GetToolConfigResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.GetToolConfig is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) SetToolConfig(context.Context, *connect.Request[v1.SetToolConfigRequest]) (*connect.Response[v1.SetToolConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.SetToolConfig is not implemented"))
+func (UnimplementedAgentServiceHandler) SetToolConfig(context.Context, *v1.SetToolConfigRequest) (*v1.SetToolConfigResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.SetToolConfig is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) SetExtensionConfig(context.Context, *connect.Request[v1.SetExtensionConfigRequest]) (*connect.Response[v1.SetExtensionConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.SetExtensionConfig is not implemented"))
+func (UnimplementedAgentServiceHandler) SetExtensionConfig(context.Context, *v1.SetExtensionConfigRequest) (*v1.SetExtensionConfigResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.SetExtensionConfig is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) UploadFile(context.Context, *connect.Request[v1.UploadFileRequest]) (*connect.Response[v1.UploadFileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.UploadFile is not implemented"))
+func (UnimplementedAgentServiceHandler) UploadFile(context.Context, *v1.UploadFileRequest) (*v1.UploadFileResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.UploadFile is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) IngestFile(context.Context, *connect.Request[v1.IngestFileRequest]) (*connect.Response[v1.IngestFileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.IngestFile is not implemented"))
+func (UnimplementedAgentServiceHandler) IngestFile(context.Context, *v1.IngestFileRequest) (*v1.IngestFileResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.IngestFile is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) GetFile(context.Context, *connect.Request[v1.GetFileRequest]) (*connect.Response[v1.GetFileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.GetFile is not implemented"))
+func (UnimplementedAgentServiceHandler) GetFile(context.Context, *v1.GetFileRequest) (*v1.GetFileResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.GetFile is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) GetFileMeta(context.Context, *connect.Request[v1.GetFileMetaRequest]) (*connect.Response[v1.GetFileMetaResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.GetFileMeta is not implemented"))
+func (UnimplementedAgentServiceHandler) GetFileMeta(context.Context, *v1.GetFileMetaRequest) (*v1.GetFileMetaResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.GetFileMeta is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) GetFileStream(context.Context, *connect.Request[v1.GetFileRequest], *connect.ServerStream[v1.FileChunk]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.GetFileStream is not implemented"))
+func (UnimplementedAgentServiceHandler) GetFileStream(context.Context, *v1.GetFileRequest, AgentServiceGetFileStreamServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.GetFileStream is not implemented")
 }
 
-func (UnimplementedAgentServiceHandler) GetAgentConfig(context.Context, *connect.Request[v1.GetAgentConfigRequest]) (*connect.Response[v1.GetAgentConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AgentService.GetAgentConfig is not implemented"))
+func (UnimplementedAgentServiceHandler) GetAgentConfig(context.Context, *v1.GetAgentConfigRequest) (*v1.GetAgentConfigResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AgentService.GetAgentConfig is not implemented")
 }
+
+type agentServiceClient struct {
+	client *connect.Client
+}
+
+func (c *agentServiceClient) Health(ctx context.Context, req *v1.HealthRequest) (*v1.HealthResponse, error) {
+	var res v1.HealthResponse
+	if err := c.client.CallUnary(ctx, agentServiceHealthSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) GetIdentity(ctx context.Context, req *v1.GetIdentityRequest) (*v1.GetIdentityResponse, error) {
+	var res v1.GetIdentityResponse
+	if err := c.client.CallUnary(ctx, agentServiceGetIdentitySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) ListSessions(ctx context.Context, req *v1.ListSessionsRequest) (*v1.ListSessionsResponse, error) {
+	var res v1.ListSessionsResponse
+	if err := c.client.CallUnary(ctx, agentServiceListSessionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) CreateSession(ctx context.Context, req *v1.CreateSessionRequest) (*v1.CreateSessionResponse, error) {
+	var res v1.CreateSessionResponse
+	if err := c.client.CallUnary(ctx, agentServiceCreateSessionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) GetSession(ctx context.Context, req *v1.GetSessionRequest) (*v1.GetSessionResponse, error) {
+	var res v1.GetSessionResponse
+	if err := c.client.CallUnary(ctx, agentServiceGetSessionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) DeleteSession(ctx context.Context, req *v1.DeleteSessionRequest) (*v1.DeleteSessionResponse, error) {
+	var res v1.DeleteSessionResponse
+	if err := c.client.CallUnary(ctx, agentServiceDeleteSessionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) ListMessages(ctx context.Context, req *v1.ListMessagesRequest) (*v1.ListMessagesResponse, error) {
+	var res v1.ListMessagesResponse
+	if err := c.client.CallUnary(ctx, agentServiceListMessagesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) Prompt(ctx context.Context, req *v1.PromptRequest) (AgentServicePromptClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, agentServicePromptSpec(), req)
+	if err != nil {
+		return AgentServicePromptClientStream{}, err
+	}
+	return AgentServicePromptClientStream{stream: stream}, nil
+}
+
+func (c *agentServiceClient) WatchSession(ctx context.Context, req *v1.WatchSessionRequest) (AgentServiceWatchSessionClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, agentServiceWatchSessionSpec(), req)
+	if err != nil {
+		return AgentServiceWatchSessionClientStream{}, err
+	}
+	return AgentServiceWatchSessionClientStream{stream: stream}, nil
+}
+
+func (c *agentServiceClient) WatchSessions(ctx context.Context, req *v1.WatchSessionsRequest) (AgentServiceWatchSessionsClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, agentServiceWatchSessionsSpec(), req)
+	if err != nil {
+		return AgentServiceWatchSessionsClientStream{}, err
+	}
+	return AgentServiceWatchSessionsClientStream{stream: stream}, nil
+}
+
+func (c *agentServiceClient) Fork(ctx context.Context, req *v1.ForkRequest) (*v1.ForkResponse, error) {
+	var res v1.ForkResponse
+	if err := c.client.CallUnary(ctx, agentServiceForkSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) Rename(ctx context.Context, req *v1.RenameRequest) (*v1.RenameResponse, error) {
+	var res v1.RenameResponse
+	if err := c.client.CallUnary(ctx, agentServiceRenameSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) SetModel(ctx context.Context, req *v1.SetModelRequest) (*v1.SetModelResponse, error) {
+	var res v1.SetModelResponse
+	if err := c.client.CallUnary(ctx, agentServiceSetModelSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) Undo(ctx context.Context, req *v1.UndoRequest) (*v1.UndoResponse, error) {
+	var res v1.UndoResponse
+	if err := c.client.CallUnary(ctx, agentServiceUndoSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) MarkRead(ctx context.Context, req *v1.MarkReadRequest) (*v1.MarkReadResponse, error) {
+	var res v1.MarkReadResponse
+	if err := c.client.CallUnary(ctx, agentServiceMarkReadSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) State(ctx context.Context, req *v1.StateRequest) (*v1.StateResponse, error) {
+	var res v1.StateResponse
+	if err := c.client.CallUnary(ctx, agentServiceStateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) Mailbox(ctx context.Context, req *v1.MailboxRequest) (*v1.MailboxResponse, error) {
+	var res v1.MailboxResponse
+	if err := c.client.CallUnary(ctx, agentServiceMailboxSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) UpdateSettings(ctx context.Context, req *v1.UpdateSettingsRequest) (*v1.UpdateSettingsResponse, error) {
+	var res v1.UpdateSettingsResponse
+	if err := c.client.CallUnary(ctx, agentServiceUpdateSettingsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) Interrupt(ctx context.Context, req *v1.InterruptRequest) (*v1.InterruptResponse, error) {
+	var res v1.InterruptResponse
+	if err := c.client.CallUnary(ctx, agentServiceInterruptSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) Compact(ctx context.Context, req *v1.CompactRequest) (*v1.CompactResponse, error) {
+	var res v1.CompactResponse
+	if err := c.client.CallUnary(ctx, agentServiceCompactSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) ListProviders(ctx context.Context, req *v1.ListProvidersRequest) (*v1.ListProvidersResponse, error) {
+	var res v1.ListProvidersResponse
+	if err := c.client.CallUnary(ctx, agentServiceListProvidersSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) ListProvidersCatalog(ctx context.Context, req *v1.ListProvidersCatalogRequest) (*v1.ListProvidersCatalogResponse, error) {
+	var res v1.ListProvidersCatalogResponse
+	if err := c.client.CallUnary(ctx, agentServiceListProvidersCatalogSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) RegisterProvider(ctx context.Context, req *v1.RegisterProviderRequest) (*v1.RegisterProviderResponse, error) {
+	var res v1.RegisterProviderResponse
+	if err := c.client.CallUnary(ctx, agentServiceRegisterProviderSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) DeleteProvider(ctx context.Context, req *v1.DeleteProviderRequest) (*v1.DeleteProviderResponse, error) {
+	var res v1.DeleteProviderResponse
+	if err := c.client.CallUnary(ctx, agentServiceDeleteProviderSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) TestProvider(ctx context.Context, req *v1.TestProviderRequest) (*v1.TestProviderResponse, error) {
+	var res v1.TestProviderResponse
+	if err := c.client.CallUnary(ctx, agentServiceTestProviderSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) ListModels(ctx context.Context, req *v1.ListModelsRequest) (*v1.ListModelsResponse, error) {
+	var res v1.ListModelsResponse
+	if err := c.client.CallUnary(ctx, agentServiceListModelsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) ListPresets(ctx context.Context, req *v1.ListPresetsRequest) (*v1.ListPresetsResponse, error) {
+	var res v1.ListPresetsResponse
+	if err := c.client.CallUnary(ctx, agentServiceListPresetsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) UpsertPreset(ctx context.Context, req *v1.UpsertPresetRequest) (*v1.UpsertPresetResponse, error) {
+	var res v1.UpsertPresetResponse
+	if err := c.client.CallUnary(ctx, agentServiceUpsertPresetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) DeletePreset(ctx context.Context, req *v1.DeletePresetRequest) (*v1.DeletePresetResponse, error) {
+	var res v1.DeletePresetResponse
+	if err := c.client.CallUnary(ctx, agentServiceDeletePresetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) PreviewPreset(ctx context.Context, req *v1.PreviewPresetRequest) (*v1.PreviewPresetResponse, error) {
+	var res v1.PreviewPresetResponse
+	if err := c.client.CallUnary(ctx, agentServicePreviewPresetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) GetConfig(ctx context.Context, req *v1.GetConfigRequest) (*v1.GetConfigResponse, error) {
+	var res v1.GetConfigResponse
+	if err := c.client.CallUnary(ctx, agentServiceGetConfigSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) SetConfig(ctx context.Context, req *v1.SetConfigRequest) (*v1.SetConfigResponse, error) {
+	var res v1.SetConfigResponse
+	if err := c.client.CallUnary(ctx, agentServiceSetConfigSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) ListTools(ctx context.Context, req *v1.ListToolsRequest) (*v1.ListToolsResponse, error) {
+	var res v1.ListToolsResponse
+	if err := c.client.CallUnary(ctx, agentServiceListToolsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) GetToolConfig(ctx context.Context, req *v1.GetToolConfigRequest) (*v1.GetToolConfigResponse, error) {
+	var res v1.GetToolConfigResponse
+	if err := c.client.CallUnary(ctx, agentServiceGetToolConfigSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) SetToolConfig(ctx context.Context, req *v1.SetToolConfigRequest) (*v1.SetToolConfigResponse, error) {
+	var res v1.SetToolConfigResponse
+	if err := c.client.CallUnary(ctx, agentServiceSetToolConfigSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) SetExtensionConfig(ctx context.Context, req *v1.SetExtensionConfigRequest) (*v1.SetExtensionConfigResponse, error) {
+	var res v1.SetExtensionConfigResponse
+	if err := c.client.CallUnary(ctx, agentServiceSetExtensionConfigSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) UploadFile(ctx context.Context, req *v1.UploadFileRequest) (*v1.UploadFileResponse, error) {
+	var res v1.UploadFileResponse
+	if err := c.client.CallUnary(ctx, agentServiceUploadFileSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) IngestFile(ctx context.Context, req *v1.IngestFileRequest) (*v1.IngestFileResponse, error) {
+	var res v1.IngestFileResponse
+	if err := c.client.CallUnary(ctx, agentServiceIngestFileSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) GetFile(ctx context.Context, req *v1.GetFileRequest) (*v1.GetFileResponse, error) {
+	var res v1.GetFileResponse
+	if err := c.client.CallUnary(ctx, agentServiceGetFileSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) GetFileMeta(ctx context.Context, req *v1.GetFileMetaRequest) (*v1.GetFileMetaResponse, error) {
+	var res v1.GetFileMetaResponse
+	if err := c.client.CallUnary(ctx, agentServiceGetFileMetaSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *agentServiceClient) GetFileStream(ctx context.Context, req *v1.GetFileRequest) (AgentServiceGetFileStreamClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, agentServiceGetFileStreamSpec(), req)
+	if err != nil {
+		return AgentServiceGetFileStreamClientStream{}, err
+	}
+	return AgentServiceGetFileStreamClientStream{stream: stream}, nil
+}
+
+func (c *agentServiceClient) GetAgentConfig(ctx context.Context, req *v1.GetAgentConfigRequest) (*v1.GetAgentConfigResponse, error) {
+	var res v1.GetAgentConfigResponse
+	if err := c.client.CallUnary(ctx, agentServiceGetAgentConfigSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type agentServiceHandler struct{ svc AgentServiceHandler }
+
+func (h agentServiceHandler) health(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.HealthRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Health(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) getIdentity(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetIdentityRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetIdentity(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) listSessions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSessionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSessions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) createSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateSession(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) getSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetSession(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) deleteSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteSession(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) listMessages(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListMessagesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListMessages(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) prompt(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PromptRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.Prompt(ctx, &req, AgentServicePromptServerStream{stream: stream})
+}
+
+func (h agentServiceHandler) watchSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.WatchSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.WatchSession(ctx, &req, AgentServiceWatchSessionServerStream{stream: stream})
+}
+
+func (h agentServiceHandler) watchSessions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.WatchSessionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.WatchSessions(ctx, &req, AgentServiceWatchSessionsServerStream{stream: stream})
+}
+
+func (h agentServiceHandler) fork(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ForkRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Fork(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) rename(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RenameRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Rename(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) setModel(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetModelRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetModel(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) undo(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UndoRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Undo(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) markRead(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.MarkReadRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.MarkRead(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) state(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StateRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.State(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) mailbox(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.MailboxRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Mailbox(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) updateSettings(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateSettingsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateSettings(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) interrupt(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.InterruptRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Interrupt(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) compact(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CompactRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Compact(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) listProviders(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListProvidersRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListProviders(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) listProvidersCatalog(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListProvidersCatalogRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListProvidersCatalog(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) registerProvider(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RegisterProviderRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RegisterProvider(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) deleteProvider(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteProviderRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteProvider(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) testProvider(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.TestProviderRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.TestProvider(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) listModels(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListModelsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListModels(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) listPresets(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPresetsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListPresets(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) upsertPreset(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpsertPresetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpsertPreset(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) deletePreset(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeletePresetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeletePreset(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) previewPreset(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PreviewPresetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PreviewPreset(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) getConfig(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetConfigRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetConfig(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) setConfig(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetConfigRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetConfig(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) listTools(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListToolsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListTools(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) getToolConfig(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetToolConfigRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetToolConfig(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) setToolConfig(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetToolConfigRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetToolConfig(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) setExtensionConfig(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetExtensionConfigRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetExtensionConfig(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) uploadFile(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UploadFileRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UploadFile(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) ingestFile(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.IngestFileRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.IngestFile(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) getFile(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetFileRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetFile(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) getFileMeta(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetFileMetaRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetFileMeta(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h agentServiceHandler) getFileStream(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetFileRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.GetFileStream(ctx, &req, AgentServiceGetFileStreamServerStream{stream: stream})
+}
+
+func (h agentServiceHandler) getAgentConfig(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetAgentConfigRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetAgentConfig(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+var (
+	adminServiceListTenantsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AdminService").Methods().ByName("ListTenants"),
+			Procedure:  AdminServiceListTenantsProcedure,
+		}
+	})
+	adminServiceCreateTenantSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AdminService").Methods().ByName("CreateTenant"),
+			Procedure:  AdminServiceCreateTenantProcedure,
+		}
+	})
+	adminServiceUpdateTenantSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AdminService").Methods().ByName("UpdateTenant"),
+			Procedure:  AdminServiceUpdateTenantProcedure,
+		}
+	})
+	adminServiceDeleteTenantSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AdminService").Methods().ByName("DeleteTenant"),
+			Procedure:  AdminServiceDeleteTenantProcedure,
+		}
+	})
+	adminServiceIssueTenantTokenSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AdminService").Methods().ByName("IssueTenantToken"),
+			Procedure:  AdminServiceIssueTenantTokenProcedure,
+		}
+	})
+	adminServiceListTenantTokensSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AdminService").Methods().ByName("ListTenantTokens"),
+			Procedure:  AdminServiceListTenantTokensProcedure,
+		}
+	})
+	adminServiceRevokeTenantTokenSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AdminService").Methods().ByName("RevokeTenantToken"),
+			Procedure:  AdminServiceRevokeTenantTokenProcedure,
+		}
+	})
+	adminServiceRotateTenantTokenSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_agent_v1_agent_proto.Services().ByName("AdminService").Methods().ByName("RotateTenantToken"),
+			Procedure:  AdminServiceRotateTenantTokenProcedure,
+		}
+	})
+)
 
 // AdminServiceClient is a client for the agent.v1.AdminService service.
 type AdminServiceClient interface {
-	ListTenants(context.Context, *connect.Request[v1.ListTenantsRequest]) (*connect.Response[v1.ListTenantsResponse], error)
-	CreateTenant(context.Context, *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.CreateTenantResponse], error)
-	UpdateTenant(context.Context, *connect.Request[v1.UpdateTenantRequest]) (*connect.Response[v1.UpdateTenantResponse], error)
-	DeleteTenant(context.Context, *connect.Request[v1.DeleteTenantRequest]) (*connect.Response[v1.DeleteTenantResponse], error)
-	IssueTenantToken(context.Context, *connect.Request[v1.IssueTenantTokenRequest]) (*connect.Response[v1.IssueTenantTokenResponse], error)
-	ListTenantTokens(context.Context, *connect.Request[v1.ListTenantTokensRequest]) (*connect.Response[v1.ListTenantTokensResponse], error)
-	RevokeTenantToken(context.Context, *connect.Request[v1.RevokeTenantTokenRequest]) (*connect.Response[v1.RevokeTenantTokenResponse], error)
-	RotateTenantToken(context.Context, *connect.Request[v1.RotateTenantTokenRequest]) (*connect.Response[v1.RotateTenantTokenResponse], error)
+	ListTenants(context.Context, *v1.ListTenantsRequest) (*v1.ListTenantsResponse, error)
+	CreateTenant(context.Context, *v1.CreateTenantRequest) (*v1.CreateTenantResponse, error)
+	UpdateTenant(context.Context, *v1.UpdateTenantRequest) (*v1.UpdateTenantResponse, error)
+	DeleteTenant(context.Context, *v1.DeleteTenantRequest) (*v1.DeleteTenantResponse, error)
+	IssueTenantToken(context.Context, *v1.IssueTenantTokenRequest) (*v1.IssueTenantTokenResponse, error)
+	ListTenantTokens(context.Context, *v1.ListTenantTokensRequest) (*v1.ListTenantTokensResponse, error)
+	RevokeTenantToken(context.Context, *v1.RevokeTenantTokenRequest) (*v1.RevokeTenantTokenResponse, error)
+	RotateTenantToken(context.Context, *v1.RotateTenantTokenRequest) (*v1.RotateTenantTokenResponse, error)
 }
 
-// NewAdminServiceClient constructs a client for the agent.v1.AdminService service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AdminServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	adminServiceMethods := v1.File_agent_v1_agent_proto.Services().ByName("AdminService").Methods()
-	return &adminServiceClient{
-		listTenants: connect.NewClient[v1.ListTenantsRequest, v1.ListTenantsResponse](
-			httpClient,
-			baseURL+AdminServiceListTenantsProcedure,
-			connect.WithSchema(adminServiceMethods.ByName("ListTenants")),
-			connect.WithClientOptions(opts...),
-		),
-		createTenant: connect.NewClient[v1.CreateTenantRequest, v1.CreateTenantResponse](
-			httpClient,
-			baseURL+AdminServiceCreateTenantProcedure,
-			connect.WithSchema(adminServiceMethods.ByName("CreateTenant")),
-			connect.WithClientOptions(opts...),
-		),
-		updateTenant: connect.NewClient[v1.UpdateTenantRequest, v1.UpdateTenantResponse](
-			httpClient,
-			baseURL+AdminServiceUpdateTenantProcedure,
-			connect.WithSchema(adminServiceMethods.ByName("UpdateTenant")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteTenant: connect.NewClient[v1.DeleteTenantRequest, v1.DeleteTenantResponse](
-			httpClient,
-			baseURL+AdminServiceDeleteTenantProcedure,
-			connect.WithSchema(adminServiceMethods.ByName("DeleteTenant")),
-			connect.WithClientOptions(opts...),
-		),
-		issueTenantToken: connect.NewClient[v1.IssueTenantTokenRequest, v1.IssueTenantTokenResponse](
-			httpClient,
-			baseURL+AdminServiceIssueTenantTokenProcedure,
-			connect.WithSchema(adminServiceMethods.ByName("IssueTenantToken")),
-			connect.WithClientOptions(opts...),
-		),
-		listTenantTokens: connect.NewClient[v1.ListTenantTokensRequest, v1.ListTenantTokensResponse](
-			httpClient,
-			baseURL+AdminServiceListTenantTokensProcedure,
-			connect.WithSchema(adminServiceMethods.ByName("ListTenantTokens")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeTenantToken: connect.NewClient[v1.RevokeTenantTokenRequest, v1.RevokeTenantTokenResponse](
-			httpClient,
-			baseURL+AdminServiceRevokeTenantTokenProcedure,
-			connect.WithSchema(adminServiceMethods.ByName("RevokeTenantToken")),
-			connect.WithClientOptions(opts...),
-		),
-		rotateTenantToken: connect.NewClient[v1.RotateTenantTokenRequest, v1.RotateTenantTokenResponse](
-			httpClient,
-			baseURL+AdminServiceRotateTenantTokenProcedure,
-			connect.WithSchema(adminServiceMethods.ByName("RotateTenantToken")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// adminServiceClient implements AdminServiceClient.
-type adminServiceClient struct {
-	listTenants       *connect.Client[v1.ListTenantsRequest, v1.ListTenantsResponse]
-	createTenant      *connect.Client[v1.CreateTenantRequest, v1.CreateTenantResponse]
-	updateTenant      *connect.Client[v1.UpdateTenantRequest, v1.UpdateTenantResponse]
-	deleteTenant      *connect.Client[v1.DeleteTenantRequest, v1.DeleteTenantResponse]
-	issueTenantToken  *connect.Client[v1.IssueTenantTokenRequest, v1.IssueTenantTokenResponse]
-	listTenantTokens  *connect.Client[v1.ListTenantTokensRequest, v1.ListTenantTokensResponse]
-	revokeTenantToken *connect.Client[v1.RevokeTenantTokenRequest, v1.RevokeTenantTokenResponse]
-	rotateTenantToken *connect.Client[v1.RotateTenantTokenRequest, v1.RotateTenantTokenResponse]
-}
-
-// ListTenants calls agent.v1.AdminService.ListTenants.
-func (c *adminServiceClient) ListTenants(ctx context.Context, req *connect.Request[v1.ListTenantsRequest]) (*connect.Response[v1.ListTenantsResponse], error) {
-	return c.listTenants.CallUnary(ctx, req)
-}
-
-// CreateTenant calls agent.v1.AdminService.CreateTenant.
-func (c *adminServiceClient) CreateTenant(ctx context.Context, req *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.CreateTenantResponse], error) {
-	return c.createTenant.CallUnary(ctx, req)
-}
-
-// UpdateTenant calls agent.v1.AdminService.UpdateTenant.
-func (c *adminServiceClient) UpdateTenant(ctx context.Context, req *connect.Request[v1.UpdateTenantRequest]) (*connect.Response[v1.UpdateTenantResponse], error) {
-	return c.updateTenant.CallUnary(ctx, req)
-}
-
-// DeleteTenant calls agent.v1.AdminService.DeleteTenant.
-func (c *adminServiceClient) DeleteTenant(ctx context.Context, req *connect.Request[v1.DeleteTenantRequest]) (*connect.Response[v1.DeleteTenantResponse], error) {
-	return c.deleteTenant.CallUnary(ctx, req)
-}
-
-// IssueTenantToken calls agent.v1.AdminService.IssueTenantToken.
-func (c *adminServiceClient) IssueTenantToken(ctx context.Context, req *connect.Request[v1.IssueTenantTokenRequest]) (*connect.Response[v1.IssueTenantTokenResponse], error) {
-	return c.issueTenantToken.CallUnary(ctx, req)
-}
-
-// ListTenantTokens calls agent.v1.AdminService.ListTenantTokens.
-func (c *adminServiceClient) ListTenantTokens(ctx context.Context, req *connect.Request[v1.ListTenantTokensRequest]) (*connect.Response[v1.ListTenantTokensResponse], error) {
-	return c.listTenantTokens.CallUnary(ctx, req)
-}
-
-// RevokeTenantToken calls agent.v1.AdminService.RevokeTenantToken.
-func (c *adminServiceClient) RevokeTenantToken(ctx context.Context, req *connect.Request[v1.RevokeTenantTokenRequest]) (*connect.Response[v1.RevokeTenantTokenResponse], error) {
-	return c.revokeTenantToken.CallUnary(ctx, req)
-}
-
-// RotateTenantToken calls agent.v1.AdminService.RotateTenantToken.
-func (c *adminServiceClient) RotateTenantToken(ctx context.Context, req *connect.Request[v1.RotateTenantTokenRequest]) (*connect.Response[v1.RotateTenantTokenResponse], error) {
-	return c.rotateTenantToken.CallUnary(ctx, req)
+// NewAdminServiceClient constructs a client for the agent.v1.AdminService service. Multiple service
+// clients may share a single connect.Client.
+func NewAdminServiceClient(client *connect.Client) AdminServiceClient {
+	return &adminServiceClient{client: client}
 }
 
 // AdminServiceHandler is an implementation of the agent.v1.AdminService service.
 type AdminServiceHandler interface {
-	ListTenants(context.Context, *connect.Request[v1.ListTenantsRequest]) (*connect.Response[v1.ListTenantsResponse], error)
-	CreateTenant(context.Context, *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.CreateTenantResponse], error)
-	UpdateTenant(context.Context, *connect.Request[v1.UpdateTenantRequest]) (*connect.Response[v1.UpdateTenantResponse], error)
-	DeleteTenant(context.Context, *connect.Request[v1.DeleteTenantRequest]) (*connect.Response[v1.DeleteTenantResponse], error)
-	IssueTenantToken(context.Context, *connect.Request[v1.IssueTenantTokenRequest]) (*connect.Response[v1.IssueTenantTokenResponse], error)
-	ListTenantTokens(context.Context, *connect.Request[v1.ListTenantTokensRequest]) (*connect.Response[v1.ListTenantTokensResponse], error)
-	RevokeTenantToken(context.Context, *connect.Request[v1.RevokeTenantTokenRequest]) (*connect.Response[v1.RevokeTenantTokenResponse], error)
-	RotateTenantToken(context.Context, *connect.Request[v1.RotateTenantTokenRequest]) (*connect.Response[v1.RotateTenantTokenResponse], error)
+	ListTenants(context.Context, *v1.ListTenantsRequest) (*v1.ListTenantsResponse, error)
+	CreateTenant(context.Context, *v1.CreateTenantRequest) (*v1.CreateTenantResponse, error)
+	UpdateTenant(context.Context, *v1.UpdateTenantRequest) (*v1.UpdateTenantResponse, error)
+	DeleteTenant(context.Context, *v1.DeleteTenantRequest) (*v1.DeleteTenantResponse, error)
+	IssueTenantToken(context.Context, *v1.IssueTenantTokenRequest) (*v1.IssueTenantTokenResponse, error)
+	ListTenantTokens(context.Context, *v1.ListTenantTokensRequest) (*v1.ListTenantTokensResponse, error)
+	RevokeTenantToken(context.Context, *v1.RevokeTenantTokenRequest) (*v1.RevokeTenantTokenResponse, error)
+	RotateTenantToken(context.Context, *v1.RotateTenantTokenRequest) (*v1.RotateTenantTokenResponse, error)
 }
 
-// NewAdminServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	adminServiceMethods := v1.File_agent_v1_agent_proto.Services().ByName("AdminService").Methods()
-	adminServiceListTenantsHandler := connect.NewUnaryHandler(
-		AdminServiceListTenantsProcedure,
-		svc.ListTenants,
-		connect.WithSchema(adminServiceMethods.ByName("ListTenants")),
-		connect.WithHandlerOptions(opts...),
+// RegisterAdminServiceHandler registers svc as the agent.v1.AdminService implementation on server.
+func RegisterAdminServiceHandler(server *connect.Server, svc AdminServiceHandler) {
+	adapter := adminServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: adminServiceListTenantsSpec(), Handler: adapter.listTenants},
+		connect.Method{Spec: adminServiceCreateTenantSpec(), Handler: adapter.createTenant},
+		connect.Method{Spec: adminServiceUpdateTenantSpec(), Handler: adapter.updateTenant},
+		connect.Method{Spec: adminServiceDeleteTenantSpec(), Handler: adapter.deleteTenant},
+		connect.Method{Spec: adminServiceIssueTenantTokenSpec(), Handler: adapter.issueTenantToken},
+		connect.Method{Spec: adminServiceListTenantTokensSpec(), Handler: adapter.listTenantTokens},
+		connect.Method{Spec: adminServiceRevokeTenantTokenSpec(), Handler: adapter.revokeTenantToken},
+		connect.Method{Spec: adminServiceRotateTenantTokenSpec(), Handler: adapter.rotateTenantToken},
 	)
-	adminServiceCreateTenantHandler := connect.NewUnaryHandler(
-		AdminServiceCreateTenantProcedure,
-		svc.CreateTenant,
-		connect.WithSchema(adminServiceMethods.ByName("CreateTenant")),
-		connect.WithHandlerOptions(opts...),
-	)
-	adminServiceUpdateTenantHandler := connect.NewUnaryHandler(
-		AdminServiceUpdateTenantProcedure,
-		svc.UpdateTenant,
-		connect.WithSchema(adminServiceMethods.ByName("UpdateTenant")),
-		connect.WithHandlerOptions(opts...),
-	)
-	adminServiceDeleteTenantHandler := connect.NewUnaryHandler(
-		AdminServiceDeleteTenantProcedure,
-		svc.DeleteTenant,
-		connect.WithSchema(adminServiceMethods.ByName("DeleteTenant")),
-		connect.WithHandlerOptions(opts...),
-	)
-	adminServiceIssueTenantTokenHandler := connect.NewUnaryHandler(
-		AdminServiceIssueTenantTokenProcedure,
-		svc.IssueTenantToken,
-		connect.WithSchema(adminServiceMethods.ByName("IssueTenantToken")),
-		connect.WithHandlerOptions(opts...),
-	)
-	adminServiceListTenantTokensHandler := connect.NewUnaryHandler(
-		AdminServiceListTenantTokensProcedure,
-		svc.ListTenantTokens,
-		connect.WithSchema(adminServiceMethods.ByName("ListTenantTokens")),
-		connect.WithHandlerOptions(opts...),
-	)
-	adminServiceRevokeTenantTokenHandler := connect.NewUnaryHandler(
-		AdminServiceRevokeTenantTokenProcedure,
-		svc.RevokeTenantToken,
-		connect.WithSchema(adminServiceMethods.ByName("RevokeTenantToken")),
-		connect.WithHandlerOptions(opts...),
-	)
-	adminServiceRotateTenantTokenHandler := connect.NewUnaryHandler(
-		AdminServiceRotateTenantTokenProcedure,
-		svc.RotateTenantToken,
-		connect.WithSchema(adminServiceMethods.ByName("RotateTenantToken")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/agent.v1.AdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case AdminServiceListTenantsProcedure:
-			adminServiceListTenantsHandler.ServeHTTP(w, r)
-		case AdminServiceCreateTenantProcedure:
-			adminServiceCreateTenantHandler.ServeHTTP(w, r)
-		case AdminServiceUpdateTenantProcedure:
-			adminServiceUpdateTenantHandler.ServeHTTP(w, r)
-		case AdminServiceDeleteTenantProcedure:
-			adminServiceDeleteTenantHandler.ServeHTTP(w, r)
-		case AdminServiceIssueTenantTokenProcedure:
-			adminServiceIssueTenantTokenHandler.ServeHTTP(w, r)
-		case AdminServiceListTenantTokensProcedure:
-			adminServiceListTenantTokensHandler.ServeHTTP(w, r)
-		case AdminServiceRevokeTenantTokenProcedure:
-			adminServiceRevokeTenantTokenHandler.ServeHTTP(w, r)
-		case AdminServiceRotateTenantTokenProcedure:
-			adminServiceRotateTenantTokenHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedAdminServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAdminServiceHandler struct{}
 
-func (UnimplementedAdminServiceHandler) ListTenants(context.Context, *connect.Request[v1.ListTenantsRequest]) (*connect.Response[v1.ListTenantsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AdminService.ListTenants is not implemented"))
+func (UnimplementedAdminServiceHandler) ListTenants(context.Context, *v1.ListTenantsRequest) (*v1.ListTenantsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AdminService.ListTenants is not implemented")
 }
 
-func (UnimplementedAdminServiceHandler) CreateTenant(context.Context, *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.CreateTenantResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AdminService.CreateTenant is not implemented"))
+func (UnimplementedAdminServiceHandler) CreateTenant(context.Context, *v1.CreateTenantRequest) (*v1.CreateTenantResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AdminService.CreateTenant is not implemented")
 }
 
-func (UnimplementedAdminServiceHandler) UpdateTenant(context.Context, *connect.Request[v1.UpdateTenantRequest]) (*connect.Response[v1.UpdateTenantResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AdminService.UpdateTenant is not implemented"))
+func (UnimplementedAdminServiceHandler) UpdateTenant(context.Context, *v1.UpdateTenantRequest) (*v1.UpdateTenantResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AdminService.UpdateTenant is not implemented")
 }
 
-func (UnimplementedAdminServiceHandler) DeleteTenant(context.Context, *connect.Request[v1.DeleteTenantRequest]) (*connect.Response[v1.DeleteTenantResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AdminService.DeleteTenant is not implemented"))
+func (UnimplementedAdminServiceHandler) DeleteTenant(context.Context, *v1.DeleteTenantRequest) (*v1.DeleteTenantResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AdminService.DeleteTenant is not implemented")
 }
 
-func (UnimplementedAdminServiceHandler) IssueTenantToken(context.Context, *connect.Request[v1.IssueTenantTokenRequest]) (*connect.Response[v1.IssueTenantTokenResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AdminService.IssueTenantToken is not implemented"))
+func (UnimplementedAdminServiceHandler) IssueTenantToken(context.Context, *v1.IssueTenantTokenRequest) (*v1.IssueTenantTokenResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AdminService.IssueTenantToken is not implemented")
 }
 
-func (UnimplementedAdminServiceHandler) ListTenantTokens(context.Context, *connect.Request[v1.ListTenantTokensRequest]) (*connect.Response[v1.ListTenantTokensResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AdminService.ListTenantTokens is not implemented"))
+func (UnimplementedAdminServiceHandler) ListTenantTokens(context.Context, *v1.ListTenantTokensRequest) (*v1.ListTenantTokensResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AdminService.ListTenantTokens is not implemented")
 }
 
-func (UnimplementedAdminServiceHandler) RevokeTenantToken(context.Context, *connect.Request[v1.RevokeTenantTokenRequest]) (*connect.Response[v1.RevokeTenantTokenResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AdminService.RevokeTenantToken is not implemented"))
+func (UnimplementedAdminServiceHandler) RevokeTenantToken(context.Context, *v1.RevokeTenantTokenRequest) (*v1.RevokeTenantTokenResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AdminService.RevokeTenantToken is not implemented")
 }
 
-func (UnimplementedAdminServiceHandler) RotateTenantToken(context.Context, *connect.Request[v1.RotateTenantTokenRequest]) (*connect.Response[v1.RotateTenantTokenResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("agent.v1.AdminService.RotateTenantToken is not implemented"))
+func (UnimplementedAdminServiceHandler) RotateTenantToken(context.Context, *v1.RotateTenantTokenRequest) (*v1.RotateTenantTokenResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "agent.v1.AdminService.RotateTenantToken is not implemented")
+}
+
+type adminServiceClient struct {
+	client *connect.Client
+}
+
+func (c *adminServiceClient) ListTenants(ctx context.Context, req *v1.ListTenantsRequest) (*v1.ListTenantsResponse, error) {
+	var res v1.ListTenantsResponse
+	if err := c.client.CallUnary(ctx, adminServiceListTenantsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *adminServiceClient) CreateTenant(ctx context.Context, req *v1.CreateTenantRequest) (*v1.CreateTenantResponse, error) {
+	var res v1.CreateTenantResponse
+	if err := c.client.CallUnary(ctx, adminServiceCreateTenantSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *adminServiceClient) UpdateTenant(ctx context.Context, req *v1.UpdateTenantRequest) (*v1.UpdateTenantResponse, error) {
+	var res v1.UpdateTenantResponse
+	if err := c.client.CallUnary(ctx, adminServiceUpdateTenantSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *adminServiceClient) DeleteTenant(ctx context.Context, req *v1.DeleteTenantRequest) (*v1.DeleteTenantResponse, error) {
+	var res v1.DeleteTenantResponse
+	if err := c.client.CallUnary(ctx, adminServiceDeleteTenantSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *adminServiceClient) IssueTenantToken(ctx context.Context, req *v1.IssueTenantTokenRequest) (*v1.IssueTenantTokenResponse, error) {
+	var res v1.IssueTenantTokenResponse
+	if err := c.client.CallUnary(ctx, adminServiceIssueTenantTokenSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *adminServiceClient) ListTenantTokens(ctx context.Context, req *v1.ListTenantTokensRequest) (*v1.ListTenantTokensResponse, error) {
+	var res v1.ListTenantTokensResponse
+	if err := c.client.CallUnary(ctx, adminServiceListTenantTokensSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *adminServiceClient) RevokeTenantToken(ctx context.Context, req *v1.RevokeTenantTokenRequest) (*v1.RevokeTenantTokenResponse, error) {
+	var res v1.RevokeTenantTokenResponse
+	if err := c.client.CallUnary(ctx, adminServiceRevokeTenantTokenSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *adminServiceClient) RotateTenantToken(ctx context.Context, req *v1.RotateTenantTokenRequest) (*v1.RotateTenantTokenResponse, error) {
+	var res v1.RotateTenantTokenResponse
+	if err := c.client.CallUnary(ctx, adminServiceRotateTenantTokenSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type adminServiceHandler struct{ svc AdminServiceHandler }
+
+func (h adminServiceHandler) listTenants(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListTenantsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListTenants(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h adminServiceHandler) createTenant(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateTenantRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateTenant(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h adminServiceHandler) updateTenant(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateTenantRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateTenant(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h adminServiceHandler) deleteTenant(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteTenantRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteTenant(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h adminServiceHandler) issueTenantToken(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.IssueTenantTokenRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.IssueTenantToken(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h adminServiceHandler) listTenantTokens(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListTenantTokensRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListTenantTokens(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h adminServiceHandler) revokeTenantToken(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeTenantTokenRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeTenantToken(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h adminServiceHandler) rotateTenantToken(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RotateTenantTokenRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RotateTenantToken(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

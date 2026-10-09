@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"path"
@@ -20,7 +19,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/abcp-sdk/abc-protocol-go/v2/bus"
 	agentv1 "github.com/abcp-sdk/workspace-gateway/gen/agent/v1"
@@ -264,7 +263,7 @@ func (s *Service) sandboxEnv(caller map[string]string) map[string]string {
 // the shared service token resolves to the configured service tenant (unless it
 // names a real tenant via X-Abc-Tenant); every other request resolves through
 // the agent identity as usual.
-func (s *Service) sandboxAuth(ctx context.Context, hdr map[string][]string) (string, error) {
+func (s *Service) sandboxAuth(ctx context.Context, hdr *connect.Header) (string, error) {
 	if t, ok := s.serviceTenant(hdr); ok {
 		return t, nil
 	}
@@ -275,7 +274,7 @@ func (s *Service) sandboxAuth(ctx context.Context, hdr map[string][]string) (str
 // header when present and valid (the workspace extension acts on behalf of the
 // real caller), else the configured synthetic service tenant. ok=false when the
 // request does not carry the shared service token.
-func (s *Service) serviceTenant(hdr map[string][]string) (string, bool) {
+func (s *Service) serviceTenant(hdr *connect.Header) (string, bool) {
 	if s.svcToken == "" || bearerToken(hdr) != s.svcToken {
 		return "", false
 	}
@@ -298,35 +297,55 @@ func validTenantID(t string) bool {
 	return true
 }
 
-func headerValue(hdr map[string][]string, name string) string {
-	for k, vs := range hdr {
-		if strings.EqualFold(k, name) && len(vs) > 0 {
-			return strings.TrimSpace(vs[0])
-		}
+func headerValue(hdr *connect.Header, name string) string {
+	if hdr == nil {
+		return ""
 	}
-	return ""
+	return strings.TrimSpace(hdr.Get(name))
 }
 
 // forwardedHost returns the public host the client used: X-Forwarded-Host
 // (set by the edge) when present, else the Host header.
-func forwardedHost(hdr map[string][]string) string {
+func forwardedHost(hdr *connect.Header) string {
 	if h := headerValue(hdr, "X-Forwarded-Host"); h != "" {
 		return h
 	}
 	return headerValue(hdr, "Host")
 }
 
-func bearerToken(hdr map[string][]string) string {
-	for k, vs := range hdr {
-		if strings.EqualFold(k, "Authorization") {
-			for _, v := range vs {
-				if strings.HasPrefix(v, "Bearer ") {
-					return strings.TrimSpace(strings.TrimPrefix(v, "Bearer "))
-				}
-			}
+func bearerToken(hdr *connect.Header) string {
+	if hdr == nil {
+		return ""
+	}
+	for _, v := range hdr.Values("Authorization") {
+		if strings.HasPrefix(v, "Bearer ") {
+			return strings.TrimSpace(strings.TrimPrefix(v, "Bearer "))
 		}
 	}
 	return ""
+}
+
+// hdrFrom returns the inbound request headers for a handler context, or nil when
+// there is no CallInfo (e.g. a direct unit-test call).
+func hdrFrom(ctx context.Context) *connect.Header {
+	if info, ok := connect.CallInfoForServerContext(ctx); ok {
+		return info.RequestHeader()
+	}
+	// Test seam: unit tests calling a handler directly have no server CallInfo,
+	// so they may seed the headers on the context.
+	if h, ok := ctx.Value(testHdrKey{}).(*connect.Header); ok {
+		return h
+	}
+	return nil
+}
+
+// testHdrKey carries headers for tests that call handlers without a transport.
+type testHdrKey struct{}
+
+// WithTestHeaders seeds request headers on ctx for a direct handler call in a
+// test (connect v2 exposes no exported server-CallInfo constructor).
+func WithTestHeaders(ctx context.Context, h *connect.Header) context.Context {
+	return context.WithValue(ctx, testHdrKey{}, h)
 }
 
 // ---- tenant ----
@@ -334,19 +353,19 @@ func bearerToken(hdr map[string][]string) string {
 // resolveTenant asks the agent who the caller is (forwarding their token). A
 // service-token caller is resolved from X-Abc-Tenant / the service tenant so the
 // extension can act for the real tenant without an agent identity round-trip.
-func (s *Service) resolveTenant(ctx context.Context, hdr map[string][]string) (string, error) {
+func (s *Service) resolveTenant(ctx context.Context, hdr *connect.Header) (string, error) {
 	if t, ok := s.serviceTenant(hdr); ok {
 		return t, nil
 	}
-	req := connect.NewRequest(&agentv1.GetIdentityRequest{})
+	req := &agentv1.GetIdentityRequest{}
 	copyHeaders(req, hdr)
 	res, err := s.agent.GetIdentity(ctx, req)
 	if err != nil {
 		return "", err
 	}
-	t := res.Msg.GetTenant()
+	t := res.GetTenant()
 	if t == "" {
-		return "", connect.NewError(connect.CodeUnauthenticated, errors.New("no tenant for credential"))
+		return "", connect.NewError(connect.CodeUnauthenticated, "no tenant for credential")
 	}
 	return t, nil
 }
@@ -365,17 +384,17 @@ func (s *Service) resolveTenant(ctx context.Context, hdr map[string][]string) (s
 // the visibility table and could browse another tenant's repository).
 //
 // The deployment's default branch is ALWAYS `main`: `branch` empty means `main`.
-func (s *Service) EnsureBranchSession(ctx context.Context, req *connect.Request[wsv1.EnsureBranchSessionRequest]) (*connect.Response[wsv1.EnsureBranchSessionResponse], error) {
-	tenant, err := s.resolveTenant(ctx, req.Header())
+func (s *Service) EnsureBranchSession(ctx context.Context, req *wsv1.EnsureBranchSessionRequest) (*wsv1.EnsureBranchSessionResponse, error) {
+	tenant, err := s.resolveTenant(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	org, repo, branch := req.Msg.GetOrg(), req.Msg.GetRepo(), req.Msg.GetBranch()
+	org, repo, branch := req.GetOrg(), req.GetRepo(), req.GetBranch()
 	if branch == "" {
 		branch = roles.MainBranch
 	}
 	if !roles.ValidComponent(org) || !roles.ValidComponent(repo) || !roles.ValidComponent(branch) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org/repo/branch must be simple names"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "org/repo/branch must be simple names")
 	}
 	if err := s.claimRepo(ctx, tenant, org, repo); err != nil {
 		return nil, err
@@ -385,25 +404,25 @@ func (s *Service) EnsureBranchSession(ctx context.Context, req *connect.Request[
 	role := roles.RoleForBranch(branch)
 	// Idempotent: create only when absent. The agent refuses a duplicate, so we
 	// probe first (GetSession -> NotFound means absent).
-	if !s.sessionExists(ctx, req.Header(), session) {
-		if err := s.createSession(ctx, req.Header(), session, roles.PresetFor(role), req.Msg.GetModel(), req.Msg.GetLocale()); err != nil {
+	if !s.sessionExists(ctx, hdrFrom(ctx), session) {
+		if err := s.createSession(ctx, hdrFrom(ctx), session, roles.PresetFor(role), req.GetModel(), req.GetLocale()); err != nil {
 			return nil, err
 		}
 	}
 	sbName, sbPhase, refs := s.sandboxFields(ctx, session)
-	return connect.NewResponse(&wsv1.EnsureBranchSessionResponse{BranchSession: &wsv1.BranchSession{
+	return &wsv1.EnsureBranchSessionResponse{BranchSession: &wsv1.BranchSession{
 		Session: session, Org: org, Repo: repo, Branch: branch,
 		Role: string(role), Preset: roles.PresetFor(role),
 		Sandbox: sbName, Phase: sbPhase, Sandboxes: refs,
-	}}), nil
+	}}, nil
 }
 
 // sessionExists reports whether the agent already holds a session with this id.
-func (s *Service) sessionExists(ctx context.Context, hdr map[string][]string, session string) bool {
-	r := connect.NewRequest(&agentv1.GetSessionRequest{Id: session})
+func (s *Service) sessionExists(ctx context.Context, hdr *connect.Header, session string) bool {
+	r := &agentv1.GetSessionRequest{Id: session}
 	copyHeaders(r, hdr)
 	res, err := s.agent.GetSession(ctx, r)
-	return err == nil && res.Msg.GetSession() != nil
+	return err == nil && res.GetSession() != nil
 }
 
 // claimOrg ensures `org` exists and is owned by tenant. A pre-existing org not
@@ -411,7 +430,7 @@ func (s *Service) sessionExists(ctx context.Context, hdr map[string][]string, se
 func (s *Service) claimOrg(ctx context.Context, tenant, org string) error {
 	owned, err := s.members.OwnsOrg(tenant, org)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if owned {
 		return nil
@@ -419,15 +438,15 @@ func (s *Service) claimOrg(ctx context.Context, tenant, org string) error {
 	// An org is GLOBALLY unique: if another tenant already owns it (or it exists
 	// in Forgejo under a different owner), refuse rather than double-book it.
 	if other, err := s.members.OrgOwner(org); err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	} else if other != "" && other != tenant {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("organization is owned by another tenant"))
+		return connect.NewError(connect.CodePermissionDenied, "organization is owned by another tenant")
 	}
 	if err := s.git.EnsureOrg(ctx, org); err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("ensure org: %w", err))
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("ensure org: %w", err).Error())
 	}
 	if err := s.members.AddOrg(tenant, org); err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return nil
 }
@@ -437,23 +456,23 @@ func (s *Service) claimOrg(ctx context.Context, tenant, org string) error {
 func (s *Service) claimRepo(ctx context.Context, tenant, org, repo string) error {
 	exists, err := s.git.RepoExists(ctx, org, repo)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if exists {
 		owned, err := s.members.OwnsRepo(tenant, org, repo)
 		if err != nil {
-			return connect.NewError(connect.CodeInternal, err)
+			return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		if !owned {
-			return connect.NewError(connect.CodePermissionDenied, errors.New("repository is owned by another tenant"))
+			return connect.NewError(connect.CodePermissionDenied, "repository is owned by another tenant")
 		}
 		return nil
 	}
 	if _, err := s.git.EnsureRepo(ctx, org, repo); err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("ensure repo: %w", err))
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("ensure repo: %w", err).Error())
 	}
 	if err := s.members.AddRepo(tenant, org, repo); err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	_ = s.members.AddOrg(tenant, org)
 	return nil
@@ -467,87 +486,87 @@ func (s *Service) claimRepo(ctx context.Context, tenant, org, repo string) error
 //
 // The parent session MUST exist (branch <-> session is 1:1; the caller derives
 // it from an existing branch session).
-func (s *Service) ForkBranchSession(ctx context.Context, req *connect.Request[wsv1.ForkBranchSessionRequest]) (*connect.Response[wsv1.ForkBranchSessionResponse], error) {
-	tenant, err := s.resolveTenant(ctx, req.Header())
+func (s *Service) ForkBranchSession(ctx context.Context, req *wsv1.ForkBranchSessionRequest) (*wsv1.ForkBranchSessionResponse, error) {
+	tenant, err := s.resolveTenant(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	org, repo, parentBranch, ok := roles.ParseSession(req.Msg.GetSession())
+	org, repo, parentBranch, ok := roles.ParseSession(req.GetSession())
 	if !ok {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("session must be org:repo:branch"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "session must be org:repo:branch")
 	}
-	branch := req.Msg.GetBranch()
+	branch := req.GetBranch()
 	if branch == "" || !roles.ValidComponent(branch) || branch == roles.MainBranch {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("branch must be a legal, non-main name"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "branch must be a legal, non-main name")
 	}
 	// Only a MAIN session may create branches (manual fork). A feature-branch
 	// session is bound to exactly one branch and must not spawn more.
 	if parentBranch != roles.MainBranch {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New(
-			"only a main session can create branches; a feature branch cannot fork new branches"))
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			"only a main session can create branches; a feature branch cannot fork new branches")
 	}
 	// An agent session may only fork a branch in its OWN repository; the parent
 	// must belong to the caller's repo (a human webui caller sends no session
 	// header and keeps full tenant access).
-	if !branchTargetAllowed(sessionFromHeaders(req.Header()), org, repo) {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New(
-			"a session may only create branches in its own repository"))
+	if !branchTargetAllowed(sessionFromHeaders(hdrFrom(ctx)), org, repo) {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			"a session may only create branches in its own repository")
 	}
 	owned, err := s.members.OwnsRepo(tenant, org, repo)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if !owned {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("branch session not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "branch session not found")
 	}
-	if !s.sessionExists(ctx, req.Header(), req.Msg.GetSession()) {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("parent session not found"))
+	if !s.sessionExists(ctx, hdrFrom(ctx), req.GetSession()) {
+		return nil, connect.NewError(connect.CodeNotFound, "parent session not found")
 	}
 
 	session := roles.SessionName(org, repo, branch)
 	role := roles.Developer
-	fr := connect.NewRequest(&agentv1.ForkRequest{
-		Id:        req.Msg.GetSession(),
+	fr := &agentv1.ForkRequest{
+		Id:        req.GetSession(),
 		Name:      session,
-		MessageId: req.Msg.GetMessageId(),
+		MessageId: req.GetMessageId(),
 		Preset:    roles.PresetFor(role),
-	})
-	copyHeaders(fr, req.Header())
+	}
+	copyHeaders(fr, hdrFrom(ctx))
 	if _, err := s.agent.Fork(ctx, fr); err != nil {
 		return nil, err
 	}
 	sbName, sbPhase, refs := s.sandboxFields(ctx, session)
-	return connect.NewResponse(&wsv1.ForkBranchSessionResponse{BranchSession: &wsv1.BranchSession{
+	return &wsv1.ForkBranchSessionResponse{BranchSession: &wsv1.BranchSession{
 		Session: session, Org: org, Repo: repo, Branch: branch,
 		Role: string(role), Preset: roles.PresetFor(role),
 		Sandbox: sbName, Phase: sbPhase, Sandboxes: refs,
-	}}), nil
+	}}, nil
 }
 
 // CreateFreeSession creates a standalone (non-repo-bound) session. Free
 // sessions carry a tenant-scoped role: admin (manage org/repo) or explorer
 // (read-only). Any number of each may exist; the role decides what the session
 // may DO, never what it may SEE (visibility is the tenant).
-func (s *Service) CreateFreeSession(ctx context.Context, req *connect.Request[wsv1.CreateFreeSessionRequest]) (*connect.Response[wsv1.CreateFreeSessionResponse], error) {
-	tenant, err := s.resolveTenant(ctx, req.Header())
+func (s *Service) CreateFreeSession(ctx context.Context, req *wsv1.CreateFreeSessionRequest) (*wsv1.CreateFreeSessionResponse, error) {
+	tenant, err := s.resolveTenant(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	role := roles.Role(req.Msg.GetRole())
+	role := roles.Role(req.GetRole())
 	if role != roles.Admin && role != roles.Explorer {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("role must be admin|explorer"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "role must be admin|explorer")
 	}
-	name := req.Msg.GetName()
+	name := req.GetName()
 	if name == "" || !roles.ValidComponent(name) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name required (simple)"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "name required (simple)")
 	}
 	if err := s.members.AddFreeSession(tenant, name, string(role)); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	if err := s.createSession(ctx, req.Header(), name, roles.PresetFor(role), req.Msg.GetModel(), req.Msg.GetLocale()); err != nil {
+	if err := s.createSession(ctx, hdrFrom(ctx), name, roles.PresetFor(role), req.GetModel(), req.GetLocale()); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&wsv1.CreateFreeSessionResponse{Session: name, Preset: roles.PresetFor(role)}), nil
+	return &wsv1.CreateFreeSessionResponse{Session: name, Preset: roles.PresetFor(role)}, nil
 }
 
 // createSession forwards a trusted CreateSession to the agent. `locale`, when
@@ -557,12 +576,12 @@ func (s *Service) CreateFreeSession(ctx context.Context, req *connect.Request[ws
 // configured `locale` HERE and pass it explicitly, because the agent stores a
 // pinned locale and would otherwise pin an empty request to English (the
 // agent's normalizeLocale(”) == 'en'), ignoring the tenant's zh config.
-func (s *Service) createSession(ctx context.Context, hdr map[string][]string, name, preset, model, locale string) error {
+func (s *Service) createSession(ctx context.Context, hdr *connect.Header, name, preset, model, locale string) error {
 	if strings.TrimSpace(locale) == "" {
 		locale = s.tenantLocale(ctx, hdr)
 	}
 	msg := &agentv1.CreateSessionRequest{Name: name, Preset: preset, Model: model, Locale: normalizeLocale(locale)}
-	r := connect.NewRequest(msg)
+	r := msg
 	copyHeaders(r, hdr)
 	_, err := s.agent.CreateSession(ctx, r)
 	return err
@@ -571,14 +590,14 @@ func (s *Service) createSession(ctx context.Context, hdr map[string][]string, na
 // tenantLocale reads the tenant's configured agent language (`locale` KV),
 // forwarding the caller's credential. Empty on any error (the agent then falls
 // back to its own default).
-func (s *Service) tenantLocale(ctx context.Context, hdr map[string][]string) string {
-	r := connect.NewRequest(&agentv1.GetConfigRequest{Key: "locale"})
+func (s *Service) tenantLocale(ctx context.Context, hdr *connect.Header) string {
+	r := &agentv1.GetConfigRequest{Key: "locale"}
 	copyHeaders(r, hdr)
 	res, err := s.agent.GetConfig(ctx, r)
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(res.Msg.GetValue())
+	return strings.TrimSpace(res.GetValue())
 }
 
 // normalizeLocale keeps only a valid pinned language ("zh"/"en"); anything else
@@ -596,13 +615,13 @@ func normalizeLocale(l string) string {
 // ListBranchSessions lists the tenant's repo-bound branch sessions + free
 // sessions, derived from the agent's own session list (the agent is the source
 // of truth; the gateway owns only repo ownership + free-session roles).
-func (s *Service) ListBranchSessions(ctx context.Context, req *connect.Request[wsv1.ListBranchSessionsRequest]) (*connect.Response[wsv1.ListBranchSessionsResponse], error) {
-	tenant, err := s.resolveTenant(ctx, req.Header())
+func (s *Service) ListBranchSessions(ctx context.Context, req *wsv1.ListBranchSessionsRequest) (*wsv1.ListBranchSessionsResponse, error) {
+	tenant, err := s.resolveTenant(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	lr := connect.NewRequest(&agentv1.ListSessionsRequest{})
-	copyHeaders(lr, req.Header())
+	lr := &agentv1.ListSessionsRequest{}
+	copyHeaders(lr, hdrFrom(ctx))
 	res, err := s.agent.ListSessions(ctx, lr)
 	if err != nil {
 		return nil, err
@@ -627,14 +646,14 @@ func (s *Service) ListBranchSessions(ctx context.Context, req *connect.Request[w
 	}
 
 	out := []*wsv1.BranchSession{}
-	for _, sess := range res.Msg.GetSessions() {
+	for _, sess := range res.GetSessions() {
 		name := sess.GetName()
 		refs := refsFor(name)
 		sbName, sbPhase := repOf(refs)
 		if org, repo, branch, ok := roles.ParseSession(name); ok {
 			owned, err := s.members.OwnsRepo(tenant, org, repo)
 			if err != nil {
-				return nil, connect.NewError(connect.CodeInternal, err)
+				return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 			}
 			if !owned {
 				continue
@@ -654,41 +673,41 @@ func (s *Service) ListBranchSessions(ctx context.Context, req *connect.Request[w
 			})
 		}
 	}
-	return connect.NewResponse(&wsv1.ListBranchSessionsResponse{BranchSessions: out}), nil
+	return &wsv1.ListBranchSessionsResponse{BranchSessions: out}, nil
 }
 
 // GetBranchSession returns one branch session (or free session).
-func (s *Service) GetBranchSession(ctx context.Context, req *connect.Request[wsv1.GetBranchSessionRequest]) (*connect.Response[wsv1.GetBranchSessionResponse], error) {
-	tenant, err := s.resolveTenant(ctx, req.Header())
+func (s *Service) GetBranchSession(ctx context.Context, req *wsv1.GetBranchSessionRequest) (*wsv1.GetBranchSessionResponse, error) {
+	tenant, err := s.resolveTenant(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	session := req.Msg.GetSession()
+	session := req.GetSession()
 	if org, repo, branch, ok := roles.ParseSession(session); ok {
 		owned, err := s.members.OwnsRepo(tenant, org, repo)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		if !owned {
-			return nil, connect.NewError(connect.CodeNotFound, errors.New("branch session not found"))
+			return nil, connect.NewError(connect.CodeNotFound, "branch session not found")
 		}
 		role := roles.RoleForBranch(branch)
 		sbName, sbPhase, refs := s.sandboxFields(ctx, session)
-		return connect.NewResponse(&wsv1.GetBranchSessionResponse{BranchSession: &wsv1.BranchSession{
+		return &wsv1.GetBranchSessionResponse{BranchSession: &wsv1.BranchSession{
 			Session: session, Org: org, Repo: repo, Branch: branch,
 			Role: string(role), Preset: roles.PresetFor(role),
 			Sandbox: sbName, Phase: sbPhase, Sandboxes: refs,
-		}}), nil
+		}}, nil
 	}
 	role, ok, _ := s.members.FreeRole(tenant, session)
 	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("branch session not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "branch session not found")
 	}
 	sbName, sbPhase, refs := s.sandboxFields(ctx, session)
-	return connect.NewResponse(&wsv1.GetBranchSessionResponse{BranchSession: &wsv1.BranchSession{
+	return &wsv1.GetBranchSessionResponse{BranchSession: &wsv1.BranchSession{
 		Session: session, Role: role, Preset: role,
 		Sandbox: sbName, Phase: sbPhase, Sandboxes: refs,
-	}}), nil
+	}}, nil
 }
 
 // DeleteBranchSession deletes a branch session (its sandbox + agent session)
@@ -696,92 +715,92 @@ func (s *Service) GetBranchSession(ctx context.Context, req *connect.Request[wsv
 // underlying git branch: repo:branch <-> session is 1:1, so leaving the branch
 // behind would strand an orphan branch with no session. `main` is protected —
 // deleting the main session never deletes the default branch.
-func (s *Service) DeleteBranchSession(ctx context.Context, req *connect.Request[wsv1.DeleteBranchSessionRequest]) (*connect.Response[wsv1.DeleteBranchSessionResponse], error) {
-	tenant, err := s.resolveTenant(ctx, req.Header())
+func (s *Service) DeleteBranchSession(ctx context.Context, req *wsv1.DeleteBranchSessionRequest) (*wsv1.DeleteBranchSessionResponse, error) {
+	tenant, err := s.resolveTenant(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	session := req.Msg.GetSession()
+	session := req.GetSession()
 	org, repo, branch, isBranch := roles.ParseSession(session)
 	if isBranch {
 		if owned, _ := s.members.OwnsRepo(tenant, org, repo); !owned {
-			return nil, connect.NewError(connect.CodeNotFound, errors.New("branch session not found"))
+			return nil, connect.NewError(connect.CodeNotFound, "branch session not found")
 		}
 	} else if _, ok, _ := s.members.FreeRole(tenant, session); !ok {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("branch session not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "branch session not found")
 	}
 	// Best-effort sandbox cleanup + session delete.
-	s.deleteSessionCascade(ctx, req.Header(), tenant, session)
+	s.deleteSessionCascade(ctx, hdrFrom(ctx), tenant, session)
 	// A branch session owns its branch 1:1: delete it too (except main, which is
 	// protected). The git deletion is idempotent.
 	if isBranch && branch != roles.MainBranch {
 		if err := s.git.DeleteBranch(ctx, org, repo, branch); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 	}
-	return connect.NewResponse(&wsv1.DeleteBranchSessionResponse{Ok: true}), nil
+	return &wsv1.DeleteBranchSessionResponse{Ok: true}, nil
 }
 
 // DeleteBranch removes a repo branch AND its branch session (session + sandboxes
 // cascade). Only the owning tenant may delete; `main` is refused (the default
 // branch is protected). The git deletion is idempotent (an already-absent
 // branch is fine); the branch session is deleted even if the branch was gone.
-func (s *Service) DeleteBranch(ctx context.Context, req *connect.Request[wsv1.DeleteBranchRequest]) (*connect.Response[wsv1.DeleteBranchResponse], error) {
-	tenant, err := s.resolveTenant(ctx, req.Header())
+func (s *Service) DeleteBranch(ctx context.Context, req *wsv1.DeleteBranchRequest) (*wsv1.DeleteBranchResponse, error) {
+	tenant, err := s.resolveTenant(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	org, repo, branch := req.Msg.GetOrg(), req.Msg.GetRepo(), req.Msg.GetBranch()
+	org, repo, branch := req.GetOrg(), req.GetRepo(), req.GetBranch()
 	if !roles.ValidComponent(org) || !roles.ValidComponent(repo) || !roles.ValidComponent(branch) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org/repo/branch must be simple names"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "org/repo/branch must be simple names")
 	}
 	if branch == roles.MainBranch {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("refusing to delete the default branch"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "refusing to delete the default branch")
 	}
 	owned, err := s.members.OwnsRepo(tenant, org, repo)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if !owned {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("repository not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "repository not found")
 	}
 	// Delete the branch session (session + sandboxes) first, then the git branch.
 	session := roles.SessionName(org, repo, branch)
-	s.deleteSessionCascade(ctx, req.Header(), tenant, session)
+	s.deleteSessionCascade(ctx, hdrFrom(ctx), tenant, session)
 	if err := s.git.DeleteBranch(ctx, org, repo, branch); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.DeleteBranchResponse{Ok: true}), nil
+	return &wsv1.DeleteBranchResponse{Ok: true}, nil
 }
 
 // DeleteRepo removes a repository AND every one of its branch sessions (each
 // cascading to its sandboxes), then drops the git repo + ownership row. Only
 // the owning tenant may delete. The org is left in place. Admin action.
-func (s *Service) DeleteRepo(ctx context.Context, req *connect.Request[wsv1.DeleteRepoRequest]) (*connect.Response[wsv1.DeleteRepoResponse], error) {
-	tenant, err := s.resolveTenant(ctx, req.Header())
+func (s *Service) DeleteRepo(ctx context.Context, req *wsv1.DeleteRepoRequest) (*wsv1.DeleteRepoResponse, error) {
+	tenant, err := s.resolveTenant(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	org, repo := req.Msg.GetOrg(), req.Msg.GetRepo()
+	org, repo := req.GetOrg(), req.GetRepo()
 	if !roles.ValidComponent(org) || !roles.ValidComponent(repo) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org/repo must be simple names"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "org/repo must be simple names")
 	}
 	owned, err := s.members.OwnsRepo(tenant, org, repo)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if !owned {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("repository not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "repository not found")
 	}
 	// Cascade every branch session of this repo (the agent is the source of
 	// truth for which sessions exist). Best-effort per session.
 	prefix := org + ":" + repo + ":"
-	lr := connect.NewRequest(&agentv1.ListSessionsRequest{})
-	copyHeaders(lr, req.Header())
+	lr := &agentv1.ListSessionsRequest{}
+	copyHeaders(lr, hdrFrom(ctx))
 	if res, err := s.agent.ListSessions(ctx, lr); err == nil {
-		for _, sess := range res.Msg.GetSessions() {
+		for _, sess := range res.GetSessions() {
 			if name := sess.GetName(); strings.HasPrefix(name, prefix) {
-				s.deleteSessionCascade(ctx, req.Header(), tenant, name)
+				s.deleteSessionCascade(ctx, hdrFrom(ctx), tenant, name)
 			}
 		}
 	}
@@ -799,12 +818,12 @@ func (s *Service) DeleteRepo(ctx context.Context, req *connect.Request[wsv1.Dele
 	}
 	// Delete the git repo (idempotent) and the ownership row.
 	if err := s.git.DeleteRepo(ctx, org, repo); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if err := s.members.RemoveRepo(tenant, org, repo); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.DeleteRepoResponse{Ok: true}), nil
+	return &wsv1.DeleteRepoResponse{Ok: true}, nil
 }
 
 // deleteSessionCascade is the SINGLE session-deletion path: it reclaims the
@@ -815,7 +834,7 @@ func (s *Service) DeleteRepo(ctx context.Context, req *connect.Request[wsv1.Dele
 // Sandboxes are matched by their `worker-manager/session` annotation (the ONLY
 // reliable key: the creator annotation holds just the tenant). A sandbox with
 // no session annotation falls back to a name match for legacy sandboxes.
-func (s *Service) deleteSessionCascade(ctx context.Context, hdr map[string][]string, tenant, session string) {
+func (s *Service) deleteSessionCascade(ctx context.Context, hdr *connect.Header, tenant, session string) {
 	if s.sbx != nil {
 		if sbxs, err := s.sbx.List(ctx); err == nil {
 			for _, sb := range sbxs {
@@ -829,7 +848,7 @@ func (s *Service) deleteSessionCascade(ctx context.Context, hdr map[string][]str
 			}
 		}
 	}
-	r := connect.NewRequest(&agentv1.DeleteSessionRequest{Id: session})
+	r := &agentv1.DeleteSessionRequest{Id: session}
 	copyHeaders(r, hdr)
 	_, _ = s.agent.DeleteSession(ctx, r)
 	_ = s.members.DeleteFreeSession(tenant, session)
@@ -837,30 +856,30 @@ func (s *Service) deleteSessionCascade(ctx context.Context, hdr map[string][]str
 
 // ---- git browse ----
 
-func (s *Service) ensureVisible(ctx context.Context, hdr map[string][]string, org, repo string) error {
+func (s *Service) ensureVisible(ctx context.Context, hdr *connect.Header, org, repo string) error {
 	tenant, err := s.resolveTenant(ctx, hdr)
 	if err != nil {
 		return err
 	}
 	ok, err := s.members.OwnsRepo(tenant, org, repo)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if !ok {
-		return connect.NewError(connect.CodeNotFound, errors.New("repository not found"))
+		return connect.NewError(connect.CodeNotFound, "repository not found")
 	}
 	return nil
 }
 
 // ListRepos lists the tenant's visible repos.
-func (s *Service) ListRepos(ctx context.Context, req *connect.Request[wsv1.ListReposRequest]) (*connect.Response[wsv1.ListReposResponse], error) {
-	tenant, err := s.resolveTenant(ctx, req.Header())
+func (s *Service) ListRepos(ctx context.Context, req *wsv1.ListReposRequest) (*wsv1.ListReposResponse, error) {
+	tenant, err := s.resolveTenant(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	repos, err := s.members.ListRepos(tenant)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.RepoInfo, 0, len(repos))
 	for _, rp := range repos {
@@ -875,67 +894,67 @@ func (s *Service) ListRepos(ctx context.Context, req *connect.Request[wsv1.ListR
 		}
 		out = append(out, &wsv1.RepoInfo{Org: rp[0], Repo: rp[1], DefaultBranch: db, Private: priv})
 	}
-	return connect.NewResponse(&wsv1.ListReposResponse{Repos: out}), nil
+	return &wsv1.ListReposResponse{Repos: out}, nil
 }
 
-func (s *Service) Tree(ctx context.Context, req *connect.Request[wsv1.TreeRequest]) (*connect.Response[wsv1.TreeResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) Tree(ctx context.Context, req *wsv1.TreeRequest) (*wsv1.TreeResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	entries, truncated, err := s.git.Tree(ctx, m.GetOrg(), m.GetRepo(), m.GetRef(), m.GetPath())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.TreeEntry, 0, len(entries))
 	for _, e := range entries {
 		out = append(out, &wsv1.TreeEntry{Path: e.Path, Type: e.Type, Size: e.Size})
 	}
-	return connect.NewResponse(&wsv1.TreeResponse{Entries: out, Truncated: truncated}), nil
+	return &wsv1.TreeResponse{Entries: out, Truncated: truncated}, nil
 }
 
-func (s *Service) ReadBlob(ctx context.Context, req *connect.Request[wsv1.ReadBlobRequest]) (*connect.Response[wsv1.ReadBlobResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) ReadBlob(ctx context.Context, req *wsv1.ReadBlobRequest) (*wsv1.ReadBlobResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	content, sha, err := s.git.ReadBlob(ctx, m.GetOrg(), m.GetRepo(), m.GetRef(), m.GetPath())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.ReadBlobResponse{Content: content, Sha: sha}), nil
+	return &wsv1.ReadBlobResponse{Content: content, Sha: sha}, nil
 }
 
-func (s *Service) Log(ctx context.Context, req *connect.Request[wsv1.LogRequest]) (*connect.Response[wsv1.LogResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) Log(ctx context.Context, req *wsv1.LogRequest) (*wsv1.LogResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	commits, hasMore, err := s.git.Log(ctx, m.GetOrg(), m.GetRepo(), m.GetRef(), m.GetPath(), int(m.GetLimit()), int(m.GetOffset()))
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.CommitInfo, 0, len(commits))
 	for _, c := range commits {
 		out = append(out, &wsv1.CommitInfo{Sha: c.SHA, Message: c.Message, Author: c.Author, Date: c.Date})
 	}
-	return connect.NewResponse(&wsv1.LogResponse{Commits: out, HasMore: hasMore}), nil
+	return &wsv1.LogResponse{Commits: out, HasMore: hasMore}, nil
 }
 
-func (s *Service) Branches(ctx context.Context, req *connect.Request[wsv1.BranchesRequest]) (*connect.Response[wsv1.BranchesResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) Branches(ctx context.Context, req *wsv1.BranchesRequest) (*wsv1.BranchesResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	branches, err := s.git.Branches(ctx, m.GetOrg(), m.GetRepo())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.BranchInfo, 0, len(branches))
 	for _, b := range branches {
 		out = append(out, &wsv1.BranchInfo{Name: b.Name, Sha: b.SHA})
 	}
-	return connect.NewResponse(&wsv1.BranchesResponse{Branches: out}), nil
+	return &wsv1.BranchesResponse{Branches: out}, nil
 }
 
 // ReadRaw returns a file's raw bytes (any content type) so the webui can
@@ -944,19 +963,19 @@ func (s *Service) Branches(ctx context.Context, req *connect.Request[wsv1.Branch
 // It also classifies the content: `is_text` is true only for valid UTF-8
 // without NUL bytes AND at most maxTextBytes (larger files are returned as
 // non-text so the client offers a download instead of highlighting).
-func (s *Service) ReadRaw(ctx context.Context, req *connect.Request[wsv1.ReadRawRequest]) (*connect.Response[wsv1.ReadRawResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) ReadRaw(ctx context.Context, req *wsv1.ReadRawRequest) (*wsv1.ReadRawResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	data, sha, err := s.git.RawFile(ctx, m.GetOrg(), m.GetRepo(), m.GetRef(), m.GetPath())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.ReadRawResponse{
+	return &wsv1.ReadRawResponse{
 		Data: data, Sha: sha, Mime: mimeOfPath(m.GetPath()),
 		IsText: isTextContent(data),
-	}), nil
+	}, nil
 }
 
 // maxTextBytes caps what the client will syntax-highlight / virtualize. Larger
@@ -985,31 +1004,31 @@ func isTextContent(data []byte) bool {
 }
 
 // Tags lists a repository's tags.
-func (s *Service) Tags(ctx context.Context, req *connect.Request[wsv1.TagsRequest]) (*connect.Response[wsv1.TagsResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) Tags(ctx context.Context, req *wsv1.TagsRequest) (*wsv1.TagsResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	tags, err := s.git.Tags(ctx, m.GetOrg(), m.GetRepo())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.TagInfo, 0, len(tags))
 	for _, t := range tags {
 		out = append(out, &wsv1.TagInfo{Name: t.Name, Sha: t.SHA})
 	}
-	return connect.NewResponse(&wsv1.TagsResponse{Tags: out}), nil
+	return &wsv1.TagsResponse{Tags: out}, nil
 }
 
 // ListReleases lists a repository's releases (read-only).
-func (s *Service) ListReleases(ctx context.Context, req *connect.Request[wsv1.ReleasesRequest]) (*connect.Response[wsv1.ReleasesResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) ListReleases(ctx context.Context, req *wsv1.ReleasesRequest) (*wsv1.ReleasesResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	rels, err := s.git.ListReleases(ctx, m.GetOrg(), m.GetRepo())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.ReleaseInfo, 0, len(rels))
 	for _, r := range rels {
@@ -1027,93 +1046,93 @@ func (s *Service) ListReleases(ctx context.Context, req *connect.Request[wsv1.Re
 			Assets: assets,
 		})
 	}
-	return connect.NewResponse(&wsv1.ReleasesResponse{Releases: out}), nil
+	return &wsv1.ReleasesResponse{Releases: out}, nil
 }
 
 // GetReleaseAsset proxies one release asset's bytes (the browser may not reach
 // the git host directly).
-func (s *Service) GetReleaseAsset(ctx context.Context, req *connect.Request[wsv1.ReleaseAssetRequest]) (*connect.Response[wsv1.ReleaseAssetResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) GetReleaseAsset(ctx context.Context, req *wsv1.ReleaseAssetRequest) (*wsv1.ReleaseAssetResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	data, name, mime, err := s.git.GetReleaseAsset(ctx, m.GetOrg(), m.GetRepo(), m.GetReleaseId(), m.GetAssetId())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.ReleaseAssetResponse{Data: data, Name: name, Mime: mime}), nil
+	return &wsv1.ReleaseAssetResponse{Data: data, Name: name, Mime: mime}, nil
 }
 
 // GetCommit returns one commit's metadata.
-func (s *Service) GetCommit(ctx context.Context, req *connect.Request[wsv1.GetCommitRequest]) (*connect.Response[wsv1.GetCommitResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) GetCommit(ctx context.Context, req *wsv1.GetCommitRequest) (*wsv1.GetCommitResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	c, err := s.git.GetCommit(ctx, m.GetOrg(), m.GetRepo(), m.GetSha())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.GetCommitResponse{Commit: &wsv1.CommitDetail{
+	return &wsv1.GetCommitResponse{Commit: &wsv1.CommitDetail{
 		Sha: c.SHA, Message: c.Message, Author: c.Author, AuthorEmail: c.AuthorEmail,
 		Date: c.Date, Parents: c.Parents, HtmlUrl: c.HTMLURL,
-	}}), nil
+	}}, nil
 }
 
 // CommitDiff returns the unified diff of one commit.
-func (s *Service) CommitDiff(ctx context.Context, req *connect.Request[wsv1.CommitDiffRequest]) (*connect.Response[wsv1.DiffResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) CommitDiff(ctx context.Context, req *wsv1.CommitDiffRequest) (*wsv1.DiffResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	diff, err := s.git.CommitDiff(ctx, m.GetOrg(), m.GetRepo(), m.GetSha())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.DiffResponse{Diff: diff}), nil
+	return &wsv1.DiffResponse{Diff: diff}, nil
 }
 
 // GetMR returns one change request's full detail.
-func (s *Service) GetMR(ctx context.Context, req *connect.Request[wsv1.GetMRRequest]) (*connect.Response[wsv1.GetMRResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) GetMR(ctx context.Context, req *wsv1.GetMRRequest) (*wsv1.GetMRResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	mr, err := s.git.GetMR(ctx, m.GetOrg(), m.GetRepo(), m.GetIndex())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	info := toMRInfo(mr)
 	// Attach the submitting session (best-effort; the head is an anonymous
 	// `mr/...` branch, so this is the only way to find the origin).
-	if sub, ok, serr := s.members.MRSubmission(s.tenantOf(ctx, req.Header()), m.GetOrg(), m.GetRepo(), m.GetIndex()); serr == nil && ok {
+	if sub, ok, serr := s.members.MRSubmission(s.tenantOf(ctx, hdrFrom(ctx)), m.GetOrg(), m.GetRepo(), m.GetIndex()); serr == nil && ok {
 		info.OriginSession = sub.OriginSession
 	}
-	return connect.NewResponse(&wsv1.GetMRResponse{Mr: info}), nil
+	return &wsv1.GetMRResponse{Mr: info}, nil
 }
 
 // MRDiff returns the unified diff of one change request.
-func (s *Service) MRDiff(ctx context.Context, req *connect.Request[wsv1.MRDiffRequest]) (*connect.Response[wsv1.MRDiffResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) MRDiff(ctx context.Context, req *wsv1.MRDiffRequest) (*wsv1.MRDiffResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	diff, err := s.git.MRDiff(ctx, m.GetOrg(), m.GetRepo(), m.GetIndex())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.MRDiffResponse{Diff: diff}), nil
+	return &wsv1.MRDiffResponse{Diff: diff}, nil
 }
 
 // ListMRComments lists the (read-only) MR conversation.
-func (s *Service) ListMRComments(ctx context.Context, req *connect.Request[wsv1.ListMRCommentsRequest]) (*connect.Response[wsv1.ListMRCommentsResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) ListMRComments(ctx context.Context, req *wsv1.ListMRCommentsRequest) (*wsv1.ListMRCommentsResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	comments, err := s.git.MRComments(ctx, m.GetOrg(), m.GetRepo(), m.GetIndex())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.MRCommentInfo, 0, len(comments))
 	for _, c := range comments {
@@ -1122,68 +1141,68 @@ func (s *Service) ListMRComments(ctx context.Context, req *connect.Request[wsv1.
 			CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
 		})
 	}
-	return connect.NewResponse(&wsv1.ListMRCommentsResponse{Comments: out}), nil
+	return &wsv1.ListMRCommentsResponse{Comments: out}, nil
 }
 
 // EnsureRepo creates the org/repo (protecting main) and records ownership.
 // Admin-only: creating org/repo is a gateway-verified admin action.
-func (s *Service) EnsureRepo(ctx context.Context, req *connect.Request[wsv1.EnsureRepoRequest]) (*connect.Response[wsv1.EnsureRepoResponse], error) {
-	tenant, err := s.resolveTenant(ctx, req.Header())
+func (s *Service) EnsureRepo(ctx context.Context, req *wsv1.EnsureRepoRequest) (*wsv1.EnsureRepoResponse, error) {
+	tenant, err := s.resolveTenant(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if err := s.requireAdmin(tenant); err != nil {
 		return nil, err
 	}
-	org, repo := req.Msg.GetOrg(), req.Msg.GetRepo()
+	org, repo := req.GetOrg(), req.GetRepo()
 	if !roles.ValidComponent(org) || !roles.ValidComponent(repo) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org/repo must be simple names"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "org/repo must be simple names")
 	}
 	created, err := s.git.EnsureRepo(ctx, org, repo)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if err := s.members.AddRepo(tenant, org, repo); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	// Auto-create the `org:repo:main` branch session (repo:branch <-> session,
 	// 1:1). Idempotent: a re-ensure leaves an existing session untouched.
-	s.ensureMainSession(ctx, req.Header(), org, repo)
-	return connect.NewResponse(&wsv1.EnsureRepoResponse{Created: created}), nil
+	s.ensureMainSession(ctx, hdrFrom(ctx), org, repo)
+	return &wsv1.EnsureRepoResponse{Created: created}, nil
 }
 
 // CreateOrg creates an organization owned by the caller's tenant (idempotent:
 // an org already owned is returned unchanged). Admin action.
-func (s *Service) CreateOrg(ctx context.Context, req *connect.Request[wsv1.CreateOrgRequest]) (*connect.Response[wsv1.CreateOrgResponse], error) {
-	tenant, err := s.resolveTenant(ctx, req.Header())
+func (s *Service) CreateOrg(ctx context.Context, req *wsv1.CreateOrgRequest) (*wsv1.CreateOrgResponse, error) {
+	tenant, err := s.resolveTenant(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if err := s.requireAdmin(tenant); err != nil {
 		return nil, err
 	}
-	org := req.Msg.GetOrg()
+	org := req.GetOrg()
 	if !roles.ValidComponent(org) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org must be a simple name"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "org must be a simple name")
 	}
 	if err := s.claimOrg(ctx, tenant, org); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&wsv1.CreateOrgResponse{Org: org}), nil
+	return &wsv1.CreateOrgResponse{Org: org}, nil
 }
 
 // ListOrgs lists the caller's tenant-owned orgs (including empty ones, which
 // ListRepos cannot surface).
-func (s *Service) ListOrgs(ctx context.Context, req *connect.Request[wsv1.ListOrgsRequest]) (*connect.Response[wsv1.ListOrgsResponse], error) {
-	tenant, err := s.resolveTenant(ctx, req.Header())
+func (s *Service) ListOrgs(ctx context.Context, req *wsv1.ListOrgsRequest) (*wsv1.ListOrgsResponse, error) {
+	tenant, err := s.resolveTenant(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	orgs, err := s.members.ListOrgs(tenant)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.ListOrgsResponse{Orgs: orgs}), nil
+	return &wsv1.ListOrgsResponse{Orgs: orgs}, nil
 }
 
 // ---- tenant-scoped repo operations (the extension's ONLY path to Forgejo) ----
@@ -1193,24 +1212,24 @@ func (s *Service) ListOrgs(ctx context.Context, req *connect.Request[wsv1.ListOr
 // with a SHARED admin token (which exposed every tenant's repos).
 
 // RepoMeta returns one repository's metadata (ownership-checked).
-func (s *Service) RepoMeta(ctx context.Context, req *connect.Request[wsv1.RepoMetaRequest]) (*connect.Response[wsv1.RepoMetaResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) RepoMeta(ctx context.Context, req *wsv1.RepoMetaRequest) (*wsv1.RepoMetaResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	info, err := s.git.GetRepo(ctx, m.GetOrg(), m.GetRepo())
 	if err != nil {
 		return nil, mrError(err)
 	}
-	return connect.NewResponse(&wsv1.RepoMetaResponse{
+	return &wsv1.RepoMetaResponse{
 		Org: info.Org, Repo: info.Repo, DefaultBranch: info.DefaultBranch, Private: info.Private, Empty: info.Empty,
-	}), nil
+	}, nil
 }
 
 // Contents reads a file (text) or lists a directory at ref/path.
-func (s *Service) Contents(ctx context.Context, req *connect.Request[wsv1.ContentsRequest]) (*connect.Response[wsv1.ContentsResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) Contents(ctx context.Context, req *wsv1.ContentsRequest) (*wsv1.ContentsResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	isDir, text, sha, size, entries, err := s.git.Contents(ctx, m.GetOrg(), m.GetRepo(), m.GetRef(), m.GetPath())
@@ -1221,20 +1240,20 @@ func (s *Service) Contents(ctx context.Context, req *connect.Request[wsv1.Conten
 	for _, e := range entries {
 		res.Entries = append(res.Entries, &wsv1.ContentDirEntry{Path: e.Path, Name: e.Name, Type: e.Type, Size: e.Size, Sha: e.SHA})
 	}
-	return connect.NewResponse(res), nil
+	return res, nil
 }
 
 // Compare returns per-file patches between two refs.
-func (s *Service) Compare(ctx context.Context, req *connect.Request[wsv1.CompareRequest]) (*connect.Response[wsv1.CompareResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) Compare(ctx context.Context, req *wsv1.CompareRequest) (*wsv1.CompareResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	// Compute the compare with go-git: Forgejo's compare API returns an EMPTY
 	// `patch` field on 1.22, so the gateway produces the full per-file diff.
 	files, err := gitcommit.Compare(ctx, s.git.GitURL(m.GetOrg(), m.GetRepo()), "root", s.git.Token(), m.GetBase(), m.GetHead(), 0)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.CompareFile, 0, len(files))
 	for _, f := range files {
@@ -1243,37 +1262,37 @@ func (s *Service) Compare(ctx context.Context, req *connect.Request[wsv1.Compare
 			Additions: int32(f.Additions), Deletions: int32(f.Deletions), Patch: f.Patch,
 		})
 	}
-	return connect.NewResponse(&wsv1.CompareResponse{Files: out}), nil
+	return &wsv1.CompareResponse{Files: out}, nil
 }
 
 // CreateTag creates a tag at a target ref.
-func (s *Service) CreateTag(ctx context.Context, req *connect.Request[wsv1.CreateTagRequest]) (*connect.Response[wsv1.CreateTagResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) CreateTag(ctx context.Context, req *wsv1.CreateTagRequest) (*wsv1.CreateTagResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	if err := s.git.CreateTagAt(ctx, m.GetOrg(), m.GetRepo(), m.GetName(), m.GetTarget()); err != nil {
 		return nil, mrError(err)
 	}
-	return connect.NewResponse(&wsv1.CreateTagResponse{Ok: true}), nil
+	return &wsv1.CreateTagResponse{Ok: true}, nil
 }
 
 // CreateBranch creates a branch from an existing ref.
-func (s *Service) CreateBranch(ctx context.Context, req *connect.Request[wsv1.CreateBranchRequest]) (*connect.Response[wsv1.CreateBranchResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) CreateBranch(ctx context.Context, req *wsv1.CreateBranchRequest) (*wsv1.CreateBranchResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	// An agent session may only create branches in its OWN repository (a human
 	// webui caller sends no session header and keeps full tenant access).
-	if !branchTargetAllowed(sessionFromHeaders(req.Header()), m.GetOrg(), m.GetRepo()) {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New(
-			"a session may only create branches in its own repository"))
+	if !branchTargetAllowed(sessionFromHeaders(hdrFrom(ctx)), m.GetOrg(), m.GetRepo()) {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			"a session may only create branches in its own repository")
 	}
 	if err := s.git.CreateBranch(ctx, m.GetOrg(), m.GetRepo(), m.GetName(), m.GetFrom()); err != nil {
 		return nil, mrError(err)
 	}
-	return connect.NewResponse(&wsv1.CreateBranchResponse{Ok: true}), nil
+	return &wsv1.CreateBranchResponse{Ok: true}, nil
 }
 
 // branchTargetAllowed reports whether `callerSession` may act on the repo
@@ -1292,9 +1311,9 @@ func branchTargetAllowed(callerSession, org, repo string) bool {
 }
 
 // Archive returns a repo tree at a ref as a tar.gz (sandbox checkout).
-func (s *Service) Archive(ctx context.Context, req *connect.Request[wsv1.ArchiveRequest]) (*connect.Response[wsv1.ArchiveResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) Archive(ctx context.Context, req *wsv1.ArchiveRequest) (*wsv1.ArchiveResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	data, err := s.git.ArchiveTarGz(ctx, m.GetOrg(), m.GetRepo(), m.GetRef())
@@ -1306,14 +1325,14 @@ func (s *Service) Archive(ctx context.Context, req *connect.Request[wsv1.Archive
 	// (`dest` = the exact landing directory, supporting rename/nesting).
 	data, err = imagebuild.StripTop(data)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.ArchiveResponse{Data: data}), nil
+	return &wsv1.ArchiveResponse{Data: data}, nil
 }
 
 // ensureMainSession idempotently creates the `org:repo:main` session. Best-effort:
 // a repo is still usable if this fails.
-func (s *Service) ensureMainSession(ctx context.Context, hdr map[string][]string, org, repo string) {
+func (s *Service) ensureMainSession(ctx context.Context, hdr *connect.Header, org, repo string) {
 	session := roles.SessionName(org, repo, roles.MainBranch)
 	if s.sessionExists(ctx, hdr, session) {
 		return
@@ -1329,25 +1348,25 @@ func (s *Service) ensureMainSession(ctx context.Context, hdr map[string][]string
 // `ref` imports the source's HEAD branch. Only `main` is created (no other
 // branches/tags are carried over). The imported repo is PUBLIC and its main
 // branch session is ensured. An existing repo is refused (never overwritten).
-func (s *Service) ImportRepo(ctx context.Context, req *connect.Request[wsv1.ImportRepoRequest]) (*connect.Response[wsv1.ImportRepoResponse], error) {
-	tenant, err := s.resolveTenant(ctx, req.Header())
+func (s *Service) ImportRepo(ctx context.Context, req *wsv1.ImportRepoRequest) (*wsv1.ImportRepoResponse, error) {
+	tenant, err := s.resolveTenant(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	m := req.Msg
+	m := req
 	org, url := m.GetOrg(), m.GetUrl()
 	if !roles.ValidComponent(org) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org must be a simple name"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "org must be a simple name")
 	}
 	if url == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("url is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "url is required")
 	}
 	repo := m.GetRepo()
 	if repo == "" {
 		repo = deriveRepoName(url)
 	}
 	if !roles.ValidComponent(repo) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("repo must be a simple name"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "repo must be a simple name")
 	}
 	// The org must belong to the tenant (an unknown org is created for it).
 	if err := s.claimOrg(ctx, tenant, org); err != nil {
@@ -1355,9 +1374,9 @@ func (s *Service) ImportRepo(ctx context.Context, req *connect.Request[wsv1.Impo
 	}
 	// Refuse to overwrite.
 	if ok, err := s.git.RepoExists(ctx, org, repo); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	} else if ok {
-		return nil, connect.NewError(connect.CodeAlreadyExists, errors.New("repository already exists"))
+		return nil, connect.NewError(connect.CodeAlreadyExists, "repository already exists")
 	}
 
 	// Create an EMPTY, PUBLIC destination repo (no auto-init): the import push
@@ -1366,14 +1385,14 @@ func (s *Service) ImportRepo(ctx context.Context, req *connect.Request[wsv1.Impo
 	// upstream (e.g. octocat/Spoon-Knife with 63k pull refs). Every repo this
 	// deployment creates is public.
 	if _, err := s.git.CreateEmptyRepo(ctx, org, repo, m.GetDescription()); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create repo: %w", err))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create repo: %w", err).Error())
 	}
 	// From here a failure must not leave an empty orphan behind.
 	cleanup := func(cause error) error {
 		if derr := s.git.DeleteRepo(context.WithoutCancel(ctx), org, repo); derr != nil {
 			log.Printf("warn: cleanup half-imported %s/%s: %v", org, repo, derr)
 		}
-		return connect.NewError(connect.CodeInternal, cause)
+		return connect.NewError(connect.CodeInternal, cause.Error()).WithCause(cause)
 	}
 
 	// Clone the source's HEAD BRANCHES only and push them into the empty repo.
@@ -1402,21 +1421,21 @@ func (s *Service) ImportRepo(ctx context.Context, req *connect.Request[wsv1.Impo
 	// Record ownership so the repo becomes visible to the tenant, protect main
 	// only when the default IS main, and ensure the branch session.
 	if err := s.members.AddRepo(tenant, org, repo); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if branch == roles.MainBranch {
 		if err := s.git.ProtectMain(ctx, org, repo); err != nil {
 			log.Printf("warn: protect main %s/%s: %v", org, repo, err)
 		}
 	}
-	if !s.sessionExists(ctx, req.Header(), roles.SessionName(org, repo, branch)) {
-		if err := s.createSession(ctx, req.Header(), roles.SessionName(org, repo, branch), roles.PresetFor(roles.RoleForBranch(branch)), "", ""); err != nil {
+	if !s.sessionExists(ctx, hdrFrom(ctx), roles.SessionName(org, repo, branch)) {
+		if err := s.createSession(ctx, hdrFrom(ctx), roles.SessionName(org, repo, branch), roles.PresetFor(roles.RoleForBranch(branch)), "", ""); err != nil {
 			log.Printf("warn: ensure imported session %s/%s:%s: %v", org, repo, branch, err)
 		}
 	}
-	return connect.NewResponse(&wsv1.ImportRepoResponse{Repo: &wsv1.RepoInfo{
+	return &wsv1.ImportRepoResponse{Repo: &wsv1.RepoInfo{
 		Org: org, Repo: repo, DefaultBranch: branch, Private: false,
-	}}), nil
+	}}, nil
 }
 
 // ---- push mirrors (admin) ----
@@ -1424,17 +1443,17 @@ func (s *Service) ImportRepo(ctx context.Context, req *connect.Request[wsv1.Impo
 // SetPushMirror registers a push mirror on a repo the caller's tenant owns.
 // HTTPS only. A repo may hold multiple mirrors (Forgejo assigns each a
 // remote_name, returned to the caller). Admin action.
-func (s *Service) SetPushMirror(ctx context.Context, req *connect.Request[wsv1.SetPushMirrorRequest]) (*connect.Response[wsv1.SetPushMirrorResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) SetPushMirror(ctx context.Context, req *wsv1.SetPushMirrorRequest) (*wsv1.SetPushMirrorResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	addr := strings.TrimSpace(m.GetRemoteAddress())
 	if !validPushMirrorAddress(addr) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("remote_address must be an http(s) git URL"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "remote_address must be an http(s) git URL")
 	}
 	if iv := strings.TrimSpace(m.GetInterval()); iv != "" && !validInterval(iv) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("interval must be a duration like 8h or 30m"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "interval must be a duration like 8h or 30m")
 	}
 	mirror, err := s.git.SetPushMirror(ctx, m.GetOrg(), m.GetRepo(), forgejo.PushMirrorOptions{
 		RemoteAddress:  addr,
@@ -1445,43 +1464,43 @@ func (s *Service) SetPushMirror(ctx context.Context, req *connect.Request[wsv1.S
 		BranchFilter:   strings.TrimSpace(m.GetBranchFilter()),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.SetPushMirrorResponse{Mirror: toPushMirrorInfo(mirror)}), nil
+	return &wsv1.SetPushMirrorResponse{Mirror: toPushMirrorInfo(mirror)}, nil
 }
 
 // ListPushMirrors lists the push mirrors of a repo the caller's tenant owns.
-func (s *Service) ListPushMirrors(ctx context.Context, req *connect.Request[wsv1.ListPushMirrorsRequest]) (*connect.Response[wsv1.ListPushMirrorsResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) ListPushMirrors(ctx context.Context, req *wsv1.ListPushMirrorsRequest) (*wsv1.ListPushMirrorsResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	mirrors, err := s.git.ListPushMirrors(ctx, m.GetOrg(), m.GetRepo())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.PushMirrorInfo, 0, len(mirrors))
 	for _, pm := range mirrors {
 		out = append(out, toPushMirrorInfo(pm))
 	}
-	return connect.NewResponse(&wsv1.ListPushMirrorsResponse{Mirrors: out}), nil
+	return &wsv1.ListPushMirrorsResponse{Mirrors: out}, nil
 }
 
 // DeletePushMirror removes a push mirror (by remote_name) from a repo the
 // caller's tenant owns. Admin action.
-func (s *Service) DeletePushMirror(ctx context.Context, req *connect.Request[wsv1.DeletePushMirrorRequest]) (*connect.Response[wsv1.DeletePushMirrorResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) DeletePushMirror(ctx context.Context, req *wsv1.DeletePushMirrorRequest) (*wsv1.DeletePushMirrorResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	name := strings.TrimSpace(m.GetRemoteName())
 	if name == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("remote_name is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "remote_name is required")
 	}
 	if err := s.git.DeletePushMirror(ctx, m.GetOrg(), m.GetRepo(), name); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.DeletePushMirrorResponse{Ok: true}), nil
+	return &wsv1.DeletePushMirrorResponse{Ok: true}, nil
 }
 
 // validPushMirrorAddress accepts an http(s) git URL (SSH mirrors are not
@@ -1532,20 +1551,20 @@ func (s *Service) requireAdmin(_ string) error { return nil }
 
 // ---- change requests ----
 
-func (s *Service) ListMRs(ctx context.Context, req *connect.Request[wsv1.ListMRsRequest]) (*connect.Response[wsv1.ListMRsResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) ListMRs(ctx context.Context, req *wsv1.ListMRsRequest) (*wsv1.ListMRsResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	mrs, err := s.git.ListMRs(ctx, m.GetOrg(), m.GetRepo(), m.GetState())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.MRInfo, 0, len(mrs))
 	for _, mr := range mrs {
 		out = append(out, toMRInfo(mr))
 	}
-	return connect.NewResponse(&wsv1.ListMRsResponse{Mrs: out}), nil
+	return &wsv1.ListMRsResponse{Mrs: out}, nil
 }
 
 // SubmitMR is the ONLY way branch content changes. It materializes the caller's
@@ -1554,28 +1573,28 @@ func (s *Service) ListMRs(ctx context.Context, req *connect.Request[wsv1.ListMRs
 //
 // The head branch name is chosen by the gateway (never the caller), is written
 // exactly once (a plain, non-force push), and is deleted on merge/close.
-func (s *Service) SubmitMR(ctx context.Context, req *connect.Request[wsv1.SubmitMRRequest]) (*connect.Response[wsv1.SubmitMRResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) SubmitMR(ctx context.Context, req *wsv1.SubmitMRRequest) (*wsv1.SubmitMRResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	base := m.GetBase()
 	if base == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("base is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "base is required")
 	}
 	if !roles.ValidComponent(base) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("base must be a simple branch name"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "base must be a simple branch name")
 	}
 	if isMRBranch(base) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("base cannot be an mr/... branch"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "base cannot be an mr/... branch")
 	}
 	if ok, berr := s.git.BranchExists(ctx, m.GetOrg(), m.GetRepo(), base); berr != nil {
-		return nil, connect.NewError(connect.CodeInternal, berr)
+		return nil, connect.NewError(connect.CodeInternal, berr.Error()).WithCause(berr)
 	} else if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("base branch %q does not exist", base))
+		return nil, connect.Errorf(connect.CodeNotFound, "base branch %q does not exist", base)
 	}
 	if len(m.GetFiles()) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("files is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "files is required")
 	}
 	ops := make([]gitcommit.FileOp, 0, len(m.GetFiles()))
 	for _, f := range m.GetFiles() {
@@ -1586,7 +1605,7 @@ func (s *Service) SubmitMR(ctx context.Context, req *connect.Request[wsv1.Submit
 		ops = append(ops, gitcommit.FileOp{Path: f.GetPath(), Op: f.GetOperation(), Content: content})
 	}
 
-	caller := sessionFromHeaders(req.Header())
+	caller := sessionFromHeaders(hdrFrom(ctx))
 	origin := caller
 	if origin == "" {
 		origin = roles.SessionName(m.GetOrg(), m.GetRepo(), base)
@@ -1606,9 +1625,9 @@ func (s *Service) SubmitMR(ctx context.Context, req *connect.Request[wsv1.Submit
 	}
 	if _, err := s.commits.Submit(ctx, opts, base, head, title, ops); err != nil {
 		if errors.Is(err, gitcommit.ErrNoChanges) || errors.Is(err, gitcommit.ErrIgnoredPath) {
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+			return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	index, url, err := s.git.CreateMR(ctx, m.GetOrg(), m.GetRepo(), title, head, base, m.GetBody())
 	if err != nil {
@@ -1617,13 +1636,13 @@ func (s *Service) SubmitMR(ctx context.Context, req *connect.Request[wsv1.Submit
 		return nil, mrError(err)
 	}
 	// Record the origin session so review notifications can find the submitter.
-	if err := s.members.AddMRSubmission(s.tenantOf(ctx, req.Header()), m.GetOrg(), m.GetRepo(), index, base, head, origin); err != nil {
+	if err := s.members.AddMRSubmission(s.tenantOf(ctx, hdrFrom(ctx)), m.GetOrg(), m.GetRepo(), index, base, head, origin); err != nil {
 		log.Printf("warn: record MR submission %s/%s#%d: %v", m.GetOrg(), m.GetRepo(), index, err)
 	}
 	// Wake the TARGET branch's session so the reviewer learns about the MR
 	// (best-effort; mirrors the extension's repo-mr-create notification).
-	s.notifyMRSubmitted(ctx, req.Header(), s.tenantOf(ctx, req.Header()), m.GetOrg(), m.GetRepo(), base, index, title, url)
-	return connect.NewResponse(&wsv1.SubmitMRResponse{Index: index, Url: url, Head: head}), nil
+	s.notifyMRSubmitted(ctx, hdrFrom(ctx), s.tenantOf(ctx, hdrFrom(ctx)), m.GetOrg(), m.GetRepo(), base, index, title, url)
+	return &wsv1.SubmitMRResponse{Index: index, Url: url, Head: head}, nil
 }
 
 // isMRBranch reports whether `ref` is a gateway-managed MR head branch.
@@ -1636,57 +1655,57 @@ func mrBranchName(origin string) string {
 	return fmt.Sprintf("mr/%s-%d", slug, time.Now().UnixNano())
 }
 
-func (s *Service) CommentMR(ctx context.Context, req *connect.Request[wsv1.CommentMRRequest]) (*connect.Response[wsv1.CommentMRResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) CommentMR(ctx context.Context, req *wsv1.CommentMRRequest) (*wsv1.CommentMRResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	if err := s.git.CommentMR(ctx, m.GetOrg(), m.GetRepo(), m.GetIndex(), m.GetBody()); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.CommentMRResponse{Ok: true}), nil
+	return &wsv1.CommentMRResponse{Ok: true}, nil
 }
 
 // MergeMR merges an MR. It is allowed ONLY when the caller's session equals
 // `org:repo:<base>` (self-merge of an MR targeting its own branch); a human
 // webui caller (no session header) is unrestricted. The `mr/...` head branch is
 // deleted by Forgejo on merge.
-func (s *Service) MergeMR(ctx context.Context, req *connect.Request[wsv1.MergeMRRequest]) (*connect.Response[wsv1.MergeMRResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) MergeMR(ctx context.Context, req *wsv1.MergeMRRequest) (*wsv1.MergeMRResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	mr, err := s.git.GetMR(ctx, m.GetOrg(), m.GetRepo(), m.GetIndex())
 	if err != nil {
 		return nil, mrError(err)
 	}
-	if err := s.authorizeMRTarget(req.Header(), m.GetOrg(), m.GetRepo(), mr.Base); err != nil {
+	if err := s.authorizeMRTarget(hdrFrom(ctx), m.GetOrg(), m.GetRepo(), mr.Base); err != nil {
 		return nil, err
 	}
 	if !mr.Mergeable {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"change request #%d is not mergeable (the base has diverged)", m.GetIndex()))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"change request #%d is not mergeable (the base has diverged)", m.GetIndex())
 	}
 	if err := s.git.MergeMR(ctx, m.GetOrg(), m.GetRepo(), m.GetIndex(), ""); err != nil {
 		return nil, mrError(err)
 	}
 	// Drop the submission record; the head branch is gone (merged).
-	_ = s.members.DeleteMRSubmission(s.tenantOf(ctx, req.Header()), m.GetOrg(), m.GetRepo(), m.GetIndex())
-	return connect.NewResponse(&wsv1.MergeMRResponse{Ok: true}), nil
+	_ = s.members.DeleteMRSubmission(s.tenantOf(ctx, hdrFrom(ctx)), m.GetOrg(), m.GetRepo(), m.GetIndex())
+	return &wsv1.MergeMRResponse{Ok: true}, nil
 }
 
 // CloseMR closes an MR (without merging) and deletes its `mr/...` head branch.
 // Same authorization as MergeMR.
-func (s *Service) CloseMR(ctx context.Context, req *connect.Request[wsv1.CloseMRRequest]) (*connect.Response[wsv1.CloseMRResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) CloseMR(ctx context.Context, req *wsv1.CloseMRRequest) (*wsv1.CloseMRResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	mr, err := s.git.GetMR(ctx, m.GetOrg(), m.GetRepo(), m.GetIndex())
 	if err != nil {
 		return nil, mrError(err)
 	}
-	if err := s.authorizeMRTarget(req.Header(), m.GetOrg(), m.GetRepo(), mr.Base); err != nil {
+	if err := s.authorizeMRTarget(hdrFrom(ctx), m.GetOrg(), m.GetRepo(), mr.Base); err != nil {
 		return nil, err
 	}
 	if err := s.git.CloseMR(ctx, m.GetOrg(), m.GetRepo(), m.GetIndex()); err != nil {
@@ -1695,30 +1714,30 @@ func (s *Service) CloseMR(ctx context.Context, req *connect.Request[wsv1.CloseMR
 	if isMRBranch(mr.Head) {
 		_ = s.git.DeleteBranch(ctx, m.GetOrg(), m.GetRepo(), mr.Head)
 	}
-	_ = s.members.DeleteMRSubmission(s.tenantOf(ctx, req.Header()), m.GetOrg(), m.GetRepo(), m.GetIndex())
-	return connect.NewResponse(&wsv1.CloseMRResponse{Ok: true}), nil
+	_ = s.members.DeleteMRSubmission(s.tenantOf(ctx, hdrFrom(ctx)), m.GetOrg(), m.GetRepo(), m.GetIndex())
+	return &wsv1.CloseMRResponse{Ok: true}, nil
 }
 
 // authorizeMRTarget enforces "an agent session may only merge/close an MR whose
 // base is its OWN branch". A human webui caller (no session header) is
 // unrestricted; a non-branch (free) session has no repo binding to compare, so
 // it is also refused for agent callers.
-func (s *Service) authorizeMRTarget(hdr map[string][]string, org, repo, base string) error {
+func (s *Service) authorizeMRTarget(hdr *connect.Header, org, repo, base string) error {
 	caller := sessionFromHeaders(hdr)
 	if caller == "" {
 		return nil // human webui console
 	}
 	want := roles.SessionName(org, repo, base)
 	if caller != want {
-		return connect.NewError(connect.CodePermissionDenied, fmt.Errorf(
-			"only the %s session may merge or close this change request", want))
+		return connect.Errorf(connect.CodePermissionDenied,
+			"only the %s session may merge or close this change request", want)
 	}
 	return nil
 }
 
 // tenantOf resolves the caller's tenant for a record write (best-effort: ""
 // on failure, which the store tolerates).
-func (s *Service) tenantOf(ctx context.Context, hdr map[string][]string) string {
+func (s *Service) tenantOf(ctx context.Context, hdr *connect.Header) string {
 	t, err := s.resolveTenant(ctx, hdr)
 	if err != nil {
 		return ""
@@ -1731,13 +1750,13 @@ func (s *Service) tenantOf(ctx context.Context, hdr map[string][]string) string 
 func mrError(err error) error {
 	var conflict *forgejo.ErrConflict
 	if errors.As(err, &conflict) {
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("merge conflict: %s", conflict.Reason))
+		return connect.Errorf(connect.CodeFailedPrecondition, "merge conflict: %s", conflict.Reason)
 	}
 	var notFound *forgejo.ErrNotFound
 	if errors.As(err, &notFound) {
-		return connect.NewError(connect.CodeNotFound, err)
+		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
-	return connect.NewError(connect.CodeInternal, err)
+	return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 }
 
 // ---- sandboxes ----
@@ -1747,25 +1766,25 @@ func mrError(err error) error {
 // namespace. Visibility is creator-scoped; the token is only ever returned by
 // ResolveSandbox to the owning tenant.
 
-func (s *Service) ListSandboxes(ctx context.Context, req *connect.Request[wsv1.ListSandboxesRequest]) (*connect.Response[wsv1.ListSandboxesResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) ListSandboxes(ctx context.Context, req *wsv1.ListSandboxesRequest) (*wsv1.ListSandboxesResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	out, err := s.listSandboxes(ctx, tenant, req.Msg.GetSession(), req.Header())
+	out, err := s.listSandboxes(ctx, tenant, req.GetSession(), hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&wsv1.ListSandboxesResponse{Sandboxes: out}), nil
+	return &wsv1.ListSandboxesResponse{Sandboxes: out}, nil
 }
 
 // listSandboxes returns the tenant's visible sandboxes (newest-first). A
 // caller with a session header is confined to its OWN sandboxes; `want` is an
 // optional explicit session filter for a webui caller.
-func (s *Service) listSandboxes(ctx context.Context, tenant, want string, hdr map[string][]string) ([]*wsv1.SandboxInfo, error) {
+func (s *Service) listSandboxes(ctx context.Context, tenant, want string, hdr *connect.Header) ([]*wsv1.SandboxInfo, error) {
 	sbxs, err := s.sbx.List(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.SandboxInfo, 0, len(sbxs))
 	// An agent session may only enumerate ITS OWN sandboxes; a webui (tenant
@@ -1787,40 +1806,40 @@ func (s *Service) listSandboxes(ctx context.Context, tenant, want string, hdr ma
 	return out, nil
 }
 
-func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.CreateSandboxRequest]) (*connect.Response[wsv1.CreateSandboxResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) CreateSandbox(ctx context.Context, req *wsv1.CreateSandboxRequest) (*wsv1.CreateSandboxResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	name := req.Msg.GetName()
+	name := req.GetName()
 	if !roles.ValidComponent(name) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name must be simple"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "name must be simple")
 	}
 	// Sandboxes run a PRE-BUILT, worker-bundled image from the deployment's
 	// dedicated sandbox org. The gateway no longer injects the worker at launch,
 	// so an image outside that org would have no worker and could never become
 	// ready. Empty = the configured default sandbox image.
-	image := req.Msg.GetImage()
+	image := req.GetImage()
 	// Resolve the OS: for windows/macos pick the VM image, force kvm, set an 8Gi
 	// limit, inject GOLDEN_DISK_URL and mount the shared golden-disk cache PVC.
-	osName := normalizeOS(req.Msg.GetOs())
+	osName := normalizeOS(req.GetOs())
 	// android is a device sandbox with its guest baked into the image; macos/
 	// windows are VM sandboxes booting from a golden disk.
 	vm := osName == "macos" || osName == "windows"
 	device := osName == "android"
-	kvm := req.Msg.GetKvm()
-	memory := req.Msg.GetMemory()
+	kvm := req.GetKvm()
+	memory := req.GetMemory()
 	extraEnv := map[string]string{}
 	goldenPVC := ""
 	if vm {
 		if _, ok := vmImageName[osName]; !ok {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("unsupported os %q (want linux|windows|macos|android)", req.Msg.GetOs()))
+			return nil, connect.Errorf(connect.CodeInvalidArgument,
+				"unsupported os %q (want linux|windows|macos|android)", req.GetOs())
 		}
 		if image == "" {
 			image = s.vmSandboxImage(osName)
 		}
-		disk := strings.TrimSpace(req.Msg.GetDisk())
+		disk := strings.TrimSpace(req.GetDisk())
 		if disk == "" {
 			disk = vmDefaultDisk[osName]
 		}
@@ -1840,7 +1859,7 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 			goldenPVC = defaultGoldenDiskCachePVC
 		}
 		if err := s.ensureGoldenDiskCache(ctx, goldenPVC); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 	} else if device {
 		// Android: a device sandbox boots an emulator — kvm +
@@ -1858,7 +1877,7 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 		}
 	}
 	if image == "" {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("no sandbox image given and no default configured"))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, "no sandbox image given and no default configured")
 	}
 	if err := s.validateSandboxImage(image); err != nil {
 		return nil, err
@@ -1867,8 +1886,8 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 	// binding comes from the caller's session header, not the (spoofable) body,
 	// so a session can never create a sandbox under another session's name. A
 	// webui caller (no session header) may pass an explicit `session`.
-	bindSession := req.Msg.GetSession()
-	if caller := sessionFromHeaders(req.Header()); caller != "" {
+	bindSession := req.GetSession()
+	if caller := sessionFromHeaders(hdrFrom(ctx)); caller != "" {
 		bindSession = caller
 	}
 	// A sandbox name is never reused, not even by the SAME session: creating
@@ -1876,34 +1895,34 @@ func (s *Service) CreateSandbox(ctx context.Context, req *connect.Request[wsv1.C
 	// early (the manager's ErrExists is the race-safe backstop). This also
 	// refuses a name another session/tenant already occupies.
 	if _, ok, gerr := s.sbx.Get(ctx, name); gerr != nil {
-		return nil, connect.NewError(connect.CodeInternal, gerr)
+		return nil, connect.NewError(connect.CodeInternal, gerr.Error()).WithCause(gerr)
 	} else if ok {
-		return nil, connect.NewError(connect.CodeAlreadyExists,
-			fmt.Errorf("sandbox %q already exists; delete it before reusing the name", name))
+		return nil, connect.Errorf(connect.CodeAlreadyExists,
+			"sandbox %q already exists; delete it before reusing the name", name)
 	}
 	sb, _, err := s.sbx.Create(ctx, sandboxmgr.Spec{
-		Name: name, Image: image, CPU: req.Msg.GetCpu(), Memory: memory,
-		Env: s.sandboxEnv(withEnv(req.Msg.GetEnv(), extraEnv)), Creator: tenant, Session: bindSession,
-		Runtime:       s.renderRuntime(kvm, req.Msg.GetGpuCount()),
+		Name: name, Image: image, CPU: req.GetCpu(), Memory: memory,
+		Env: s.sandboxEnv(withEnv(req.GetEnv(), extraEnv)), Creator: tenant, Session: bindSession,
+		Runtime:       s.renderRuntime(kvm, req.GetGpuCount()),
 		Bootstrap:     s.bootstrap,
 		GoldenDiskPVC: goldenPVC,
 	})
 	if err != nil {
 		if errors.Is(err, sandboxmgr.ErrExists) {
-			return nil, connect.NewError(connect.CodeAlreadyExists,
-				fmt.Errorf("sandbox %q already exists; delete it before reusing the name", name))
+			return nil, connect.Errorf(connect.CodeAlreadyExists,
+				"sandbox %q already exists; delete it before reusing the name", name)
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	// Wait up to 60s for the worker to accept connections; on timeout the
 	// sandbox is left in place (the caller may status/delete it).
 	if err := s.sbx.WaitReady(ctx, name, 60*time.Second); err != nil {
-		return nil, connect.NewError(connect.CodeDeadlineExceeded, err)
+		return nil, connect.NewError(connect.CodeDeadlineExceeded, err.Error()).WithCause(err)
 	}
 	if cur, ok, gerr := s.sbx.Get(ctx, name); gerr == nil && ok {
 		sb = cur
 	}
-	return connect.NewResponse(&wsv1.CreateSandboxResponse{Sandbox: toSandboxInfo(sb)}), nil
+	return &wsv1.CreateSandboxResponse{Sandbox: toSandboxInfo(sb)}, nil
 }
 
 // sandboxAccessible reports whether the caller may act on `sb`.
@@ -2035,33 +2054,33 @@ func (s *Service) validateSandboxImage(image string) error {
 	// when configured. A bare `<org>/<name>` (no host) is refused, so a sandbox
 	// can never silently pull from Docker Hub / a public mirror.
 	if s.sandboxImageRegistryHost != "" && gotHost != s.sandboxImageRegistryHost {
-		return connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("sandbox image must come from the %q registry", s.sandboxImageRegistryHost))
+		return connect.Errorf(connect.CodePermissionDenied,
+			"sandbox image must come from the %q registry", s.sandboxImageRegistryHost)
 	}
 	if s.sandboxOrg != "" {
 		org := strings.SplitN(rest, "/", 2)[0]
 		if org != s.sandboxOrg {
-			return connect.NewError(connect.CodePermissionDenied,
-				fmt.Errorf("sandbox image must come from the %q org", s.sandboxOrg))
+			return connect.Errorf(connect.CodePermissionDenied,
+				"sandbox image must come from the %q org", s.sandboxOrg)
 		}
 	}
 	return nil
 }
 
-func (s *Service) GetSandbox(ctx context.Context, req *connect.Request[wsv1.GetSandboxRequest]) (*connect.Response[wsv1.GetSandboxResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) GetSandbox(ctx context.Context, req *wsv1.GetSandboxRequest) (*wsv1.GetSandboxResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	sb, ok, err := s.sbx.Get(ctx, req.Msg.GetName())
+	sb, ok, err := s.sbx.Get(ctx, req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "sandbox not found")
 	}
-	if !sandboxAccessible(sb, tenant, sessionFromHeaders(req.Header())) {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
+	if !sandboxAccessible(sb, tenant, sessionFromHeaders(hdrFrom(ctx))) {
+		return nil, connect.NewError(connect.CodeNotFound, "sandbox not found")
 	}
 	info := toSandboxInfo(sb)
 	// Best-effort worker environment (workspace root + home) so the webui can
@@ -2071,116 +2090,116 @@ func (s *Service) GetSandbox(ctx context.Context, req *connect.Request[wsv1.GetS
 			info.Workspace, info.Home, info.Os, info.Arch = wi.Workspace, wi.Home, wi.OS, wi.Arch
 		}
 	}
-	return connect.NewResponse(&wsv1.GetSandboxResponse{Sandbox: info}), nil
+	return &wsv1.GetSandboxResponse{Sandbox: info}, nil
 }
 
-func (s *Service) DeleteSandbox(ctx context.Context, req *connect.Request[wsv1.DeleteSandboxRequest]) (*connect.Response[wsv1.DeleteSandboxResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) DeleteSandbox(ctx context.Context, req *wsv1.DeleteSandboxRequest) (*wsv1.DeleteSandboxResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	sb, ok, err := s.sbx.Get(ctx, req.Msg.GetName())
+	sb, ok, err := s.sbx.Get(ctx, req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "sandbox not found")
 	}
-	if !sandboxAccessible(sb, tenant, sessionFromHeaders(req.Header())) {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
+	if !sandboxAccessible(sb, tenant, sessionFromHeaders(hdrFrom(ctx))) {
+		return nil, connect.NewError(connect.CodeNotFound, "sandbox not found")
 	}
-	deleted, err := s.sbx.Delete(ctx, req.Msg.GetName())
+	deleted, err := s.sbx.Delete(ctx, req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.DeleteSandboxResponse{Ok: deleted}), nil
+	return &wsv1.DeleteSandboxResponse{Ok: deleted}, nil
 }
 
 // ResolveSandbox returns the worker's url + bearer token to the OWNING tenant,
 // so an execution tool can talk to the worker directly.
-func (s *Service) ResolveSandbox(ctx context.Context, req *connect.Request[wsv1.ResolveSandboxRequest]) (*connect.Response[wsv1.ResolveSandboxResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) ResolveSandbox(ctx context.Context, req *wsv1.ResolveSandboxRequest) (*wsv1.ResolveSandboxResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	sb, ok, err := s.sbx.Get(ctx, req.Msg.GetName())
+	sb, ok, err := s.sbx.Get(ctx, req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "sandbox not found")
 	}
-	if !sandboxAccessible(sb, tenant, sessionFromHeaders(req.Header())) {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
+	if !sandboxAccessible(sb, tenant, sessionFromHeaders(hdrFrom(ctx))) {
+		return nil, connect.NewError(connect.CodeNotFound, "sandbox not found")
 	}
-	url, token, err := s.sbx.Resolve(ctx, req.Msg.GetName())
+	url, token, err := s.sbx.Resolve(ctx, req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.ResolveSandboxResponse{
-		Name: req.Msg.GetName(), Url: url, Token: token,
+	return &wsv1.ResolveSandboxResponse{
+		Name: req.GetName(), Url: url, Token: token,
 		Phase: sb.Phase, Message: sb.Message,
-	}), nil
+	}, nil
 }
 
 // SandboxLogs reads a sandbox pod's container log (current or previous
 // instance), plus its live phase + failure reason. Read-only observability for
 // the webui; NOT exposed as an agent tool.
-func (s *Service) SandboxLogs(ctx context.Context, req *connect.Request[wsv1.SandboxLogsRequest]) (*connect.Response[wsv1.SandboxLogsResponse], error) {
-	if _, _, err := s.ownedSandbox(ctx, req.Header(), req.Msg.GetName()); err != nil {
+func (s *Service) SandboxLogs(ctx context.Context, req *wsv1.SandboxLogsRequest) (*wsv1.SandboxLogsResponse, error) {
+	if _, _, err := s.ownedSandbox(ctx, hdrFrom(ctx), req.GetName()); err != nil {
 		return nil, err
 	}
-	tail := req.Msg.GetTailLines()
+	tail := req.GetTailLines()
 	if tail <= 0 {
 		tail = s.serviceLogTail
 	}
-	lines, phase, restarts, message, err := s.sbx.TailLogs(ctx, req.Msg.GetName(), sandboxmgr.LogOptions{
-		TailLines: tail, Previous: req.Msg.GetPrevious(),
+	lines, phase, restarts, message, err := s.sbx.TailLogs(ctx, req.GetName(), sandboxmgr.LogOptions{
+		TailLines: tail, Previous: req.GetPrevious(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.SandboxLogsResponse{
+	return &wsv1.SandboxLogsResponse{
 		Lines: lines, Phase: phase, Restarts: restarts, Message: message,
 		Available: len(lines) > 0,
-	}), nil
+	}, nil
 }
 
 // ---- sandbox jobs (read-only observability) ----
 
 // ownedSandbox resolves the caller + the named sandbox, enforcing tenant
 // ownership. Returns the worker endpoint (url, token).
-func (s *Service) ownedSandbox(ctx context.Context, hdr map[string][]string, name string) (string, string, error) {
+func (s *Service) ownedSandbox(ctx context.Context, hdr *connect.Header, name string) (string, string, error) {
 	tenant, err := s.sandboxAuth(ctx, hdr)
 	if err != nil {
 		return "", "", err
 	}
 	sb, ok, err := s.sbx.Get(ctx, name)
 	if err != nil {
-		return "", "", connect.NewError(connect.CodeInternal, err)
+		return "", "", connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if !ok {
-		return "", "", connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
+		return "", "", connect.NewError(connect.CodeNotFound, "sandbox not found")
 	}
 	if !sandboxAccessible(sb, tenant, sessionFromHeaders(hdr)) {
-		return "", "", connect.NewError(connect.CodeNotFound, errors.New("sandbox not found"))
+		return "", "", connect.NewError(connect.CodeNotFound, "sandbox not found")
 	}
 	url, token, err := s.sbx.Resolve(ctx, name)
 	if err != nil {
-		return "", "", connect.NewError(connect.CodeNotFound, err)
+		return "", "", connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	return url, token, nil
 }
 
 // ListSandboxJobs returns a sandbox's worker job history.
-func (s *Service) ListSandboxJobs(ctx context.Context, req *connect.Request[wsv1.ListSandboxJobsRequest]) (*connect.Response[wsv1.ListSandboxJobsResponse], error) {
-	url, token, err := s.ownedSandbox(ctx, req.Header(), req.Msg.GetName())
+func (s *Service) ListSandboxJobs(ctx context.Context, req *wsv1.ListSandboxJobsRequest) (*wsv1.ListSandboxJobsResponse, error) {
+	url, token, err := s.ownedSandbox(ctx, hdrFrom(ctx), req.GetName())
 	if err != nil {
 		return nil, err
 	}
 	jobs, err := workerclient.New(url, token).ListJobs(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.SandboxJob, 0, len(jobs))
 	for _, j := range jobs {
@@ -2189,33 +2208,33 @@ func (s *Service) ListSandboxJobs(ctx context.Context, req *connect.Request[wsv1
 			StartedAt: j.StartedAt, FinishedAt: j.FinishedAt,
 		})
 	}
-	return connect.NewResponse(&wsv1.ListSandboxJobsResponse{Jobs: out}), nil
+	return &wsv1.ListSandboxJobsResponse{Jobs: out}, nil
 }
 
 // GetSandboxJobOutput polls a bounded window of a job's buffered output.
-func (s *Service) GetSandboxJobOutput(ctx context.Context, req *connect.Request[wsv1.GetSandboxJobOutputRequest]) (*connect.Response[wsv1.GetSandboxJobOutputResponse], error) {
-	url, token, err := s.ownedSandbox(ctx, req.Header(), req.Msg.GetName())
+func (s *Service) GetSandboxJobOutput(ctx context.Context, req *wsv1.GetSandboxJobOutputRequest) (*wsv1.GetSandboxJobOutputResponse, error) {
+	url, token, err := s.ownedSandbox(ctx, hdrFrom(ctx), req.GetName())
 	if err != nil {
 		return nil, err
 	}
-	m := req.Msg
+	m := req
 	out, err := workerclient.New(url, token).JobOutput(ctx, m.GetJobId(), m.GetStart(), m.GetEnd(), m.GetStream())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.GetSandboxJobOutputResponse{
+	return &wsv1.GetSandboxJobOutputResponse{
 		Lines: out.Lines, TotalLines: out.TotalLines,
 		StartLine: out.StartLine, EndLine: out.EndLine, Done: out.Done,
-	}), nil
+	}, nil
 }
 
 // WatchSandboxJob streams a job's output (history then live) until it ends.
-func (s *Service) WatchSandboxJob(ctx context.Context, req *connect.Request[wsv1.WatchSandboxJobRequest], st *connect.ServerStream[wsv1.WatchSandboxJobResponse]) error {
-	url, token, err := s.ownedSandbox(ctx, req.Header(), req.Msg.GetName())
+func (s *Service) WatchSandboxJob(ctx context.Context, req *wsv1.WatchSandboxJobRequest, st wsv1connect.BranchSessionServiceWatchSandboxJobServerStream) error {
+	url, token, err := s.ownedSandbox(ctx, hdrFrom(ctx), req.GetName())
 	if err != nil {
 		return err
 	}
-	events, errc := workerclient.New(url, token).WatchJob(ctx, req.Msg.GetJobId())
+	events, errc := workerclient.New(url, token).WatchJob(ctx, req.GetJobId())
 	for ev := range events {
 		msg := &wsv1.WatchSandboxJobResponse{Output: ev.Output}
 		if ev.Done {
@@ -2229,7 +2248,7 @@ func (s *Service) WatchSandboxJob(ctx context.Context, req *connect.Request[wsv1
 		}
 	}
 	if err := <-errc; err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return nil
 }
@@ -2237,38 +2256,38 @@ func (s *Service) WatchSandboxJob(ctx context.Context, req *connect.Request[wsv1
 // ListSandboxFiles lists a directory (or a single file) in the sandbox. The
 // path is passed to the worker VERBATIM: a relative path resolves against the
 // worker's workspace, an absolute path is used as-is.
-func (s *Service) ListSandboxFiles(ctx context.Context, req *connect.Request[wsv1.ListSandboxFilesRequest]) (*connect.Response[wsv1.ListSandboxFilesResponse], error) {
-	url, token, err := s.ownedSandbox(ctx, req.Header(), req.Msg.GetName())
+func (s *Service) ListSandboxFiles(ctx context.Context, req *wsv1.ListSandboxFilesRequest) (*wsv1.ListSandboxFilesResponse, error) {
+	url, token, err := s.ownedSandbox(ctx, hdrFrom(ctx), req.GetName())
 	if err != nil {
 		return nil, err
 	}
-	m := req.Msg
+	m := req
 	fl, err := workerclient.New(url, token).FileList(ctx, m.GetPath(), m.GetDepth(), m.GetLimit())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.SandboxFileEntry, 0, len(fl.Files))
 	for _, f := range fl.Files {
 		out = append(out, &wsv1.SandboxFileEntry{Path: f.Path, Size: f.Size, IsDir: f.IsDir})
 	}
-	return connect.NewResponse(&wsv1.ListSandboxFilesResponse{IsDir: fl.IsDir, Files: out}), nil
+	return &wsv1.ListSandboxFilesResponse{IsDir: fl.IsDir, Files: out}, nil
 }
 
 // ReadSandboxFile reads a (windowed) file from the sandbox.
-func (s *Service) ReadSandboxFile(ctx context.Context, req *connect.Request[wsv1.ReadSandboxFileRequest]) (*connect.Response[wsv1.ReadSandboxFileResponse], error) {
-	url, token, err := s.ownedSandbox(ctx, req.Header(), req.Msg.GetName())
+func (s *Service) ReadSandboxFile(ctx context.Context, req *wsv1.ReadSandboxFileRequest) (*wsv1.ReadSandboxFileResponse, error) {
+	url, token, err := s.ownedSandbox(ctx, hdrFrom(ctx), req.GetName())
 	if err != nil {
 		return nil, err
 	}
-	m := req.Msg
+	m := req
 	fr, err := workerclient.New(url, token).FileRead(ctx, m.GetPath(), m.GetStartLine(), m.GetEndLine())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.ReadSandboxFileResponse{
+	return &wsv1.ReadSandboxFileResponse{
 		Content: fr.Content, TotalLines: fr.TotalLines,
 		StartLine: fr.StartLine, EndLine: fr.EndLine,
-	}), nil
+	}, nil
 }
 
 // ---- services (long-lived Deployments) ----
@@ -2276,28 +2295,28 @@ func (s *Service) ReadSandboxFile(ctx context.Context, req *connect.Request[wsv1
 // DeployService creates/updates a long-lived Deployment + Service from a user
 // image (no worker injection, no sidecar). A bounded YAML manifest, when
 // given, overrides the scalar fields.
-func (s *Service) DeployService(ctx context.Context, req *connect.Request[wsv1.DeployServiceRequest]) (*connect.Response[wsv1.DeployServiceResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) DeployService(ctx context.Context, req *wsv1.DeployServiceRequest) (*wsv1.DeployServiceResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if s.services == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "service backend not configured")
 	}
-	m := req.Msg
+	m := req
 	name := m.GetName()
 	if name == "" {
-		name = servicesmgr.ServiceName(sessionFromHeaders(req.Header()))
+		name = servicesmgr.ServiceName(sessionFromHeaders(hdrFrom(ctx)))
 	}
 	// A service is published publicly as `<name>.<ns>.<domain>`, so its name
 	// must be a DNS-1123 label (lowercase letters/digits/'-').
 	if !roles.ValidServiceName(name) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name must be a DNS-1123 label (lowercase letters, digits, '-')"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "name must be a DNS-1123 label (lowercase letters, digits, '-')")
 	}
 	// Ownership guard: only the creator may update an existing service.
 	if existing, gerr := s.services.Get(ctx, name); gerr == nil {
 		if existing.Creator != "" && existing.Creator != tenant {
-			return nil, connect.NewError(connect.CodePermissionDenied, errors.New("service belongs to another tenant"))
+			return nil, connect.NewError(connect.CodePermissionDenied, "service belongs to another tenant")
 		}
 	}
 
@@ -2305,7 +2324,7 @@ func (s *Service) DeployService(ctx context.Context, req *connect.Request[wsv1.D
 	// port (tcp80 -> container_port). Entries sharing a suffix form ONE Service.
 	ports, err := servicePorts(m.GetServices(), m.GetContainerPort())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 
 	vols, err := s.resolveVolumes(ctx, tenant, m.GetVolumes())
@@ -2317,7 +2336,7 @@ func (s *Service) DeployService(ctx context.Context, req *connect.Request[wsv1.D
 		Env: m.GetEnv(), CPU: m.GetCpu(), Memory: m.GetMemory(),
 		Replicas: m.GetReplicas(), ContainerPort: m.GetContainerPort(),
 		ServicePort: m.GetServicePort(), Creator: tenant,
-		Session:        sessionFromHeaders(req.Header()),
+		Session:        sessionFromHeaders(hdrFrom(ctx)),
 		Ports:          ports,
 		Runtime:        s.renderRuntime(m.GetKvm(), m.GetGpuCount()),
 		Volumes:        vols,
@@ -2335,10 +2354,10 @@ func (s *Service) DeployService(ctx context.Context, req *connect.Request[wsv1.D
 		Slot:           m.GetSlot(),
 	}
 	if spec.Image == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("image is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "image is required")
 	}
 	if !servicesmgr.ValidSlot(m.GetSlot()) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("slot must be blue|green"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "slot must be blue|green")
 	}
 	var svc servicesmgr.Service
 	if m.GetSlot() != "" {
@@ -2347,7 +2366,7 @@ func (s *Service) DeployService(ctx context.Context, req *connect.Request[wsv1.D
 		svc, err = s.services.Deploy(ctx, spec)
 	}
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	// Bounded readiness wait: surface a deterministic start failure (bad
 	// command, image pull error, unschedulable pod) right away instead of
@@ -2359,7 +2378,7 @@ func (s *Service) DeployService(ctx context.Context, req *connect.Request[wsv1.D
 	if cur, gerr := s.services.Get(ctx, name); gerr == nil {
 		svc = cur
 	}
-	return connect.NewResponse(&wsv1.DeployServiceResponse{Service: s.toServiceInfo(svc, req.Header())}), nil
+	return &wsv1.DeployServiceResponse{Service: s.toServiceInfo(svc, hdrFrom(ctx))}, nil
 }
 
 // awaitServiceReady waits up to serviceReadyTimeout for a just-deployed service
@@ -2373,43 +2392,43 @@ func (s *Service) awaitServiceReady(ctx context.Context, name, slot string) erro
 	}
 	res, err := s.services.WaitReady(ctx, deployName, serviceReadyTimeout)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if res.Failed {
-		return connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("service %q failed to start: %s", name, res.Reason))
+		return connect.Errorf(connect.CodeFailedPrecondition,
+			"service %q failed to start: %s", name, res.Reason)
 	}
 	return nil
 }
 
 // PromoteService switches a blue-green service's primary URL to the other slot.
-func (s *Service) PromoteService(ctx context.Context, req *connect.Request[wsv1.PromoteServiceRequest]) (*connect.Response[wsv1.PromoteServiceResponse], error) {
-	if _, err := s.ownedService(ctx, req.Header(), req.Msg.GetName()); err != nil {
+func (s *Service) PromoteService(ctx context.Context, req *wsv1.PromoteServiceRequest) (*wsv1.PromoteServiceResponse, error) {
+	if _, err := s.ownedService(ctx, hdrFrom(ctx), req.GetName()); err != nil {
 		return nil, err
 	}
 	if s.services == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "service backend not configured")
 	}
-	svc, err := s.services.Promote(ctx, req.Msg.GetName(), !req.Msg.GetForce())
+	svc, err := s.services.Promote(ctx, req.GetName(), !req.GetForce())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.PromoteServiceResponse{Service: s.toServiceInfo(svc, req.Header())}), nil
+	return &wsv1.PromoteServiceResponse{Service: s.toServiceInfo(svc, hdrFrom(ctx))}, nil
 }
 
 // RollbackService switches a blue-green service's primary URL back a slot.
-func (s *Service) RollbackService(ctx context.Context, req *connect.Request[wsv1.RollbackServiceRequest]) (*connect.Response[wsv1.RollbackServiceResponse], error) {
-	if _, err := s.ownedService(ctx, req.Header(), req.Msg.GetName()); err != nil {
+func (s *Service) RollbackService(ctx context.Context, req *wsv1.RollbackServiceRequest) (*wsv1.RollbackServiceResponse, error) {
+	if _, err := s.ownedService(ctx, hdrFrom(ctx), req.GetName()); err != nil {
 		return nil, err
 	}
 	if s.services == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "service backend not configured")
 	}
-	svc, err := s.services.Rollback(ctx, req.Msg.GetName())
+	svc, err := s.services.Rollback(ctx, req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.RollbackServiceResponse{Service: s.toServiceInfo(svc, req.Header())}), nil
+	return &wsv1.RollbackServiceResponse{Service: s.toServiceInfo(svc, hdrFrom(ctx))}, nil
 }
 
 // servicePorts resolves the requested ports into servicesmgr.Port values. With
@@ -2463,17 +2482,17 @@ func (s *Service) resolveVolumes(ctx context.Context, tenant string, mounts []*w
 	out := make([]servicesmgr.VolumeMount, 0, len(mounts))
 	for i, m := range mounts {
 		if !roles.ValidServiceName(m.GetPvc()) {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("volumes[%d]: pvc must be a DNS-1123 label", i))
+			return nil, connect.Errorf(connect.CodeInvalidArgument, "volumes[%d]: pvc must be a DNS-1123 label", i)
 		}
 		if m.GetMountPath() == "" || !strings.HasPrefix(m.GetMountPath(), "/") {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("volumes[%d]: mount_path must be an absolute path", i))
+			return nil, connect.Errorf(connect.CodeInvalidArgument, "volumes[%d]: mount_path must be an absolute path", i)
 		}
 		pvc, err := s.services.GetPVC(ctx, m.GetPvc())
 		if err != nil {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("volumes[%d]: pvc %q not found", i, m.GetPvc()))
+			return nil, connect.Errorf(connect.CodeNotFound, "volumes[%d]: pvc %q not found", i, m.GetPvc())
 		}
 		if pvc.Creator != "" && pvc.Creator != tenant {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("volumes[%d]: pvc %q not found", i, m.GetPvc()))
+			return nil, connect.Errorf(connect.CodeNotFound, "volumes[%d]: pvc %q not found", i, m.GetPvc())
 		}
 		out = append(out, servicesmgr.VolumeMount{
 			PVC: pvc.Name, MountPath: m.GetMountPath(),
@@ -2550,35 +2569,35 @@ func (s *Service) helmChartDir(ctx context.Context, org, repo, ref, chartPath st
 }
 
 // HelmDeploy renders (and, unless dry_run, applies) a chart as a release.
-func (s *Service) HelmDeploy(ctx context.Context, req *connect.Request[wsv1.HelmDeployRequest]) (*connect.Response[wsv1.HelmDeployResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) HelmDeploy(ctx context.Context, req *wsv1.HelmDeployRequest) (*wsv1.HelmDeployResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if s.helm == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("helm backend not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "helm backend not configured")
 	}
-	m := req.Msg
+	m := req
 	org, repo, ref := m.GetOrg(), m.GetRepo(), m.GetRef()
 	if !roles.ValidComponent(org) || !roles.ValidComponent(repo) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org/repo must be simple names"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "org/repo must be simple names")
 	}
 	if ref == "" {
 		ref = roles.MainBranch
 	}
 	if !roles.ValidComponent(ref) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("ref must be a simple name"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "ref must be a simple name")
 	}
 	if !helmReleaseRe.MatchString(m.GetRelease()) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("release must be a DNS-1123 label"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "release must be a DNS-1123 label")
 	}
 	chartDir, cleanup, err := s.helmChartDir(ctx, org, repo, ref, m.GetChartPath())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	defer cleanup()
 	if !helmmgr.ValidHelmSlot(m.GetSlot()) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("slot must be blue|green"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "slot must be blue|green")
 	}
 	opts := helmmgr.RenderOptions{
 		Release: m.GetRelease(), ChartPath: m.GetChartPath(),
@@ -2587,24 +2606,24 @@ func (s *Service) HelmDeploy(ctx context.Context, req *connect.Request[wsv1.Helm
 	if m.GetDryRun() {
 		manifest, objects, _, terr := s.helm.Template(chartDir, opts)
 		if terr != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, terr)
+			return nil, connect.NewError(connect.CodeInvalidArgument, terr.Error()).WithCause(terr)
 		}
 		names := make([]string, 0, len(objects))
 		for _, o := range objects {
 			names = append(names, o.Kind+"/"+o.Name)
 		}
-		return connect.NewResponse(&wsv1.HelmDeployResponse{Manifest: manifest, Objects: names}), nil
+		return &wsv1.HelmDeployResponse{Manifest: manifest, Objects: names}, nil
 	}
 	var rel helmmgr.Release
 	if m.GetSlot() != "" {
-		rel, err = s.helm.ApplySlot(ctx, chartDir, opts, tenant, sessionFromHeaders(req.Header()))
+		rel, err = s.helm.ApplySlot(ctx, chartDir, opts, tenant, sessionFromHeaders(hdrFrom(ctx)))
 	} else {
-		rel, err = s.helm.Apply(ctx, chartDir, opts, tenant, sessionFromHeaders(req.Header()))
+		rel, err = s.helm.Apply(ctx, chartDir, opts, tenant, sessionFromHeaders(hdrFrom(ctx)))
 	}
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.HelmDeployResponse{
+	return &wsv1.HelmDeployResponse{
 		Release: s.helmReleaseInfoWithSlots(ctx, rel),
 		Manifest: func() string {
 			if len(rel.History) > 0 {
@@ -2612,12 +2631,12 @@ func (s *Service) HelmDeploy(ctx context.Context, req *connect.Request[wsv1.Helm
 			}
 			return ""
 		}(),
-	}), nil
+	}, nil
 }
 
 // HelmList lists the tenant's releases.
-func (s *Service) HelmList(ctx context.Context, req *connect.Request[wsv1.HelmListRequest]) (*connect.Response[wsv1.HelmListResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) HelmList(ctx context.Context, req *wsv1.HelmListRequest) (*wsv1.HelmListResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -2625,7 +2644,7 @@ func (s *Service) HelmList(ctx context.Context, req *connect.Request[wsv1.HelmLi
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&wsv1.HelmListResponse{Releases: out}), nil
+	return &wsv1.HelmListResponse{Releases: out}, nil
 }
 
 // listHelmReleases returns the tenant's visible Helm releases (slot releases
@@ -2636,7 +2655,7 @@ func (s *Service) listHelmReleases(ctx context.Context, tenant string) ([]*wsv1.
 	}
 	all, err := s.helm.List(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.HelmReleaseInfo, 0, len(all))
 	for _, r := range all {
@@ -2654,20 +2673,20 @@ func (s *Service) listHelmReleases(ctx context.Context, tenant string) ([]*wsv1.
 }
 
 // HelmHistory returns a release and its revisions.
-func (s *Service) HelmHistory(ctx context.Context, req *connect.Request[wsv1.HelmHistoryRequest]) (*connect.Response[wsv1.HelmHistoryResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) HelmHistory(ctx context.Context, req *wsv1.HelmHistoryRequest) (*wsv1.HelmHistoryResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if s.helm == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("helm backend not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "helm backend not configured")
 	}
-	rel, ok, err := s.helm.Get(ctx, req.Msg.GetRelease())
+	rel, ok, err := s.helm.Get(ctx, req.GetRelease())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if !ok || (rel.Creator != "" && rel.Creator != tenant) {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("release not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "release not found")
 	}
 	revs := make([]*wsv1.HelmRevisionInfo, 0, len(rel.History))
 	for _, rv := range rel.History {
@@ -2680,111 +2699,111 @@ func (s *Service) HelmHistory(ctx context.Context, req *connect.Request[wsv1.Hel
 			Values: rv.Values, CreatedAt: rv.CreatedAt, Objects: objs,
 		})
 	}
-	return connect.NewResponse(&wsv1.HelmHistoryResponse{Release: s.helmReleaseInfoWithSlots(ctx, rel), Revisions: revs}), nil
+	return &wsv1.HelmHistoryResponse{Release: s.helmReleaseInfoWithSlots(ctx, rel), Revisions: revs}, nil
 }
 
 // HelmRollback re-applies a prior revision.
-func (s *Service) HelmRollback(ctx context.Context, req *connect.Request[wsv1.HelmRollbackRequest]) (*connect.Response[wsv1.HelmRollbackResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) HelmRollback(ctx context.Context, req *wsv1.HelmRollbackRequest) (*wsv1.HelmRollbackResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if s.helm == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("helm backend not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "helm backend not configured")
 	}
-	cur, ok, err := s.helm.Get(ctx, req.Msg.GetRelease())
+	cur, ok, err := s.helm.Get(ctx, req.GetRelease())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if !ok || (cur.Creator != "" && cur.Creator != tenant) {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("release not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "release not found")
 	}
-	target := int(req.Msg.GetRevision())
+	target := int(req.GetRevision())
 	if target == 0 {
 		target = cur.Revision - 1
 	}
-	rel, err := s.helm.Rollback(ctx, req.Msg.GetRelease(), target)
+	rel, err := s.helm.Rollback(ctx, req.GetRelease(), target)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.HelmRollbackResponse{Release: toHelmReleaseInfo(rel)}), nil
+	return &wsv1.HelmRollbackResponse{Release: toHelmReleaseInfo(rel)}, nil
 }
 
 // HelmUninstall deletes a release and its objects.
-func (s *Service) HelmUninstall(ctx context.Context, req *connect.Request[wsv1.HelmUninstallRequest]) (*connect.Response[wsv1.HelmUninstallResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) HelmUninstall(ctx context.Context, req *wsv1.HelmUninstallRequest) (*wsv1.HelmUninstallResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if s.helm == nil {
-		return connect.NewResponse(&wsv1.HelmUninstallResponse{Ok: false}), nil
+		return &wsv1.HelmUninstallResponse{Ok: false}, nil
 	}
-	cur, ok, err := s.helm.Get(ctx, req.Msg.GetRelease())
+	cur, ok, err := s.helm.Get(ctx, req.GetRelease())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if !ok || (cur.Creator != "" && cur.Creator != tenant) {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("release not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "release not found")
 	}
 	var ok2 bool
 	if cur.ActiveSlot != "" {
 		// Blue-green router entry: remove both slots + the router Service.
-		ok2, err = s.helm.UninstallRouter(ctx, req.Msg.GetRelease())
+		ok2, err = s.helm.UninstallRouter(ctx, req.GetRelease())
 	} else {
-		ok2, err = s.helm.Uninstall(ctx, req.Msg.GetRelease())
+		ok2, err = s.helm.Uninstall(ctx, req.GetRelease())
 	}
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.HelmUninstallResponse{Ok: ok2}), nil
+	return &wsv1.HelmUninstallResponse{Ok: ok2}, nil
 }
 
 // HelmPromote switches a blue-green Helm release's router to the other slot.
-func (s *Service) HelmPromote(ctx context.Context, req *connect.Request[wsv1.HelmPromoteRequest]) (*connect.Response[wsv1.HelmPromoteResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) HelmPromote(ctx context.Context, req *wsv1.HelmPromoteRequest) (*wsv1.HelmPromoteResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if s.helm == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("helm backend not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "helm backend not configured")
 	}
-	if err := s.ownedHelmRelease(ctx, tenant, req.Msg.GetRelease()); err != nil {
+	if err := s.ownedHelmRelease(ctx, tenant, req.GetRelease()); err != nil {
 		return nil, err
 	}
-	rel, err := s.helm.Promote(ctx, req.Msg.GetRelease(), !req.Msg.GetForce())
+	rel, err := s.helm.Promote(ctx, req.GetRelease(), !req.GetForce())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.HelmPromoteResponse{Release: s.helmReleaseInfoWithSlots(ctx, rel)}), nil
+	return &wsv1.HelmPromoteResponse{Release: s.helmReleaseInfoWithSlots(ctx, rel)}, nil
 }
 
 // HelmRollbackRelease switches a blue-green Helm release's router back a slot.
-func (s *Service) HelmRollbackRelease(ctx context.Context, req *connect.Request[wsv1.HelmRollbackReleaseRequest]) (*connect.Response[wsv1.HelmRollbackReleaseResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) HelmRollbackRelease(ctx context.Context, req *wsv1.HelmRollbackReleaseRequest) (*wsv1.HelmRollbackReleaseResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if s.helm == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("helm backend not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "helm backend not configured")
 	}
-	if err := s.ownedHelmRelease(ctx, tenant, req.Msg.GetRelease()); err != nil {
+	if err := s.ownedHelmRelease(ctx, tenant, req.GetRelease()); err != nil {
 		return nil, err
 	}
-	rel, err := s.helm.RollbackRouter(ctx, req.Msg.GetRelease())
+	rel, err := s.helm.RollbackRouter(ctx, req.GetRelease())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.HelmRollbackReleaseResponse{Release: s.helmReleaseInfoWithSlots(ctx, rel)}), nil
+	return &wsv1.HelmRollbackReleaseResponse{Release: s.helmReleaseInfoWithSlots(ctx, rel)}, nil
 }
 
 // ownedHelmRelease verifies the release exists and belongs to the tenant.
 func (s *Service) ownedHelmRelease(ctx context.Context, tenant, release string) error {
 	rel, ok, err := s.helm.Get(ctx, release)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if !ok || (rel.Creator != "" && rel.Creator != tenant) {
-		return connect.NewError(connect.CodeNotFound, errors.New("release not found"))
+		return connect.NewError(connect.CodeNotFound, "release not found")
 	}
 	return nil
 }
@@ -2792,20 +2811,20 @@ func (s *Service) ownedHelmRelease(ctx context.Context, tenant, release string) 
 // HelmObjects lists the LIVE status of a release's current-revision objects
 // (workloads, pods, services, ...), so a UI/tool can show each one — and why an
 // unhealthy pod is failing — without knowing the names up front.
-func (s *Service) HelmObjects(ctx context.Context, req *connect.Request[wsv1.HelmObjectsRequest]) (*connect.Response[wsv1.HelmObjectsResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) HelmObjects(ctx context.Context, req *wsv1.HelmObjectsRequest) (*wsv1.HelmObjectsResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if s.helm == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("helm backend not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "helm backend not configured")
 	}
-	if err := s.ownedHelmRelease(ctx, tenant, req.Msg.GetRelease()); err != nil {
+	if err := s.ownedHelmRelease(ctx, tenant, req.GetRelease()); err != nil {
 		return nil, err
 	}
-	objs, err := s.helm.Objects(ctx, req.Msg.GetRelease())
+	objs, err := s.helm.Objects(ctx, req.GetRelease())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.HelmObjectInfo, 0, len(objs))
 	for _, o := range objs {
@@ -2816,28 +2835,28 @@ func (s *Service) HelmObjects(ctx context.Context, req *connect.Request[wsv1.Hel
 			ReadyReplicas: o.ReadyReps, DesiredReplicas: o.DesiredRep,
 		})
 	}
-	return connect.NewResponse(&wsv1.HelmObjectsResponse{Objects: out}), nil
+	return &wsv1.HelmObjectsResponse{Objects: out}, nil
 }
 
 // HelmObjectLogs reads one object's container log (kind must be "Pod"),
 // gated on the object belonging to the release's current revision.
-func (s *Service) HelmObjectLogs(ctx context.Context, req *connect.Request[wsv1.HelmObjectLogsRequest]) (*connect.Response[wsv1.HelmObjectLogsResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) HelmObjectLogs(ctx context.Context, req *wsv1.HelmObjectLogsRequest) (*wsv1.HelmObjectLogsResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if s.helm == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("helm backend not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "helm backend not configured")
 	}
-	if err := s.ownedHelmRelease(ctx, tenant, req.Msg.GetRelease()); err != nil {
+	if err := s.ownedHelmRelease(ctx, tenant, req.GetRelease()); err != nil {
 		return nil, err
 	}
-	lines, available, msg, err := s.helm.ObjectLogs(ctx, req.Msg.GetRelease(), req.Msg.GetKind(), req.Msg.GetName(),
-		helmmgr.LogOptions{TailLines: req.Msg.GetTailLines(), Previous: req.Msg.GetPrevious(), Container: req.Msg.GetContainer()})
+	lines, available, msg, err := s.helm.ObjectLogs(ctx, req.GetRelease(), req.GetKind(), req.GetName(),
+		helmmgr.LogOptions{TailLines: req.GetTailLines(), Previous: req.GetPrevious(), Container: req.GetContainer()})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.HelmObjectLogsResponse{Lines: lines, Available: available, Message: msg}), nil
+	return &wsv1.HelmObjectLogsResponse{Lines: lines, Available: available, Message: msg}, nil
 }
 
 var helmReleaseRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,52}[a-z0-9])?$`)
@@ -2934,21 +2953,21 @@ func toTolerations(in []*wsv1.TolerationSpec) []servicesmgr.Toleration {
 
 // CreatePVC creates a named, tenant-owned claim with the deployment's storage
 // class (self-hosted local-path). Admin action; the tenant owns the claim.
-func (s *Service) CreatePVC(ctx context.Context, req *connect.Request[wsv1.CreatePVCRequest]) (*connect.Response[wsv1.CreatePVCResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) CreatePVC(ctx context.Context, req *wsv1.CreatePVCRequest) (*wsv1.CreatePVCResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if s.services == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "service backend not configured")
 	}
-	m := req.Msg
+	m := req
 	if !roles.ValidServiceName(m.GetName()) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name must be a DNS-1123 label (lowercase letters, digits, '-')"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "name must be a DNS-1123 label (lowercase letters, digits, '-')")
 	}
 	// Only the deployment's configured class is supported today.
 	if sc := m.GetStorageClass(); sc != "" && sc != s.pvcStorageClass {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("storage_class must be %q", s.pvcStorageClass))
+		return nil, connect.Errorf(connect.CodeInvalidArgument, "storage_class must be %q", s.pvcStorageClass)
 	}
 	size := m.GetSize()
 	if size == "" {
@@ -2956,14 +2975,14 @@ func (s *Service) CreatePVC(ctx context.Context, req *connect.Request[wsv1.Creat
 	}
 	pvc, err := s.services.CreatePVC(ctx, m.GetName(), size, s.pvcStorageClass, tenant)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.CreatePVCResponse{Pvc: toPVCInfo(pvc)}), nil
+	return &wsv1.CreatePVCResponse{Pvc: toPVCInfo(pvc)}, nil
 }
 
 // ListPVCs lists the tenant's claims.
-func (s *Service) ListPVCs(ctx context.Context, req *connect.Request[wsv1.ListPVCsRequest]) (*connect.Response[wsv1.ListPVCsResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) ListPVCs(ctx context.Context, req *wsv1.ListPVCsRequest) (*wsv1.ListPVCsResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -2971,7 +2990,7 @@ func (s *Service) ListPVCs(ctx context.Context, req *connect.Request[wsv1.ListPV
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&wsv1.ListPVCsResponse{Pvcs: out}), nil
+	return &wsv1.ListPVCsResponse{Pvcs: out}, nil
 }
 
 // listPVCs returns the tenant's visible PersistentVolumeClaims.
@@ -2981,7 +3000,7 @@ func (s *Service) listPVCs(ctx context.Context, tenant string) ([]*wsv1.PVCInfo,
 	}
 	pvcs, err := s.services.ListPVCs(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.PVCInfo, 0, len(pvcs))
 	for _, p := range pvcs {
@@ -2994,27 +3013,27 @@ func (s *Service) listPVCs(ctx context.Context, tenant string) ([]*wsv1.PVCInfo,
 }
 
 // DeletePVC removes a claim the tenant owns. Refused while a service mounts it.
-func (s *Service) DeletePVC(ctx context.Context, req *connect.Request[wsv1.DeletePVCRequest]) (*connect.Response[wsv1.DeletePVCResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) DeletePVC(ctx context.Context, req *wsv1.DeletePVCRequest) (*wsv1.DeletePVCResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if s.services == nil {
-		return connect.NewResponse(&wsv1.DeletePVCResponse{Ok: false}), nil
+		return &wsv1.DeletePVCResponse{Ok: false}, nil
 	}
-	cur, gerr := s.services.GetPVC(ctx, req.Msg.GetName())
+	cur, gerr := s.services.GetPVC(ctx, req.GetName())
 	if gerr != nil {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("pvc not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "pvc not found")
 	}
 	if cur.Creator != "" && cur.Creator != tenant {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("pvc not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "pvc not found")
 	}
-	ok, err := s.services.DeletePVC(ctx, req.Msg.GetName())
+	ok, err := s.services.DeletePVC(ctx, req.GetName())
 	if err != nil {
 		// Mounted-by is the common refusal: surface it as FailedPrecondition.
-		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.DeletePVCResponse{Ok: ok}), nil
+	return &wsv1.DeletePVCResponse{Ok: ok}, nil
 }
 
 func toPVCInfo(p servicesmgr.PVC) *wsv1.PVCInfo {
@@ -3025,26 +3044,26 @@ func toPVCInfo(p servicesmgr.PVC) *wsv1.PVCInfo {
 }
 
 // ListServices lists the tenant's services.
-func (s *Service) ListServices(ctx context.Context, req *connect.Request[wsv1.ListServicesRequest]) (*connect.Response[wsv1.ListServicesResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) ListServices(ctx context.Context, req *wsv1.ListServicesRequest) (*wsv1.ListServicesResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	out, err := s.listServices(ctx, tenant, req.Header())
+	out, err := s.listServices(ctx, tenant, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&wsv1.ListServicesResponse{Services: out}), nil
+	return &wsv1.ListServicesResponse{Services: out}, nil
 }
 
 // listServices returns the tenant's visible services (newest-first).
-func (s *Service) listServices(ctx context.Context, tenant string, hdr map[string][]string) ([]*wsv1.ServiceInfo, error) {
+func (s *Service) listServices(ctx context.Context, tenant string, hdr *connect.Header) ([]*wsv1.ServiceInfo, error) {
 	if s.services == nil {
 		return []*wsv1.ServiceInfo{}, nil
 	}
 	svcs, err := s.services.List(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.ServiceInfo, 0, len(svcs))
 	for _, svc := range svcs {
@@ -3070,123 +3089,123 @@ func sortByCreatedAtDesc[T hasCreatedAt](items []T) {
 }
 
 // DeleteService removes a service the tenant owns.
-func (s *Service) DeleteService(ctx context.Context, req *connect.Request[wsv1.DeleteServiceRequest]) (*connect.Response[wsv1.DeleteServiceResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) DeleteService(ctx context.Context, req *wsv1.DeleteServiceRequest) (*wsv1.DeleteServiceResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if s.services == nil {
-		return connect.NewResponse(&wsv1.DeleteServiceResponse{Ok: false}), nil
+		return &wsv1.DeleteServiceResponse{Ok: false}, nil
 	}
-	svc, gerr := s.services.Get(ctx, req.Msg.GetName())
+	svc, gerr := s.services.Get(ctx, req.GetName())
 	if gerr != nil {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("service not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
 	if svc.Creator != "" && svc.Creator != tenant {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("service not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
-	ok, err := s.services.Delete(ctx, req.Msg.GetName())
+	ok, err := s.services.Delete(ctx, req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.DeleteServiceResponse{Ok: ok}), nil
+	return &wsv1.DeleteServiceResponse{Ok: ok}, nil
 }
 
 // PauseService scales a service to zero replicas without deleting it. The
 // replica count is remembered so ResumeService can restore it.
-func (s *Service) PauseService(ctx context.Context, req *connect.Request[wsv1.PauseServiceRequest]) (*connect.Response[wsv1.PauseServiceResponse], error) {
-	svc, err := s.pauseResume(ctx, req.Header(), req.Msg.GetName(), true)
+func (s *Service) PauseService(ctx context.Context, req *wsv1.PauseServiceRequest) (*wsv1.PauseServiceResponse, error) {
+	svc, err := s.pauseResume(ctx, hdrFrom(ctx), req.GetName(), true)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&wsv1.PauseServiceResponse{Service: svc}), nil
+	return &wsv1.PauseServiceResponse{Service: svc}, nil
 }
 
 // ResumeService restores a paused service to its pre-pause replica count.
-func (s *Service) ResumeService(ctx context.Context, req *connect.Request[wsv1.ResumeServiceRequest]) (*connect.Response[wsv1.ResumeServiceResponse], error) {
-	svc, err := s.pauseResume(ctx, req.Header(), req.Msg.GetName(), false)
+func (s *Service) ResumeService(ctx context.Context, req *wsv1.ResumeServiceRequest) (*wsv1.ResumeServiceResponse, error) {
+	svc, err := s.pauseResume(ctx, hdrFrom(ctx), req.GetName(), false)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&wsv1.ResumeServiceResponse{Service: svc}), nil
+	return &wsv1.ResumeServiceResponse{Service: svc}, nil
 }
 
 // ScaleService sets a service's desired replica count (0 = scaled down).
-func (s *Service) ScaleService(ctx context.Context, req *connect.Request[wsv1.ScaleServiceRequest]) (*connect.Response[wsv1.ScaleServiceResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) ScaleService(ctx context.Context, req *wsv1.ScaleServiceRequest) (*wsv1.ScaleServiceResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if s.services == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "service backend not configured")
 	}
-	cur, gerr := s.services.Get(ctx, req.Msg.GetName())
+	cur, gerr := s.services.Get(ctx, req.GetName())
 	if gerr != nil {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("service not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
 	if cur.Creator != "" && cur.Creator != tenant {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("service not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
-	if req.Msg.GetReplicas() < 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("replicas must be >= 0"))
+	if req.GetReplicas() < 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "replicas must be >= 0")
 	}
-	out, err := s.services.Scale(ctx, req.Msg.GetName(), req.Msg.GetReplicas())
+	out, err := s.services.Scale(ctx, req.GetName(), req.GetReplicas())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.ScaleServiceResponse{Service: s.toServiceInfo(out, req.Header())}), nil
+	return &wsv1.ScaleServiceResponse{Service: s.toServiceInfo(out, hdrFrom(ctx))}, nil
 }
 
 // GetServiceManifest returns the service's Deployment + Services as YAML.
-func (s *Service) GetServiceManifest(ctx context.Context, req *connect.Request[wsv1.GetServiceManifestRequest]) (*connect.Response[wsv1.GetServiceManifestResponse], error) {
-	if _, err := s.ownedService(ctx, req.Header(), req.Msg.GetName()); err != nil {
+func (s *Service) GetServiceManifest(ctx context.Context, req *wsv1.GetServiceManifestRequest) (*wsv1.GetServiceManifestResponse, error) {
+	if _, err := s.ownedService(ctx, hdrFrom(ctx), req.GetName()); err != nil {
 		return nil, err
 	}
 	if s.services == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "service backend not configured")
 	}
-	y, err := s.services.Manifest(ctx, req.Msg.GetName())
+	y, err := s.services.Manifest(ctx, req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.GetServiceManifestResponse{Yaml: y}), nil
+	return &wsv1.GetServiceManifestResponse{Yaml: y}, nil
 }
 
 // ApplyServiceManifest replaces a service from an edited multi-document YAML.
-func (s *Service) ApplyServiceManifest(ctx context.Context, req *connect.Request[wsv1.ApplyServiceManifestRequest]) (*connect.Response[wsv1.ApplyServiceManifestResponse], error) {
-	if _, err := s.ownedService(ctx, req.Header(), req.Msg.GetName()); err != nil {
+func (s *Service) ApplyServiceManifest(ctx context.Context, req *wsv1.ApplyServiceManifestRequest) (*wsv1.ApplyServiceManifestResponse, error) {
+	if _, err := s.ownedService(ctx, hdrFrom(ctx), req.GetName()); err != nil {
 		return nil, err
 	}
 	if s.services == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "service backend not configured")
 	}
-	out, y, err := s.services.ApplyManifest(ctx, req.Msg.GetName(), req.Msg.GetYaml(), req.Msg.GetDryRun())
+	out, y, err := s.services.ApplyManifest(ctx, req.GetName(), req.GetYaml(), req.GetDryRun())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	resp := &wsv1.ApplyServiceManifestResponse{Yaml: y}
-	if !req.Msg.GetDryRun() {
-		resp.Service = s.toServiceInfo(out, req.Header())
+	if !req.GetDryRun() {
+		resp.Service = s.toServiceInfo(out, hdrFrom(ctx))
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // pauseResume is the shared authorization + dispatch for Pause/Resume. Pausing
 // is only meaningful for a running service; resuming only for a paused one.
-func (s *Service) pauseResume(ctx context.Context, hdr map[string][]string, name string, pause bool) (*wsv1.ServiceInfo, error) {
+func (s *Service) pauseResume(ctx context.Context, hdr *connect.Header, name string, pause bool) (*wsv1.ServiceInfo, error) {
 	tenant, err := s.sandboxAuth(ctx, hdr)
 	if err != nil {
 		return nil, err
 	}
 	if s.services == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "service backend not configured")
 	}
 	cur, gerr := s.services.Get(ctx, name)
 	if gerr != nil {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("service not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
 	if cur.Creator != "" && cur.Creator != tenant {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("service not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "service not found")
 	}
 	var out servicesmgr.Service
 	if pause {
@@ -3195,25 +3214,25 @@ func (s *Service) pauseResume(ctx context.Context, hdr map[string][]string, name
 		out, err = s.services.Resume(ctx, name)
 	}
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return s.toServiceInfo(out, hdr), nil
 }
 
 // ServiceLogs reads a bounded window of a service's container log.
-func (s *Service) ServiceLogs(ctx context.Context, req *connect.Request[wsv1.ServiceLogsRequest]) (*connect.Response[wsv1.ServiceLogsResponse], error) {
-	if _, err := s.ownedService(ctx, req.Header(), req.Msg.GetName()); err != nil {
+func (s *Service) ServiceLogs(ctx context.Context, req *wsv1.ServiceLogsRequest) (*wsv1.ServiceLogsResponse, error) {
+	if _, err := s.ownedService(ctx, hdrFrom(ctx), req.GetName()); err != nil {
 		return nil, err
 	}
-	tail := req.Msg.GetTailLines()
+	tail := req.GetTailLines()
 	if tail <= 0 {
 		tail = s.serviceLogTail
 	}
-	lines, err := s.services.LogSource().Tail(ctx, req.Msg.GetName(), servicesmgr.LogOptions{
-		TailLines: tail, Previous: req.Msg.GetPrevious(),
+	lines, err := s.services.LogSource().Tail(ctx, req.GetName(), servicesmgr.LogOptions{
+		TailLines: tail, Previous: req.GetPrevious(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	resp := &wsv1.ServiceLogsResponse{Lines: lines, Available: len(lines) > 0}
 	// A container that failed BEFORE producing any output (runc create error,
@@ -3221,9 +3240,9 @@ func (s *Service) ServiceLogs(ctx context.Context, req *connect.Request[wsv1.Ser
 	// so the log stream is empty and the ONLY explanation lives in the pod
 	// status. Attach it so the caller/model is not left with a bare "no logs".
 	if len(lines) == 0 {
-		fillPodDiagnostics(ctx, s.services, req.Msg.GetName(), &resp.PodPhase, &resp.Restarts, &resp.Message)
+		fillPodDiagnostics(ctx, s.services, req.GetName(), &resp.PodPhase, &resp.Restarts, &resp.Message)
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // fillPodDiagnostics reads a service's pod diagnostics (phase / restarts /
@@ -3251,12 +3270,12 @@ type servicesReader interface {
 
 // WatchServiceLogs streams a service's container log until the stream ends or
 // the client disconnects.
-func (s *Service) WatchServiceLogs(ctx context.Context, req *connect.Request[wsv1.WatchServiceLogsRequest], st *connect.ServerStream[wsv1.WatchServiceLogsResponse]) error {
-	if _, err := s.ownedService(ctx, req.Header(), req.Msg.GetName()); err != nil {
+func (s *Service) WatchServiceLogs(ctx context.Context, req *wsv1.WatchServiceLogsRequest, st wsv1connect.BranchSessionServiceWatchServiceLogsServerStream) error {
+	if _, err := s.ownedService(ctx, hdrFrom(ctx), req.GetName()); err != nil {
 		return err
 	}
-	lines, errc := s.services.LogSource().Follow(ctx, req.Msg.GetName(), servicesmgr.LogOptions{
-		Previous: req.Msg.GetPrevious(),
+	lines, errc := s.services.LogSource().Follow(ctx, req.GetName(), servicesmgr.LogOptions{
+		Previous: req.GetPrevious(),
 	})
 	sent := false
 	for l := range lines {
@@ -3269,7 +3288,7 @@ func (s *Service) WatchServiceLogs(ctx context.Context, req *connect.Request[wsv
 	// output, so a failed-to-start container is explained rather than blank.
 	done := &wsv1.WatchServiceLogsResponse{Done: true}
 	if !sent {
-		fillPodDiagnostics(ctx, s.services, req.Msg.GetName(), &done.PodPhase, &done.Restarts, &done.Message)
+		fillPodDiagnostics(ctx, s.services, req.GetName(), &done.PodPhase, &done.Restarts, &done.Message)
 	}
 	if err := <-errc; err != nil {
 		done.Error = err.Error()
@@ -3280,8 +3299,8 @@ func (s *Service) WatchServiceLogs(ctx context.Context, req *connect.Request[wsv
 // WatchWorkspace streams the tenant's sandboxes/services/PVCs live: an initial
 // full snapshot, then a new frame whenever any underlying k8s object changes.
 // The client never polls.
-func (s *Service) WatchWorkspace(ctx context.Context, req *connect.Request[wsv1.WatchWorkspaceRequest], st *connect.ServerStream[wsv1.WatchWorkspaceResponse]) error {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) WatchWorkspace(ctx context.Context, req *wsv1.WatchWorkspaceRequest, st wsv1connect.BranchSessionServiceWatchWorkspaceServerStream) error {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return err
 	}
@@ -3289,7 +3308,7 @@ func (s *Service) WatchWorkspace(ctx context.Context, req *connect.Request[wsv1.
 	defer unsub()
 
 	send := func() error {
-		hdr := req.Header()
+		hdr := hdrFrom(ctx)
 		sbxs, err := s.listSandboxes(ctx, tenant, "", hdr)
 		if err != nil {
 			return err
@@ -3332,20 +3351,20 @@ func (s *Service) WatchWorkspace(ctx context.Context, req *connect.Request[wsv1.
 }
 
 // ownedService resolves a service and enforces tenant/creator ownership.
-func (s *Service) ownedService(ctx context.Context, hdr map[string][]string, name string) (servicesmgr.Service, error) {
+func (s *Service) ownedService(ctx context.Context, hdr *connect.Header, name string) (servicesmgr.Service, error) {
 	tenant, err := s.sandboxAuth(ctx, hdr)
 	if err != nil {
 		return servicesmgr.Service{}, err
 	}
 	if s.services == nil {
-		return servicesmgr.Service{}, connect.NewError(connect.CodeUnavailable, errors.New("service backend not configured"))
+		return servicesmgr.Service{}, connect.NewError(connect.CodeUnavailable, "service backend not configured")
 	}
 	svc, gerr := s.services.Get(ctx, name)
 	if gerr != nil {
-		return servicesmgr.Service{}, connect.NewError(connect.CodeNotFound, errors.New("service not found"))
+		return servicesmgr.Service{}, connect.NewError(connect.CodeNotFound, "service not found")
 	}
 	if svc.Creator != "" && svc.Creator != tenant {
-		return servicesmgr.Service{}, connect.NewError(connect.CodePermissionDenied, errors.New("service belongs to another tenant"))
+		return servicesmgr.Service{}, connect.NewError(connect.CodePermissionDenied, "service belongs to another tenant")
 	}
 	return svc, nil
 }
@@ -3370,13 +3389,13 @@ func sanitizeTag(s string) string {
 
 // Blame returns per-line authorship of one file at a ref (go-git over a bare
 // clone; Forgejo has no blame API).
-func (s *Service) Blame(ctx context.Context, req *connect.Request[wsv1.BlameRequest]) (*connect.Response[wsv1.BlameResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) Blame(ctx context.Context, req *wsv1.BlameRequest) (*wsv1.BlameResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	if m.GetPath() == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("path is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "path is required")
 	}
 	ref := m.GetRef()
 	if ref == "" {
@@ -3384,7 +3403,7 @@ func (s *Service) Blame(ctx context.Context, req *connect.Request[wsv1.BlameRequ
 	}
 	lines, err := gitcommit.Blame(ctx, s.git.GitURL(m.GetOrg(), m.GetRepo()), "root", s.git.Token(), ref, m.GetPath(), 0)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.BlameLine, 0, len(lines))
 	for _, l := range lines {
@@ -3393,45 +3412,43 @@ func (s *Service) Blame(ctx context.Context, req *connect.Request[wsv1.BlameRequ
 			AuthorEmail: l.AuthorEmail, Date: l.Date, Content: l.Content,
 		})
 	}
-	return connect.NewResponse(&wsv1.BlameResponse{Lines: out}), nil
+	return &wsv1.BlameResponse{Lines: out}, nil
 }
 
 // FileDiff returns the unified diff of one file between two refs (go-git;
 // Forgejo's compare `patch` is empty on 1.22).
-func (s *Service) FileDiff(ctx context.Context, req *connect.Request[wsv1.FileDiffRequest]) (*connect.Response[wsv1.FileDiffResponse], error) {
-	m := req.Msg
-	if err := s.ensureVisible(ctx, req.Header(), m.GetOrg(), m.GetRepo()); err != nil {
+func (s *Service) FileDiff(ctx context.Context, req *wsv1.FileDiffRequest) (*wsv1.FileDiffResponse, error) {
+	m := req
+	if err := s.ensureVisible(ctx, hdrFrom(ctx), m.GetOrg(), m.GetRepo()); err != nil {
 		return nil, err
 	}
 	if m.GetPath() == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("path is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "path is required")
 	}
 	diff, err := gitcommit.FileDiff(ctx, s.git.GitURL(m.GetOrg(), m.GetRepo()), "root", s.git.Token(), m.GetBase(), m.GetHead(), m.GetPath(), 0)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.FileDiffResponse{Diff: diff}), nil
+	return &wsv1.FileDiffResponse{Diff: diff}, nil
 }
 
 // sessionFromHeaders extracts the caller's session name (used to derive a
 // default service name). The extension passes it via X-Session-Name.
-func sessionFromHeaders(hdr map[string][]string) string {
-	for k, vs := range hdr {
-		if strings.EqualFold(k, "X-Session-Name") && len(vs) > 0 {
-			return vs[0]
-		}
+func sessionFromHeaders(hdr *connect.Header) string {
+	if hdr == nil {
+		return ""
 	}
-	return ""
+	return hdr.Get("X-Session-Name")
 }
 
-func (s *Service) toServiceInfo(svc servicesmgr.Service, hdr map[string][]string) *wsv1.ServiceInfo {
+func (s *Service) toServiceInfo(svc servicesmgr.Service, hdr *connect.Header) *wsv1.ServiceInfo {
 	publicURLs := s.servicePublicURLs(svc, hdr)
 	slotURLs := s.slotPublicURLs(svc, hdr)
 	return toServiceInfoImpl(svc, publicURLs, slotURLs)
 }
 
 // slotPublicURLs returns each slot's own public URL (`https://<name>-<slot>.<ns>.<domain>`).
-func (s *Service) slotPublicURLs(svc servicesmgr.Service, hdr map[string][]string) map[string]string {
+func (s *Service) slotPublicURLs(svc servicesmgr.Service, hdr *connect.Header) map[string]string {
 	if len(svc.Slots) == 0 {
 		return nil
 	}
@@ -3570,7 +3587,7 @@ func presetKey(port int32, proto string) string {
 // servicePublicURLs returns, per port-suffix, the anonymous public URL for
 // tcp80 ingress ports (`https://<name>[-<suffix>].<ns>.<domain>`). Only tcp80 is
 // publicly reachable (the edge maps hosts to a service's port 80).
-func (s *Service) servicePublicURLs(svc servicesmgr.Service, hdr map[string][]string) map[string]string {
+func (s *Service) servicePublicURLs(svc servicesmgr.Service, hdr *connect.Header) map[string]string {
 	domain := s.publicDomainFor(hdr)
 	if domain == "" {
 		return nil
@@ -3602,7 +3619,7 @@ func siblingName(name, suffix string) string {
 // the first two labels (the edge convention is `<svc>.<ns>.<domain>`), e.g.
 // `workspace.agent.10.199.64.20.nip.io` -> `10.199.64.20.nip.io`. Empty when it
 // cannot be determined (e.g. an in-cluster caller with no public host).
-func (s *Service) publicDomainFor(hdr map[string][]string) string {
+func (s *Service) publicDomainFor(hdr *connect.Header) string {
 	if s.publicServiceDomain != "" {
 		return s.publicServiceDomain
 	}
@@ -3634,17 +3651,17 @@ func (s *Service) publicDomainFor(hdr map[string][]string) string {
 // ListOCIImages browses container images in the registry. `owner` selects the
 // namespace (default: the deployment toolchain org); `name` narrows to one
 // image, listing its tags.
-func (s *Service) ListOCIImages(ctx context.Context, req *connect.Request[wsv1.ListOCIImagesRequest]) (*connect.Response[wsv1.ListOCIImagesResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) ListOCIImages(ctx context.Context, req *wsv1.ListOCIImagesRequest) (*wsv1.ListOCIImagesResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	owner := req.Msg.GetOwner()
+	owner := req.GetOwner()
 	if owner == "" {
 		owner = s.toolchainOrg
 	}
 	if !roles.ValidComponent(owner) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("owner must be a simple name"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "owner must be a simple name")
 	}
 	// A tenant may browse the SHARED catalog namespaces (the toolchain org, the
 	// sandbox org and the system `root`), but any other namespace must be one it
@@ -3652,13 +3669,13 @@ func (s *Service) ListOCIImages(ctx context.Context, req *connect.Request[wsv1.L
 	if owner != s.toolchainOrg && owner != s.sandboxOrg && owner != "root" {
 		owned, err := s.members.OwnsOrg(tenant, owner)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		if !owned {
-			return nil, connect.NewError(connect.CodeNotFound, errors.New("namespace not found"))
+			return nil, connect.NewError(connect.CodeNotFound, "namespace not found")
 		}
 	}
-	name := req.Msg.GetName()
+	name := req.GetName()
 	host := ""
 	if s.builder != nil {
 		host = s.builder.RegistryHost
@@ -3670,7 +3687,7 @@ func (s *Service) ListOCIImages(ctx context.Context, req *connect.Request[wsv1.L
 	if s.registry != nil {
 		imgs, err := s.registry.ListImages(ctx, owner, name)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		out := make([]*wsv1.OCIImage, 0, len(imgs))
 		for _, im := range imgs {
@@ -3679,11 +3696,11 @@ func (s *Service) ListOCIImages(ctx context.Context, req *connect.Request[wsv1.L
 				Ref: host + "/" + im.Owner + "/" + im.Name + ":" + im.Tag,
 			})
 		}
-		return connect.NewResponse(&wsv1.ListOCIImagesResponse{Images: out}), nil
+		return &wsv1.ListOCIImagesResponse{Images: out}, nil
 	}
 	pkgs, err := s.git.ListContainerPackages(ctx, owner, name)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*wsv1.OCIImage, 0, len(pkgs))
 	for _, p := range pkgs {
@@ -3692,7 +3709,7 @@ func (s *Service) ListOCIImages(ctx context.Context, req *connect.Request[wsv1.L
 			Ref: host + "/" + p.Owner + "/" + p.Name + ":" + p.Tag,
 		})
 	}
-	return connect.NewResponse(&wsv1.ListOCIImagesResponse{Images: out}), nil
+	return &wsv1.ListOCIImagesResponse{Images: out}, nil
 }
 
 // BuildSandboxImage builds an image from a repository Dockerfile (context = a
@@ -3705,27 +3722,27 @@ var imageNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
 // under an org the caller owns, with a no-op `FROM <source>` rebuild. It is the
 // OCI analogue of repo-import: the caller names the destination org and the new
 // image is recorded under that org (which must belong to the tenant).
-func (s *Service) ImportImage(ctx context.Context, req *connect.Request[wsv1.ImportImageRequest]) (*connect.Response[wsv1.ImportImageResponse], error) {
-	tenant, err := s.sandboxAuth(ctx, req.Header())
+func (s *Service) ImportImage(ctx context.Context, req *wsv1.ImportImageRequest) (*wsv1.ImportImageResponse, error) {
+	tenant, err := s.sandboxAuth(ctx, hdrFrom(ctx))
 	if err != nil {
 		return nil, err
 	}
-	m := req.Msg
+	m := req
 	org, name, tag, source := m.GetOrg(), m.GetName(), m.GetTag(), m.GetSource()
 	if !roles.ValidComponent(org) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("org must be a simple name"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "org must be a simple name")
 	}
 	if !imageNameRe.MatchString(name) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name must be a single simple name"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "name must be a single simple name")
 	}
 	if !roles.ValidComponent(tag) {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("tag must be a simple name"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "tag must be a simple name")
 	}
 	if source == "" || strings.ContainsAny(source, " \t\n") {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("source must be an image ref"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "source must be an image ref")
 	}
 	if s.builder == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("image builder not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "image builder not configured")
 	}
 	// The destination org must belong to the caller (creating it if needed).
 	if err := s.claimOrg(ctx, tenant, org); err != nil {
@@ -3739,9 +3756,9 @@ func (s *Service) ImportImage(ctx context.Context, req *connect.Request[wsv1.Imp
 		AuthToken: m.GetAuthToken(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&wsv1.ImportImageResponse{ImageRef: res.ImageRef, Log: res.Log}), nil
+	return &wsv1.ImportImageResponse{ImageRef: res.ImageRef, Log: res.Log}, nil
 }
 
 func toSandboxInfo(sb sandboxmgr.Sandbox) *wsv1.SandboxInfo {
@@ -3851,15 +3868,10 @@ var hopHeaders = map[string]bool{
 // copyHeaders copies the caller's headers (Authorization in particular) so the
 // agent sees the real tenant token. Protocol/transport headers are skipped:
 // the connect client sets them on the outbound request.
-func copyHeaders[T any](dst *connect.Request[T], hdr map[string][]string) {
-	for k, vs := range hdr {
-		if hopHeaders[http.CanonicalHeaderKey(k)] {
-			continue
-		}
-		for _, v := range vs {
-			dst.Header().Add(k, v)
-		}
-	}
-}
+// copyHeaders is a no-op under connect v2: request metadata lives on the
+// context's CallInfo, and the agent client interceptor (fwdClientInterceptor)
+// forwards the caller's headers onto every outbound agent call. Kept so call
+// sites stay unchanged.
+func copyHeaders[T any](_ *T, _ *connect.Header) {}
 
 var _ wsv1connect.BranchSessionServiceHandler = (*Service)(nil)

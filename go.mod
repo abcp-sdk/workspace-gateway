@@ -3,7 +3,7 @@ module github.com/abcp-sdk/workspace-gateway
 go 1.26.0
 
 require (
-	connectrpc.com/connect v1.20.0
+	connectrpc.com/connect/v2 v2.0.0
 	github.com/abcp-sdk/abc-protocol-go/v2 v2.7.1
 	github.com/epiclabs-io/diff3 v0.0.0-20260520111523-3b1669897fb1
 	github.com/go-git/go-git/v5 v5.19.2
